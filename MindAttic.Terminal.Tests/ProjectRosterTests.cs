@@ -17,13 +17,13 @@ public sealed class ProjectRosterTests
                 new Project { Name = "zebra",   Path = "" },
                 new Project { Name = "Apple",   Path = "" },
                 new Project { Name = "banana",  Path = "" },
-                new Project { Name = "MindAttic.UIUX", Path = "" }
+                new Project { Name = "MindAttic.UiUx", Path = "" }
             }
         };
 
         var sorted = ProjectRoster.Sorted(settings).Select(p => p.Name).ToArray();
 
-        Assert.That(sorted, Is.EqualTo(new[] { "Apple", "banana", "MindAttic.UIUX", "zebra" }));
+        Assert.That(sorted, Is.EqualTo(new[] { "Apple", "banana", "MindAttic.UiUx", "zebra" }));
     }
 
     [Test]
