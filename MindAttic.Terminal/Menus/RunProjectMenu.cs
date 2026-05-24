@@ -1,0 +1,42 @@
+using MindAttic.Terminal.Models;
+using MindAttic.Terminal.Services;
+using MindAttic.Terminal.Ui;
+using Spectre.Console;
+
+namespace MindAttic.Terminal.Menus;
+
+public sealed class RunProjectMenu(SettingsStore store, WindowsTerminalLauncher wt)
+{
+    public void Run()
+    {
+        while (true)
+        {
+            var settings = store.Load();
+            var items = ProjectRoster.Sorted(settings)
+                .Where(p => !string.IsNullOrWhiteSpace(p.RunCommand))
+                .Select(p => new MenuItem
+                {
+                    Name = p.Name,
+                    Description = p.RunCommand,
+                    Tag = p
+                })
+                .ToList();
+
+            Screen.Header("Run Project");
+            if (items.Count == 0)
+            {
+                Screen.Notice("[grey50]No projects have a RunCommand configured.[/]");
+                Screen.PressAnyKey();
+                return;
+            }
+
+            var sel = Menu.Prompt("Choose a project to run:", items);
+            if (sel is null) return;
+
+            var project = (Project)sel.Tag!;
+            wt.Open(wt.BuildRunCommandTab(project));
+            Screen.Notice($"[green]Started:[/] [cyan1]{Markup.Escape(project.Name)}[/] → {Markup.Escape(project.RunCommand!)}");
+            Thread.Sleep(800);
+        }
+    }
+}
