@@ -52,6 +52,12 @@ public sealed class BackupMenu(BackupService backup)
         else
         {
             AnsiConsole.MarkupLine($"  [red]Backup failed (robocopy exit {result.RobocopyExitCode}) after {Format(result.Elapsed)}[/]");
+            if (!string.IsNullOrWhiteSpace(result.Output))
+            {
+                foreach (var line in result.Output.Split('\n'))
+                    if (!string.IsNullOrWhiteSpace(line))
+                        AnsiConsole.MarkupLine($"    [grey50]{Markup.Escape(line.TrimEnd())}[/]");
+            }
         }
 
         Screen.PressAnyKey();

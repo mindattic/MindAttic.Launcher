@@ -36,7 +36,11 @@ public sealed class OpenProjectMenu(SettingsStore store, AgentProviderRegistry p
             {
                 var project = (Project)sel.Tag!;
                 var provider = providers.EffectiveProvider(project);
-                wt.Open(wt.BuildAgentTab(project, provider, ExePath.Self));
+                // Match RestartInNewTab: republish if source changed, then spawn
+                // the canonical Release exe from artifacts/. Using ExePath.Self
+                // here meant dev tabs ran whatever Debug bin happened to be live.
+                ExePath.EnsureFresh();
+                wt.Open(wt.BuildAgentTab(project, provider, ExePath.Release));
                 Thread.Sleep(800); // PS launcher's anti-flicker wait
                 continue;
             }

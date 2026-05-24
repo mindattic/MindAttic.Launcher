@@ -26,7 +26,10 @@ public sealed class TitlePinner : IDisposable
     public TitlePinner(string title)
     {
         this.title = title;
-        Console.Title = title;
+        // Console.Title can throw on redirected stdout (CI, piped runs) or on
+        // hosts without a real console. Match the loop's swallow-and-continue
+        // posture so a non-conhost environment doesn't kill the host command.
+        try { Console.Title = title; } catch { }
         loop = Task.Run(() => RunLoop(cts.Token));
     }
 

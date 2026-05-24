@@ -56,7 +56,18 @@ public static class Menu
 
             while (true)
             {
-                var keyInfo = Console.ReadKey(intercept: true);
+                ConsoleKeyInfo keyInfo;
+                try
+                {
+                    keyInfo = Console.ReadKey(intercept: true);
+                }
+                catch (InvalidOperationException)
+                {
+                    // stdin is redirected (piped run, CI, test harness). There's
+                    // no interactive user to drive the menu — unwind cleanly
+                    // instead of crashing.
+                    return new MenuResult { Back = true };
+                }
                 var navigated = false;
 
                 switch (keyInfo.Key)
@@ -127,8 +138,15 @@ public static class Menu
 
     private static void RenderItem(MenuItem item, int nameWidth, bool highlighted)
     {
-        var name = item.Name.PadRight(nameWidth);
-        var desc = string.IsNullOrWhiteSpace(item.Description) ? "" : $"  [grey50]{item.Description}[/]";
+        // Name + Description come from user-controlled settings (project names,
+        // RunCommand strings, etc.) — escape before interpolating into markup so
+        // a stray '[' doesn't crash the prompt with InvalidOperationException.
+        // Pad on the raw string so column alignment matches the visible width,
+        // since Markup.Escape doubles '[' which renders back as a single char.
+        var name = Markup.Escape(item.Name.PadRight(nameWidth));
+        var desc = string.IsNullOrWhiteSpace(item.Description)
+            ? ""
+            : $"  [grey50]{Markup.Escape(item.Description)}[/]";
         if (highlighted)
             AnsiConsole.MarkupLine($"[yellow]> {name}[/]{desc}");
         else

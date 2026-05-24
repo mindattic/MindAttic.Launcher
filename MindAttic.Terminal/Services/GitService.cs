@@ -100,8 +100,11 @@ public sealed class GitService
 
     public GitStatus Status(string repoPath)
     {
-        if (!Directory.Exists(repoPath))                       return new GitStatus([], "PATH NOT FOUND");
-        if (!Directory.Exists(Path.Combine(repoPath, ".git"))) return new GitStatus([], "not a git repo");
+        if (!Directory.Exists(repoPath)) return new GitStatus([], "PATH NOT FOUND");
+        // In a git worktree, .git is a *file* (gitdir: …), not a directory, so
+        // check for either form before declaring "not a git repo".
+        var dotGit = Path.Combine(repoPath, ".git");
+        if (!Directory.Exists(dotGit) && !File.Exists(dotGit)) return new GitStatus([], "not a git repo");
 
         var (code, stdout, stderr) = Run(repoPath, DefaultTimeout, "status", "--porcelain");
         if (code != 0) return new GitStatus([], $"git status failed: {stderr.Trim()}");
@@ -142,9 +145,11 @@ public sealed class GitService
 
     private static (int code, string stdout, string stderr) Run(string repoPath, TimeSpan timeout, params string[] args)
     {
+        // Scope git to the repo with -C only; we deliberately don't set
+        // ProcessStartInfo.WorkingDirectory so there's one canonical path
+        // resolution rule regardless of the caller's cwd.
         var psi = new ProcessStartInfo("git")
         {
-            WorkingDirectory = repoPath,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
@@ -166,6 +171,10 @@ public sealed class GitService
         if (!p.WaitForExit((int)timeout.TotalMilliseconds))
         {
             try { p.Kill(entireProcessTree: true); } catch { }
+            // Drain the reader tasks so we don't leave them hanging on closed
+            // streams. Killing the process closes stdout/stderr so the reads
+            // should return promptly, but cap the wait defensively.
+            try { Task.WaitAll(new[] { stdoutTask, stderrTask }, TimeSpan.FromSeconds(5)); } catch { }
             return (124, "", $"git {string.Join(' ', args)} timed out after {timeout.TotalSeconds:0}s");
         }
 

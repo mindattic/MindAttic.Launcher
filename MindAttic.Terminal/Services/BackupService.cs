@@ -2,7 +2,7 @@ using System.Diagnostics;
 
 namespace MindAttic.Terminal.Services;
 
-public sealed record BackupResult(bool Ok, int RobocopyExitCode, TimeSpan Elapsed, string TargetFolder);
+public sealed record BackupResult(bool Ok, int RobocopyExitCode, TimeSpan Elapsed, string TargetFolder, string Output = "");
 
 /// <summary>
 /// robocopy-backed backup of <c>D:\Projects\MindAttic</c> →
@@ -118,6 +118,18 @@ public sealed class BackupService
         sw.Stop();
 
         var code = p.ExitCode;
-        return new BackupResult(code < 8, code, sw.Elapsed, targetFolder);
+        var ok = code < 8;
+        // Robocopy writes most failure detail to stdout (per-file errors) and
+        // some to stderr. Keep both, prefer stderr first, and trim to a tail
+        // so we don't dump megabytes of output into the menu.
+        var output = ok ? "" : Tail(string.Join("\n", stderrTask.Result, stdoutTask.Result), 2000);
+        return new BackupResult(ok, code, sw.Elapsed, targetFolder, output);
+    }
+
+    private static string Tail(string text, int maxChars)
+    {
+        if (string.IsNullOrEmpty(text)) return "";
+        text = text.Trim();
+        return text.Length <= maxChars ? text : text[^maxChars..];
     }
 }
