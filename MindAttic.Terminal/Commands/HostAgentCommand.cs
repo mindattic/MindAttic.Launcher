@@ -61,6 +61,11 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
         }
 
         using var pinner = new TitlePinner(title);
+        // Per-tab pipe lets the launcher's "Remote Control" menu type
+        // /remote-control into every running Claude/Codex tab at once via
+        // ConsoleInputInjector. Started before Process.Start so a broadcast
+        // landing during agent startup isn't missed.
+        using var inputPipe = new HostInputPipeServer(provider.Key);
 
         var psi = new ProcessStartInfo(parts[0])
         {

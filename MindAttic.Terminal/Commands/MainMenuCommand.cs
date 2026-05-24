@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using MindAttic.Terminal.Menus;
 using MindAttic.Terminal.Services;
 using MindAttic.Terminal.Ui;
+using Spectre.Console;
 using Spectre.Console.Cli;
 
 namespace MindAttic.Terminal.Commands;
@@ -39,6 +40,7 @@ public sealed class MainMenuCommand : Command<MainMenuCommand.Settings>
                 new() { Name = "Run Project",         Description = "run a project in a new terminal tab", Tag = "run" },
                 new() { Name = "Backup",              Description = "back up MindAttic to R:\\Backup\\MindAttic", Tag = "backup" },
                 new() { Name = "Provider",            Description = "set default coding agent or per-project override", Tag = "provider" },
+                new() { Name = "Remote Control",      Description = "run /remote-control in every open Claude tab", Tag = "remote" },
                 new() { Name = "Open Command Prompt", Description = "open cmd at the root directory", Tag = "cmd" },
                 new() { Name = "Restart",             Description = "reload this console in a new tab; other tabs are untouched", Tag = "restart" },
                 new() { Name = "Exit",                Description = "close this menu (other tabs are untouched)", Tag = "exit" }
@@ -55,6 +57,7 @@ public sealed class MainMenuCommand : Command<MainMenuCommand.Settings>
                 case "run":      run.Run(); break;
                 case "backup":   backup.Run(); break;
                 case "provider": provider.Run(); break;
+                case "remote":   RunRemoteControl(); break;
                 case "cmd":
                     wt.Open(wt.BuildCmdTab(MindAtticRoot()));
                     Thread.Sleep(600);
@@ -65,6 +68,25 @@ public sealed class MainMenuCommand : Command<MainMenuCommand.Settings>
                 case "exit":     return 0;
             }
         }
+    }
+
+    private static void RunRemoteControl()
+    {
+        var broadcaster = new RemoteControlBroadcaster();
+        var result = broadcaster.BroadcastAsync("Claude", "/remote-control\n").GetAwaiter().GetResult();
+
+        if (result.Delivered == 0 && result.Failed.Count == 0)
+        {
+            AnsiConsole.MarkupLine("[yellow]No open Claude tabs found.[/]");
+        }
+        else
+        {
+            var tabWord = result.Delivered == 1 ? "tab" : "tabs";
+            AnsiConsole.MarkupLine($"[green]Sent /remote-control to {result.Delivered} Claude {tabWord}.[/]");
+            if (result.Failed.Count > 0)
+                AnsiConsole.MarkupLine($"[red]{result.Failed.Count} tab(s) didn't respond.[/]");
+        }
+        Thread.Sleep(1200);
     }
 
     private static string MindAtticRoot()
