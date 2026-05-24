@@ -3,9 +3,8 @@ using Spectre.Console;
 namespace MindAttic.Terminal.Ui;
 
 /// <summary>
-/// Color palette ported from the original PowerShell launcher
-/// (MindAttic.ps1 §"Color palette"). One source of truth for accent/dim/key
-/// colors so menus stay visually consistent.
+/// Color palette: one source of truth for accent/dim/key colors so menus stay
+/// visually consistent.
 /// </summary>
 public static class Theme
 {

@@ -8,9 +8,9 @@ using Spectre.Console.Cli;
 namespace MindAttic.Terminal.Commands;
 
 /// <summary>
-/// Per-tab agent host. Replaces console-launcher.ps1: looks up the project +
-/// provider, splits the provider's RunCommand into argv, sets the tab title
-/// and starts the title-pinner, then execs the agent with inherited stdio.
+/// Per-tab agent host: looks up the project + provider, splits the provider's
+/// RunCommand into argv, sets the tab title and starts the title-pinner, then
+/// execs the agent with inherited stdio.
 /// </summary>
 [SuppressMessage("Performance", "CA1812", Justification = "Instantiated by Spectre.Console.Cli")]
 public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>

@@ -5,9 +5,8 @@ namespace MindAttic.Terminal.Interop;
 
 /// <summary>
 /// Splits a Windows command line into argv exactly as <c>CreateProcessW</c>
-/// would, via <c>CommandLineToArgvW</c>. Ported from the PowerShell launcher
-/// (MindAtticCommandLineParser in console-launcher.ps1) so quoted args in a
-/// provider's <c>RunCommand</c> survive intact.
+/// would, via <c>CommandLineToArgvW</c>, so quoted args in a provider's
+/// <c>RunCommand</c> survive intact.
 /// </summary>
 public static partial class CommandLineParser
 {

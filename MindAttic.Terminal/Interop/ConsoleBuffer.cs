@@ -6,8 +6,7 @@ namespace MindAttic.Terminal.Interop;
 /// <summary>
 /// Peeks the bottom rows of the current console screen buffer so the agent
 /// host can detect Claude/Codex "esc to interrupt" prompts and decide whether
-/// to pin the tab title with the idle marker. Ported from
-/// MindAtticConsoleReader in console-launcher.ps1.
+/// to pin the tab title with the idle marker.
 /// </summary>
 public static partial class ConsoleBuffer
 {

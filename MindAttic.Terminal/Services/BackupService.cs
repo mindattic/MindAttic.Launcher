@@ -6,9 +6,8 @@ public sealed record BackupResult(bool Ok, int RobocopyExitCode, TimeSpan Elapse
 
 /// <summary>
 /// robocopy-backed backup of <c>D:\Projects\MindAttic</c> →
-/// <c>R:\Backup\MindAttic\&lt;yyyy-MM-dd&gt;[_a..z]</c>. Ports MindAttic.ps1
-/// §"Backup" verbatim including the exclude lists and the dated-folder
-/// allocator with letter-suffix collision handling.
+/// <c>R:\Backup\MindAttic\&lt;yyyy-MM-dd&gt;[_a..z]</c>. Includes the exclude
+/// lists and the dated-folder allocator with letter-suffix collision handling.
 /// </summary>
 public sealed class BackupService
 {

@@ -1,9 +1,9 @@
 # MindAttic.Terminal
 
-C# CLI for MindAttic orchestration. Replaces the PowerShell-based MindAttic
-project launcher (`MindAttic.ps1` + `console-launcher.ps1`) with a single
-binary, `MindAttic.Terminal.exe`. Tab spawning still goes through Windows Terminal
-(`wt`); the agent host that runs inside each tab is `mindattic host`.
+C# CLI for MindAttic orchestration. Single binary, `MindAttic.Terminal.exe`,
+that handles project menus, per-tab agent hosting, commit/push, and backup.
+Tab spawning goes through Windows Terminal (`wt`); the agent host that runs
+inside each tab is `mindattic host`.
 
 ## Build & publish
 
@@ -22,7 +22,7 @@ publishes on first run automatically.
 | Form | Behavior |
 | --- | --- |
 | `MindAttic.Terminal` | Interactive Spectre.Console menu (Commit, Open Project Tab, Run Project, Backup, Provider, Restart). |
-| `MindAttic.Terminal host --name <Project> [--provider <Key>] [--title <Tab>]` | Per-tab agent host. Replaces `console-launcher.ps1`. |
+| `MindAttic.Terminal host --name <Project> [--provider <Key>] [--title <Tab>]` | Per-tab agent host: sets the tab title, starts the title pinner, and execs the configured agent provider with inherited stdio. |
 | `MindAttic.Terminal commit [--project <Project>] [--message "..."]` | Commit + push one or all projects. Auto-generates the message from `git status --porcelain` when none is supplied. |
 | `MindAttic.Terminal.bat` | Launches `MindAttic.Terminal` and triggers a first-time publish if the exe is missing. |
 | `MindAttic.Terminal.bat --tab Foo` | Quick-spawn a `wt` tab running `MindAttic.Terminal host --name Foo`. |
@@ -60,8 +60,3 @@ git `--porcelain` parsing (incl. renames, MM both-modified, untracked, quoted
 paths), the auto commit-message + 200-char summary fallback, and the backup
 dated-folder allocator.
 
-## Retiring the PowerShell launcher
-
-`D:\Projects\MindAttic\MindAttic.ps1` and `console-launcher.ps1` stay in
-place as a fallback. Remove them once the .NET launcher has been stable for
-~a week.
