@@ -44,7 +44,10 @@ public static class Menu
 
         var nameWidth = rows.Max(i => i.Name.Length);
         var index = 0;
-        var startTop = System.Console.CursorTop;
+        // CursorTop throws on redirected stdout; fall back to 0 so the re-render
+        // path still works (it just overwrites from the top of the stream).
+        var startTop = 0;
+        try { startTop = System.Console.CursorTop; } catch { /* see above */ }
 
         var priorCursorVisible = true;
         try { priorCursorVisible = System.Console.CursorVisible; } catch { /* not supported on this stream */ }

@@ -50,6 +50,9 @@ public sealed class AgentProviderRegistry(SettingsStore store)
         var idx = -1;
         for (var i = 0; i < providers.Count; i++)
             if (string.Equals(providers[i].Key, currentKey, StringComparison.OrdinalIgnoreCase)) { idx = i; break; }
+        // Match SetDefault/SetProjectProvider: unknown keys are a caller bug,
+        // not "silently start from the first provider."
+        if (idx < 0) throw new ArgumentException($"Unknown provider: {currentKey}", nameof(currentKey));
         return providers[(idx + 1) % providers.Count];
     }
 

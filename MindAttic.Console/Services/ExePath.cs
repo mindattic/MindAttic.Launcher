@@ -46,7 +46,13 @@ public static class ExePath
         try
         {
             using var p = Process.Start(psi);
-            p?.WaitForExit();
+            // Cap the wait so a wedged publish (nuget stall, AV scan) can't
+            // freeze Restart / Open Project Tab. On timeout, kill and move on
+            // — the caller still tries to launch whatever exe currently exists.
+            if (p is not null && !p.WaitForExit((int)TimeSpan.FromMinutes(2).TotalMilliseconds))
+            {
+                try { p.Kill(entireProcessTree: true); } catch { }
+            }
         }
         catch
         {

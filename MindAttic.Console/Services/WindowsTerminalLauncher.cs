@@ -19,7 +19,7 @@ public sealed class WindowsTerminalLauncher
         public required IReadOnlyList<string> Command { get; init; }
     }
 
-    public Process Open(Tab tab)
+    public void Open(Tab tab)
     {
         var args = new List<string> { "-w", "0", "new-tab" };
 
@@ -56,7 +56,9 @@ public sealed class WindowsTerminalLauncher
         };
         foreach (var a in args) psi.ArgumentList.Add(a);
 
-        return Process.Start(psi) ?? throw new InvalidOperationException("Failed to start wt.");
+        // wt forks the new tab and exits immediately. Dispose the launcher
+        // Process handle right away — callers were leaking it.
+        using var launcher = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start wt.");
     }
 
     /// <summary>Builds an "agent host" tab — invokes `mindattic host …` for the given project + provider.</summary>

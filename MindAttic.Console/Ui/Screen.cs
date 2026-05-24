@@ -41,6 +41,9 @@ public static class Screen
     {
         AnsiConsole.WriteLine();
         AnsiConsole.MarkupLine("  [grey50]Press any key to continue...[/]");
-        System.Console.ReadKey(intercept: true);
+        // ReadKey throws on redirected stdin (piped runs, CI). Don't crash the
+        // host — just return as if the user pressed a key.
+        try { System.Console.ReadKey(intercept: true); }
+        catch (InvalidOperationException) { }
     }
 }

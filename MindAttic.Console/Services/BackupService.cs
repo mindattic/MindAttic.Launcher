@@ -113,15 +113,21 @@ public sealed class BackupService
             }
         }
 
-        Task.WaitAll(stdoutTask, stderrTask);
+        // Cap the drain wait so a wedged stream after Kill() can't hang the
+        // menu indefinitely — same defensive posture as GitService.Run.
+        try { Task.WaitAll(new[] { stdoutTask, stderrTask }, TimeSpan.FromSeconds(5)); } catch { }
         sw.Stop();
 
         var code = p.ExitCode;
         var ok = code < 8;
         // Robocopy writes most failure detail to stdout (per-file errors) and
         // some to stderr. Keep both, prefer stderr first, and trim to a tail
-        // so we don't dump megabytes of output into the menu.
-        var output = ok ? "" : Tail(string.Join("\n", stderrTask.Result, stdoutTask.Result), 2000);
+        // so we don't dump megabytes of output into the menu. If the drain
+        // wait timed out, fall back to "" for the unfinished task so we don't
+        // block on .Result.
+        var stderrText = stderrTask.IsCompletedSuccessfully ? stderrTask.Result : "";
+        var stdoutText = stdoutTask.IsCompletedSuccessfully ? stdoutTask.Result : "";
+        var output = ok ? "" : Tail(string.Join("\n", stderrText, stdoutText), 2000);
         return new BackupResult(ok, code, sw.Elapsed, targetFolder, output);
     }
 

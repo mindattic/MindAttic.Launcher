@@ -69,10 +69,13 @@ public sealed class SettingsStore
 
             store.Save(seed);
         }
-        catch
+        catch (Exception ex)
         {
-            // Best-effort seeding. A malformed legacy file falls through to a
-            // default-constructed AppSettings — same posture as JsonSettingsStore.Load.
+            // Best-effort seeding, but surface the reason on stderr so a
+            // malformed legacy file isn't silent data loss — the user otherwise
+            // sees an empty roster on first run with no explanation.
+            System.Console.Error.WriteLine(
+                $"Could not seed from legacy settings at {legacySettingsPath}: {ex.Message}");
         }
     }
 }

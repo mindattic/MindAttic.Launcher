@@ -44,10 +44,14 @@ public sealed class HostInputPipeServer : IDisposable
         {
             try
             {
+                // maxNumberOfServerInstances: 1 so another local process can't
+                // pre-create or squat the same pipe name and intercept the
+                // broadcaster's keystroke payload — pipe name is PID-derived
+                // and known, so the squat surface was real.
                 using var server = new NamedPipeServerStream(
                     Name,
                     PipeDirection.In,
-                    NamedPipeServerStream.MaxAllowedServerInstances,
+                    maxNumberOfServerInstances: 1,
                     PipeTransmissionMode.Byte,
                     PipeOptions.Asynchronous);
 

@@ -8,11 +8,11 @@ using Spectre.Console.Cli;
 namespace MindAttic.Console.Commands;
 
 [SuppressMessage("Performance", "CA1812", Justification = "Instantiated by Spectre.Console.Cli")]
-public sealed class MainMenuCommand : Command<MainMenuCommand.Settings>
+public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
 {
     public sealed class Settings : CommandSettings { }
 
-    public override int Execute(CommandContext context, Settings settings)
+    public override async Task<int> ExecuteAsync(CommandContext context, Settings settings)
     {
         var store = new SettingsStore();
         _ = store.Load(); // surface legacy-seed migration on launch
@@ -57,7 +57,7 @@ public sealed class MainMenuCommand : Command<MainMenuCommand.Settings>
                 case "run":      run.Run(); break;
                 case "backup":   backup.Run(); break;
                 case "provider": provider.Run(); break;
-                case "remote":   RunRemoteControl(); break;
+                case "remote":   await RunRemoteControl(); break;
                 case "cmd":
                     wt.Open(wt.BuildCmdTab(MindAtticRoot()));
                     Thread.Sleep(600);
@@ -70,10 +70,10 @@ public sealed class MainMenuCommand : Command<MainMenuCommand.Settings>
         }
     }
 
-    private static void RunRemoteControl()
+    private static async Task RunRemoteControl()
     {
         var broadcaster = new RemoteControlBroadcaster();
-        var result = broadcaster.BroadcastAsync("Claude", "/remote-control\n").GetAwaiter().GetResult();
+        var result = await broadcaster.BroadcastAsync("Claude", "/remote-control\n");
 
         if (result.Delivered == 0 && result.Failed.Count == 0)
         {

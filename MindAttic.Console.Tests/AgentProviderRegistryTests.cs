@@ -72,6 +72,12 @@ public sealed class AgentProviderRegistryTests
     }
 
     [Test]
+    public void Next_unknown_key_throws()
+    {
+        Assert.Throws<ArgumentException>(() => registry.Next("Bogus"));
+    }
+
+    [Test]
     public void SetDefault_persists_through_store_round_trip()
     {
         registry.SetDefault("Codex");

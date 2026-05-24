@@ -43,7 +43,11 @@ public sealed class CommitMenu(SettingsStore store, GitService git)
         var results = new Dictionary<string, string>();
         Parallel.ForEach(projects, p =>
         {
-            var summary = git.ShortStatus(p.Path);
+            // git.ShortStatus shells out and can throw if git isn't on PATH;
+            // catch per-project so one missing tool doesn't crash the menu.
+            string summary;
+            try { summary = git.ShortStatus(p.Path); }
+            catch (Exception ex) { summary = $"git error: {ex.Message}"; }
             lock (results) results[p.Name] = summary;
         });
         return results;
