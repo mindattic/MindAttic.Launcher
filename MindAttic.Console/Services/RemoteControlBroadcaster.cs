@@ -36,26 +36,32 @@ public sealed class RemoteControlBroadcaster
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        var delivered = 0;
-        var failed = new List<string>();
-        foreach (var name in targets)
-        {
-            try
-            {
-                using var client = new NamedPipeClientStream(".", name, PipeDirection.Out, PipeOptions.Asynchronous);
-                await client.ConnectAsync(1000, ct).ConfigureAwait(false);
-                var bytes = Encoding.UTF8.GetBytes(payload);
-                await client.WriteAsync(bytes, ct).ConfigureAwait(false);
-                await client.FlushAsync(ct).ConfigureAwait(false);
-                delivered++;
-            }
-            catch
-            {
-                failed.Add(name);
-            }
-        }
+        // Fan out: each connect is IO-bound with a 1s timeout, so a serial
+        // foreach makes a 5-stale-tab broadcast take 5 seconds. Run them in
+        // parallel — order doesn't matter, only the delivered/failed totals.
+        var bytes = Encoding.UTF8.GetBytes(payload);
+        var sends = targets.Select(name => SendToAsync(name, bytes, ct));
+        var outcomes = await Task.WhenAll(sends).ConfigureAwait(false);
 
+        var delivered = outcomes.Count(o => o.Ok);
+        var failed = outcomes.Where(o => !o.Ok).Select(o => o.Name).ToList();
         return new Result { Delivered = delivered, Failed = failed };
+    }
+
+    private static async Task<(string Name, bool Ok)> SendToAsync(string name, byte[] bytes, CancellationToken ct)
+    {
+        try
+        {
+            using var client = new NamedPipeClientStream(".", name, PipeDirection.Out, PipeOptions.Asynchronous);
+            await client.ConnectAsync(1000, ct).ConfigureAwait(false);
+            await client.WriteAsync(bytes, ct).ConfigureAwait(false);
+            await client.FlushAsync(ct).ConfigureAwait(false);
+            return (name, true);
+        }
+        catch
+        {
+            return (name, false);
+        }
     }
 
     private static IEnumerable<string> EnumerateLocalPipes()

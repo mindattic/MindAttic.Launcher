@@ -37,7 +37,14 @@ public static partial class ConsoleInputInjector
         }
 
         var buffer = records.ToArray();
-        WriteConsoleInputW(handle, buffer, (uint)buffer.Length, out _);
+        // Surface failures so the pipe server / broadcaster don't report
+        // "Sent /remote-control to N tabs" when the input handle is closed or
+        // the call failed for some other reason.
+        if (!WriteConsoleInputW(handle, buffer, (uint)buffer.Length, out _))
+        {
+            var err = Marshal.GetLastWin32Error();
+            throw new System.ComponentModel.Win32Exception(err, "WriteConsoleInputW failed");
+        }
     }
 
     private static INPUT_RECORD KeyRecord(bool bKeyDown, ushort vkey, char ch) => new()

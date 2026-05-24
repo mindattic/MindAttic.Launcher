@@ -29,14 +29,26 @@ public sealed class BackupMenu(BackupService backup)
         AnsiConsole.WriteLine();
 
         BackupResult? result = null;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots)
             .Start("  Backing up...", ctx =>
             {
-                var task = Task.Run(() => result = backup.Run(
-                    target,
-                    onTick: elapsed => ctx.Status($"  Backing up... [grey50]{Format(elapsed)}[/]")));
-                task.Wait();
+                // Spectre runs the spinner on a separate thread; the delegate
+                // is the work, so calling backup.Run inline is correct — the
+                // earlier Task.Run+Wait just bounced through the thread pool
+                // and wrapped any failure in AggregateException. Catch here so
+                // a missing robocopy can't take down the menu.
+                try
+                {
+                    result = backup.Run(
+                        target,
+                        onTick: elapsed => ctx.Status($"  Backing up... [grey50]{Format(elapsed)}[/]"));
+                }
+                catch (Exception ex)
+                {
+                    result = new BackupResult(false, -1, sw.Elapsed, target, ex.Message);
+                }
             });
 
         AnsiConsole.WriteLine();
@@ -64,5 +76,7 @@ public sealed class BackupMenu(BackupService backup)
     }
 
     private static string Format(TimeSpan t) =>
-        $"{(int)Math.Floor(t.TotalMinutes)}:{t.Seconds:D2}";
+        t.TotalHours >= 1
+            ? t.ToString(@"h\:mm\:ss")
+            : t.ToString(@"m\:ss");
 }

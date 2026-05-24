@@ -14,7 +14,22 @@ public sealed class SettingsStore
 
     // Legacy file that the original PowerShell scripts read from. Used as a
     // one-time seed source if the Vault settings.json is missing on first run.
-    public const string DefaultLegacySettingsPath = @"D:\Projects\MindAttic\settings.json";
+    // Resolved at runtime from the repo root so the seed still works when the
+    // checkout isn't on D:\ — falls back to the historical D:\ path when no
+    // repo root is detectable (e.g. running the published exe in isolation).
+    public static string DefaultLegacySettingsPath { get; } = ResolveLegacySettingsPath();
+
+    private static string ResolveLegacySettingsPath()
+    {
+        var dir = Path.GetDirectoryName(Environment.ProcessPath ?? string.Empty);
+        while (!string.IsNullOrEmpty(dir))
+        {
+            if (File.Exists(Path.Combine(dir, "scripts", "publish.ps1")))
+                return Path.Combine(dir, "settings.json");
+            dir = Path.GetDirectoryName(dir);
+        }
+        return @"D:\Projects\MindAttic\settings.json";
+    }
 
     private static readonly JsonSerializerOptions LegacyReadOptions = new()
     {

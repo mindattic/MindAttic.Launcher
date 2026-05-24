@@ -12,7 +12,7 @@ public sealed class CommitMenu(SettingsStore store, GitService git)
         while (true)
         {
             var sortedProjects = ProjectRoster.Sorted(store.Load());
-            var statuses = FetchStatuses(sortedProjects);
+            var statuses = git.FetchShortStatuses(sortedProjects);
 
             var items = new List<MenuItem>
             {
@@ -36,21 +36,6 @@ public sealed class CommitMenu(SettingsStore store, GitService git)
             else if (sel.Tag is Project project)
                 CommitOne(project);
         }
-    }
-
-    private Dictionary<string, string> FetchStatuses(IReadOnlyList<Project> projects)
-    {
-        var results = new Dictionary<string, string>();
-        Parallel.ForEach(projects, p =>
-        {
-            // git.ShortStatus shells out and can throw if git isn't on PATH;
-            // catch per-project so one missing tool doesn't crash the menu.
-            string summary;
-            try { summary = git.ShortStatus(p.Path); }
-            catch (Exception ex) { summary = $"git error: {ex.Message}"; }
-            lock (results) results[p.Name] = summary;
-        });
-        return results;
     }
 
     private void CommitAll(IReadOnlyList<Project> projects)

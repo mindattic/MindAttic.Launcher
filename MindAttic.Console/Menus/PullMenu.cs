@@ -12,7 +12,7 @@ public sealed class PullMenu(SettingsStore store, GitService git)
         while (true)
         {
             var sortedProjects = ProjectRoster.Sorted(store.Load());
-            var statuses = FetchStatuses(sortedProjects);
+            var statuses = git.FetchShortStatuses(sortedProjects);
 
             var items = new List<MenuItem>
             {
@@ -35,23 +35,6 @@ public sealed class PullMenu(SettingsStore store, GitService git)
             else if (sel.Tag is Project project)
                 PullOne(project);
         }
-    }
-
-    private Dictionary<string, string> FetchStatuses(IReadOnlyList<Project> projects)
-    {
-        // Status fetches are independent and IO-bound — run them in parallel
-        // so a 20-project roster doesn't serialize 20 git invocations.
-        var results = new Dictionary<string, string>();
-        Parallel.ForEach(projects, p =>
-        {
-            // git.ShortStatus shells out and can throw if git isn't on PATH;
-            // catch per-project so one missing tool doesn't crash the menu.
-            string summary;
-            try { summary = git.ShortStatus(p.Path); }
-            catch (Exception ex) { summary = $"git error: {ex.Message}"; }
-            lock (results) results[p.Name] = summary;
-        });
-        return results;
     }
 
     private void PullAll(IReadOnlyList<Project> projects)

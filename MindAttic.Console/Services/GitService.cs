@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using MindAttic.Console.Models;
 
 namespace MindAttic.Console.Services;
 
@@ -114,8 +115,34 @@ public sealed class GitService
     /// <summary>Convenience wrapper: returns the user-facing summary string (or the error explanation).</summary>
     public string ShortStatus(string repoPath) => Status(repoPath).Short();
 
+    /// <summary>
+    /// Parallel fan-out of <see cref="ShortStatus"/> across a project roster.
+    /// Returns a map keyed by project name. Per-project exceptions (git missing,
+    /// permission errors) are caught and surfaced as the status string so one
+    /// bad repo can't take down the menu.
+    /// </summary>
+    public Dictionary<string, string> FetchShortStatuses(IReadOnlyList<Project> projects)
+    {
+        var results = new Dictionary<string, string>();
+        Parallel.ForEach(projects, p =>
+        {
+            string summary;
+            try { summary = ShortStatus(p.Path); }
+            catch (Exception ex) { summary = $"git error: {ex.Message}"; }
+            lock (results) results[p.Name] = summary;
+        });
+        return results;
+    }
+
     public (bool ok, string? message) Pull(string repoPath)
     {
+        // Mirror Status()/Commit()'s pre-checks so the caller sees the same
+        // "PATH NOT FOUND" / "not a git repo" wording instead of git's own
+        // confusing fatal output.
+        if (!Directory.Exists(repoPath)) return (false, "PATH NOT FOUND");
+        var dotGit = Path.Combine(repoPath, ".git");
+        if (!Directory.Exists(dotGit) && !File.Exists(dotGit)) return (false, "not a git repo");
+
         var (code, stdout, stderr) = Run(repoPath, DefaultTimeout, "pull", "--ff-only");
         if (code != 0) return (false, $"{stdout}\n{stderr}".Trim());
         return (true, stdout.Contains("Already up to date", StringComparison.OrdinalIgnoreCase)

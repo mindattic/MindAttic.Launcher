@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.IO.Pipes;
 using System.Text;
 using MindAttic.Console.Interop;
@@ -25,7 +24,7 @@ public sealed class HostInputPipeServer : IDisposable
     public string Name { get; }
 
     public HostInputPipeServer(string providerKey)
-        : this(PipeName(providerKey, Process.GetCurrentProcess().Id), ConsoleInputInjector.InjectText)
+        : this(PipeName(providerKey, Environment.ProcessId), ConsoleInputInjector.InjectText)
     {
     }
 
@@ -63,10 +62,12 @@ public sealed class HostInputPipeServer : IDisposable
                     sink(text);
             }
             catch (OperationCanceledException) { return; }
-            catch
+            catch (Exception ex)
             {
                 // A broken connection or transient pipe failure shouldn't take
-                // the agent down; just loop and accept the next client.
+                // the agent down — but log it so a silent injection failure
+                // (WriteConsoleInputW returning false) isn't invisible.
+                try { System.Console.Error.WriteLine($"[host-pipe] {ex.Message}"); } catch { }
             }
         }
     }

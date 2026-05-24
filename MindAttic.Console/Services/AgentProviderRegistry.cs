@@ -20,29 +20,51 @@ public sealed class AgentProviderRegistry(SettingsStore store)
         return configured.Count > 0 ? configured : Defaults;
     }
 
-    public AgentProvider? ByKey(string? key) =>
+    public AgentProvider? ByKey(string? key) => ByKey(All(), key);
+
+    private static AgentProvider? ByKey(IReadOnlyList<AgentProvider> providers, string? key) =>
         string.IsNullOrWhiteSpace(key)
             ? null
-            : All().FirstOrDefault(p => string.Equals(p.Key, key, StringComparison.OrdinalIgnoreCase));
+            : providers.FirstOrDefault(p => string.Equals(p.Key, key, StringComparison.OrdinalIgnoreCase));
 
     public string CurrentDefaultKey()
     {
+        var providers = All();
         var providerKey = store.Load().Provider;
-        if (ByKey(providerKey) is not null) return providerKey!;
-        return All()[0].Key;
+        if (ByKey(providers, providerKey) is not null) return providerKey!;
+        return providers[0].Key;
     }
 
-    public AgentProvider Current() => ByKey(CurrentDefaultKey()) ?? All()[0];
-
-    public string EffectiveProviderKey(Project project)
+    public AgentProvider Current()
     {
-        if (!string.IsNullOrWhiteSpace(project.Provider) && ByKey(project.Provider) is not null)
-            return project.Provider!;
-        return CurrentDefaultKey();
+        var providers = All();
+        return ByKey(providers, CurrentDefaultKey(providers)) ?? providers[0];
     }
 
-    public AgentProvider EffectiveProvider(Project project) =>
-        ByKey(EffectiveProviderKey(project))!;
+    public string EffectiveProviderKey(Project project) => EffectiveProviderKey(All(), project);
+
+    private string EffectiveProviderKey(IReadOnlyList<AgentProvider> providers, Project project)
+    {
+        if (!string.IsNullOrWhiteSpace(project.Provider) && ByKey(providers, project.Provider) is not null)
+            return project.Provider!;
+        return CurrentDefaultKey(providers);
+    }
+
+    private string CurrentDefaultKey(IReadOnlyList<AgentProvider> providers)
+    {
+        var providerKey = store.Load().Provider;
+        if (ByKey(providers, providerKey) is not null) return providerKey!;
+        return providers[0].Key;
+    }
+
+    // Single All() call per EffectiveProvider invocation — the public API was
+    // routing through ByKey twice (once for the key, once for the lookup),
+    // each one re-filtering the provider list from settings.
+    public AgentProvider EffectiveProvider(Project project)
+    {
+        var providers = All();
+        return ByKey(providers, EffectiveProviderKey(providers, project))!;
+    }
 
     public AgentProvider Next(string currentKey)
     {
