@@ -46,6 +46,12 @@ public sealed class CommitCommand : Command<CommitCommand.Settings>
             }
 
             var status = git.Status(p.Path);
+            if (!status.IsValid)
+            {
+                AnsiConsole.MarkupLine($"[white]{Markup.Escape(p.Name)}:[/] [red]{Markup.Escape(status.Error ?? "")}[/]");
+                ok = false;
+                continue;
+            }
             if (status.IsClean)
             {
                 AnsiConsole.MarkupLine($"[white]{Markup.Escape(p.Name)}:[/] [grey50]nothing to commit[/]");

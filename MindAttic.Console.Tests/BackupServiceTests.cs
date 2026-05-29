@@ -56,6 +56,21 @@ public sealed class BackupServiceTests
         Assert.Throws<InvalidOperationException>(() => subject.ResolveTargetFolder());
     }
 
+    [TestCase(0, ExpectedResult = true)]
+    [TestCase(1, ExpectedResult = true)]
+    [TestCase(7, ExpectedResult = true)]
+    [TestCase(8, ExpectedResult = false)]
+    [TestCase(16, ExpectedResult = false)]
+    [TestCase(-1, ExpectedResult = false)]
+    public bool ComputeOk_treats_only_0_through_7_as_success(int exitCode) =>
+        BackupService.ComputeOk(exitCode, cancelled: false);
+
+    [Test]
+    public void ComputeOk_reports_failure_when_cancelled_even_on_a_success_code()
+    {
+        Assert.That(BackupService.ComputeOk(0, cancelled: true), Is.False);
+    }
+
     [Test]
     public void Exclude_lists_match_original_PS_launcher()
     {

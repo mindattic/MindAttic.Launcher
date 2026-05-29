@@ -205,7 +205,15 @@ public sealed class GitService
             return (124, "", $"git {string.Join(' ', args)} timed out after {timeout.TotalSeconds:0}s");
         }
 
-        Task.WaitAll(stdoutTask, stderrTask);
+        // git itself has exited, but a process it spawned (a pager, a hook, a
+        // credential helper) can inherit our redirected stdout/stderr and keep
+        // the pipe open, leaving ReadToEnd blocked indefinitely. Cap the drain
+        // the same way the timeout path does so one stuck grandchild can't wedge
+        // the menu; read whatever finished.
+        if (!Task.WaitAll(new[] { stdoutTask, stderrTask }, TimeSpan.FromSeconds(5)))
+            return (p.ExitCode,
+                stdoutTask.IsCompletedSuccessfully ? stdoutTask.Result : "",
+                stderrTask.IsCompletedSuccessfully ? stderrTask.Result : "");
         return (p.ExitCode, stdoutTask.Result, stderrTask.Result);
     }
 }

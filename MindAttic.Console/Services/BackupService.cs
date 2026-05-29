@@ -94,10 +94,12 @@ public sealed class BackupService
         var stderrTask = Task.Run(() => p.StandardError.ReadToEnd(), CancellationToken.None);
 
         var lastTickSec = -1;
+        var cancelled = false;
         while (!p.HasExited)
         {
             if (ct.IsCancellationRequested)
             {
+                cancelled = true;
                 try { p.Kill(entireProcessTree: true); } catch { }
                 break;
             }
@@ -113,13 +115,22 @@ public sealed class BackupService
             }
         }
 
+        // Kill() is asynchronous, so after a cancellation break the process may
+        // not have exited yet; wait (bounded) before reading ExitCode so we
+        // don't throw "process has not exited" or read a stale code.
+        try { p.WaitForExit(5000); } catch { }
         // Cap the drain wait so a wedged stream after Kill() can't hang the
         // menu indefinitely — same defensive posture as GitService.Run.
         try { Task.WaitAll(new[] { stdoutTask, stderrTask }, TimeSpan.FromSeconds(5)); } catch { }
         sw.Stop();
 
-        var code = p.ExitCode;
-        var ok = code < 8;
+        // ExitCode throws if the process somehow still hasn't exited; treat that
+        // (and any negative/kill code from cancellation) as a failure rather
+        // than letting "< 8" report a cancelled or wedged run as a success.
+        int code;
+        try { code = p.ExitCode; }
+        catch { code = -1; }
+        var ok = ComputeOk(code, cancelled);
         // Robocopy writes most failure detail to stdout (per-file errors) and
         // some to stderr. Keep both, prefer stderr first, and trim to a tail
         // so we don't dump megabytes of output into the menu. If the drain
@@ -130,6 +141,15 @@ public sealed class BackupService
         var output = ok ? "" : Tail(string.Join("\n", stderrText, stdoutText), 2000);
         return new BackupResult(ok, code, sw.Elapsed, targetFolder, output);
     }
+
+    /// <summary>
+    /// robocopy exit codes 0–7 are success (files copied / nothing to do / minor
+    /// housekeeping); 8+ are failures. A negative code only shows up when we
+    /// killed the process (cancellation, wedge), so it — like an explicit
+    /// cancellation — counts as a failure rather than a success.
+    /// </summary>
+    public static bool ComputeOk(int robocopyExitCode, bool cancelled) =>
+        !cancelled && robocopyExitCode is >= 0 and < 8;
 
     private static string Tail(string text, int maxChars)
     {

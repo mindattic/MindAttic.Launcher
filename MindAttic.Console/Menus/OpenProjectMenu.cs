@@ -24,6 +24,13 @@ public sealed class OpenProjectMenu(SettingsStore store, AgentProviderRegistry p
                 .ToList();
 
             Screen.Header("Open Project Tab");
+            if (items.Count == 0)
+            {
+                Screen.Notice("[grey50]No projects configured.[/]");
+                Screen.PressAnyKey();
+                return;
+            }
+
             var result = Menu.PromptWithKeys(
                 "Choose a project to open:",
                 items,

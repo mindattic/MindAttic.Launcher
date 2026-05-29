@@ -35,7 +35,13 @@ public static class ExePath
         var psi = new ProcessStartInfo("powershell")
         {
             UseShellExecute = false,
-            WorkingDirectory = root
+            WorkingDirectory = root,
+            // Capture the publish chatter instead of letting it scribble over the
+            // Spectre menu we return to. RedirectStandardOutput also means we must
+            // drain both streams, or a verbose publish can deadlock on a full pipe.
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
         };
         psi.ArgumentList.Add("-NoProfile");
         psi.ArgumentList.Add("-ExecutionPolicy");
@@ -46,12 +52,18 @@ public static class ExePath
         try
         {
             using var p = Process.Start(psi);
-            // Cap the wait so a wedged publish (nuget stall, AV scan) can't
-            // freeze Restart / Open Project Tab. On timeout, kill and move on
-            // — the caller still tries to launch whatever exe currently exists.
-            if (p is not null && !p.WaitForExit((int)TimeSpan.FromMinutes(2).TotalMilliseconds))
+            if (p is not null)
             {
-                try { p.Kill(entireProcessTree: true); } catch { }
+                var drainOut = Task.Run(() => p.StandardOutput.ReadToEnd());
+                var drainErr = Task.Run(() => p.StandardError.ReadToEnd());
+                // Cap the wait so a wedged publish (nuget stall, AV scan) can't
+                // freeze Restart / Open Project Tab. On timeout, kill and move on
+                // — the caller still tries to launch whatever exe currently exists.
+                if (!p.WaitForExit((int)TimeSpan.FromMinutes(2).TotalMilliseconds))
+                {
+                    try { p.Kill(entireProcessTree: true); } catch { }
+                }
+                try { Task.WaitAll(new[] { drainOut, drainErr }, TimeSpan.FromSeconds(5)); } catch { }
             }
         }
         catch

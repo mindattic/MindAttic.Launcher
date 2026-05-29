@@ -1,6 +1,7 @@
 using MindAttic.Console.Models;
 using MindAttic.Console.Services;
 using MindAttic.Console.Ui;
+using Spectre.Console;
 
 namespace MindAttic.Console.Menus;
 
@@ -58,7 +59,7 @@ public sealed class ProviderMenu(SettingsStore store, AgentProviderRegistry prov
         if (sel is null) return;
 
         providers.SetDefault(((AgentProvider)sel.Tag!).Key);
-        Screen.Notice($"[green]Default provider set to[/] [cyan1]{((AgentProvider)sel.Tag!).Name}[/]");
+        Screen.Notice($"[green]Default provider set to[/] [cyan1]{Markup.Escape(((AgentProvider)sel.Tag!).Name)}[/]");
         Thread.Sleep(600);
     }
 
@@ -91,18 +92,18 @@ public sealed class ProviderMenu(SettingsStore store, AgentProviderRegistry prov
         }
 
         Screen.Header("Provider", project.Name);
-        var sel = Menu.Prompt($"Pick a provider for {project.Name}:", items);
+        var sel = Menu.Prompt($"Pick a provider for {Markup.Escape(project.Name)}:", items);
         if (sel is null) return;
 
         if (sel.Tag is AgentProvider chosen)
         {
             providers.SetProjectProvider(project.Name, chosen.Key);
-            Screen.Notice($"[green]{project.Name} provider set to[/] [cyan1]{chosen.Name}[/]");
+            Screen.Notice($"[green]{Markup.Escape(project.Name)} provider set to[/] [cyan1]{Markup.Escape(chosen.Name)}[/]");
         }
         else
         {
             providers.SetProjectProvider(project.Name, null);
-            Screen.Notice($"[green]{project.Name} reset to default provider.[/]");
+            Screen.Notice($"[green]{Markup.Escape(project.Name)} reset to default provider.[/]");
         }
         Thread.Sleep(600);
     }

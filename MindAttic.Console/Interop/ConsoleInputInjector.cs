@@ -37,6 +37,10 @@ public static partial class ConsoleInputInjector
         }
 
         var buffer = records.ToArray();
+        // Text that collapses to nothing injectable (e.g. a lone '\r') leaves an
+        // empty buffer — skip the syscall rather than calling WriteConsoleInputW
+        // with a zero-length array.
+        if (buffer.Length == 0) return;
         // Surface failures so the pipe server / broadcaster don't report
         // "Sent /remote-control to N tabs" when the input handle is closed or
         // the call failed for some other reason.

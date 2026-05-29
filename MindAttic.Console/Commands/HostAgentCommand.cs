@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using MindAttic.Console.Interop;
+using MindAttic.Console.Models;
 using MindAttic.Console.Services;
 using Spectre.Console.Cli;
 
@@ -47,9 +48,24 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
             return 1;
         }
 
-        var provider = !string.IsNullOrWhiteSpace(settings.Provider)
-            ? registry.ByKey(settings.Provider) ?? registry.EffectiveProvider(project)
-            : registry.EffectiveProvider(project);
+        AgentProvider provider;
+        if (!string.IsNullOrWhiteSpace(settings.Provider))
+        {
+            // An explicit --provider that doesn't resolve is a caller bug (a
+            // typo), not "quietly launch the project default" — that would hide
+            // the mistake and start the wrong agent. Fail loudly instead.
+            var requested = registry.ByKey(settings.Provider);
+            if (requested is null)
+            {
+                System.Console.Error.WriteLine($"Unknown provider: {settings.Provider}");
+                return 4;
+            }
+            provider = requested;
+        }
+        else
+        {
+            provider = registry.EffectiveProvider(project);
+        }
 
         var title = string.IsNullOrWhiteSpace(settings.Title) ? settings.Name : settings.Title!;
 

@@ -10,9 +10,11 @@ public sealed class AgentProviderRegistry(SettingsStore store)
         new AgentProvider { Key = "Codex",  Name = "OpenAI Codex", RunCommand = "codex --dangerously-bypass-approvals-and-sandbox" }
     ];
 
-    public IReadOnlyList<AgentProvider> All()
+    public IReadOnlyList<AgentProvider> All() => ProvidersFrom(store.Load());
+
+    private static IReadOnlyList<AgentProvider> ProvidersFrom(AppSettings settings)
     {
-        var configured = store.Load().AgentProviders
+        var configured = settings.AgentProviders
             .Where(a => !string.IsNullOrWhiteSpace(a.Key)
                      && !string.IsNullOrWhiteSpace(a.Name)
                      && !string.IsNullOrWhiteSpace(a.RunCommand))
@@ -27,43 +29,43 @@ public sealed class AgentProviderRegistry(SettingsStore store)
             ? null
             : providers.FirstOrDefault(p => string.Equals(p.Key, key, StringComparison.OrdinalIgnoreCase));
 
+    private static string DefaultKeyFrom(AppSettings settings, IReadOnlyList<AgentProvider> providers) =>
+        ByKey(providers, settings.Provider) is not null ? settings.Provider! : providers[0].Key;
+
+    // Every public accessor below resolves from one settings snapshot — the
+    // providers list and the default/effective key both come out of a single
+    // store.Load(), instead of re-reading (and re-filtering) settings per lookup.
     public string CurrentDefaultKey()
     {
-        var providers = All();
-        var providerKey = store.Load().Provider;
-        if (ByKey(providers, providerKey) is not null) return providerKey!;
-        return providers[0].Key;
+        var settings = store.Load();
+        return DefaultKeyFrom(settings, ProvidersFrom(settings));
     }
 
     public AgentProvider Current()
     {
-        var providers = All();
-        return ByKey(providers, CurrentDefaultKey(providers)) ?? providers[0];
+        var settings = store.Load();
+        var providers = ProvidersFrom(settings);
+        return ByKey(providers, DefaultKeyFrom(settings, providers)) ?? providers[0];
     }
 
-    public string EffectiveProviderKey(Project project) => EffectiveProviderKey(All(), project);
+    public string EffectiveProviderKey(Project project)
+    {
+        var settings = store.Load();
+        return EffectiveKey(settings, ProvidersFrom(settings), project);
+    }
 
-    private string EffectiveProviderKey(IReadOnlyList<AgentProvider> providers, Project project)
+    private static string EffectiveKey(AppSettings settings, IReadOnlyList<AgentProvider> providers, Project project)
     {
         if (!string.IsNullOrWhiteSpace(project.Provider) && ByKey(providers, project.Provider) is not null)
             return project.Provider!;
-        return CurrentDefaultKey(providers);
+        return DefaultKeyFrom(settings, providers);
     }
 
-    private string CurrentDefaultKey(IReadOnlyList<AgentProvider> providers)
-    {
-        var providerKey = store.Load().Provider;
-        if (ByKey(providers, providerKey) is not null) return providerKey!;
-        return providers[0].Key;
-    }
-
-    // Single All() call per EffectiveProvider invocation — the public API was
-    // routing through ByKey twice (once for the key, once for the lookup),
-    // each one re-filtering the provider list from settings.
     public AgentProvider EffectiveProvider(Project project)
     {
-        var providers = All();
-        return ByKey(providers, EffectiveProviderKey(providers, project))!;
+        var settings = store.Load();
+        var providers = ProvidersFrom(settings);
+        return ByKey(providers, EffectiveKey(settings, providers, project))!;
     }
 
     public AgentProvider Next(string currentKey)
