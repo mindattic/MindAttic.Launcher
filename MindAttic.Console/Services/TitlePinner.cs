@@ -4,17 +4,21 @@ namespace MindAttic.Console.Services;
 
 /// <summary>
 /// Background loop that polls the bottom of the console buffer every 500 ms
-/// and prefixes the tab title with a pause glyph when no "esc to interrupt" /
-/// "ctrl+c to cancel" prompt is visible. The owning wt tab must be launched
-/// without --suppressApplicationTitle for the prefix to actually show.
+/// and prefixes the tab title with a play glyph while an "esc to interrupt" /
+/// "ctrl+c to cancel" prompt is visible (the agent is busy) and a pause glyph
+/// otherwise (idle/waiting). The owning wt tab must be launched without
+/// --suppressApplicationTitle for the prefix to actually show.
 /// </summary>
 public sealed class TitlePinner : IDisposable
 {
-    // U+23F8 (⏸) DOUBLE VERTICAL BAR. The console title is set via the wide
-    // SetConsoleTitleW path, so Unicode renders fine in Windows Terminal; "||"
-    // is the ASCII fallback if a host ever mangles the glyph. Title space is
-    // tight, so this replaces the old word "Paused".
+    // The console title is set via the wide SetConsoleTitleW path, so Unicode
+    // renders fine in Windows Terminal; "||" / ">" are the ASCII fallbacks if a
+    // host ever mangles the glyphs. Title space is tight, so a single glyph
+    // stands in for the old "Paused" word.
+    // U+23F8 (⏸) DOUBLE VERTICAL BAR — shown when the agent is idle/waiting.
     private const string IdleMarker = "⏸";
+    // U+25B6 (▶) BLACK RIGHT-POINTING TRIANGLE — shown while the agent is busy.
+    private const string BusyMarker = "▶";
     private static readonly string[] BusyPatterns =
     [
         "esc to interrupt",
@@ -53,7 +57,8 @@ public sealed class TitlePinner : IDisposable
                         if (lower.Contains(pattern)) { isBusy = true; break; }
                     }
                 }
-                System.Console.Title = isBusy ? title : $"{IdleMarker}  {title}";
+                var marker = isBusy ? BusyMarker : IdleMarker;
+                System.Console.Title = $"{marker}  {title}";
             }
             catch
             {
