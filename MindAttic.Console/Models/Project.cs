@@ -13,5 +13,16 @@ public sealed class Project
     public string? ColorScheme { get; set; }
     public string? Provider { get; set; }
 
-    public string TabTitle => string.IsNullOrWhiteSpace(TabAlias) ? Name : TabAlias!;
+    private const string NamePrefix = "MindAttic.";
+
+    /// <summary>
+    /// Short label for the wt tab title. An explicit <see cref="TabAlias"/> wins;
+    /// otherwise the shared "MindAttic." prefix is stripped so "MindAttic.Legion"
+    /// shows as "Legion" — tab titles have very little room and the prefix is
+    /// redundant when every project carries it.
+    /// </summary>
+    public string TabTitle =>
+        !string.IsNullOrWhiteSpace(TabAlias) ? TabAlias!
+        : Name.StartsWith(NamePrefix, StringComparison.OrdinalIgnoreCase) ? Name[NamePrefix.Length..]
+        : Name;
 }

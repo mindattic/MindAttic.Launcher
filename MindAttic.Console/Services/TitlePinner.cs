@@ -4,13 +4,17 @@ namespace MindAttic.Console.Services;
 
 /// <summary>
 /// Background loop that polls the bottom of the console buffer every 500 ms
-/// and prefixes the tab title with "Paused" when no "esc to interrupt" /
+/// and prefixes the tab title with a pause glyph when no "esc to interrupt" /
 /// "ctrl+c to cancel" prompt is visible. The owning wt tab must be launched
 /// without --suppressApplicationTitle for the prefix to actually show.
 /// </summary>
 public sealed class TitlePinner : IDisposable
 {
-    private const string IdleMarker = "Paused";
+    // U+23F8 (⏸) DOUBLE VERTICAL BAR. The console title is set via the wide
+    // SetConsoleTitleW path, so Unicode renders fine in Windows Terminal; "||"
+    // is the ASCII fallback if a host ever mangles the glyph. Title space is
+    // tight, so this replaces the old word "Paused".
+    private const string IdleMarker = "⏸";
     private static readonly string[] BusyPatterns =
     [
         "esc to interrupt",
@@ -49,7 +53,7 @@ public sealed class TitlePinner : IDisposable
                         if (lower.Contains(pattern)) { isBusy = true; break; }
                     }
                 }
-                System.Console.Title = isBusy ? title : $"{IdleMarker} - {title}";
+                System.Console.Title = isBusy ? title : $"{IdleMarker}  {title}";
             }
             catch
             {
