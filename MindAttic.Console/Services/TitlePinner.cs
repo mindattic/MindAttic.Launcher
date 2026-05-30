@@ -3,11 +3,23 @@ using MindAttic.Console.Interop;
 namespace MindAttic.Console.Services;
 
 /// <summary>
-/// Background loop that polls the bottom of the console buffer every 500 ms
-/// and prefixes the tab title with a play glyph while an "esc to interrupt" /
-/// "ctrl+c to cancel" prompt is visible (the agent is busy) and a pause glyph
-/// otherwise (idle/waiting). The owning wt tab must be launched without
-/// --suppressApplicationTitle for the prefix to actually show.
+/// Background watchdog that runs inside each <c>mindattic host</c> tab. Every
+/// <see cref="PollInterval"/> it peeks the bottom of the console buffer to tell
+/// whether the agent is busy (an "esc to interrupt" / "ctrl+c to cancel" prompt
+/// is visible) or idle, then reasserts the tab title as
+/// <c>{marker}  {title}</c> — a play glyph while busy, a pause glyph otherwise.
+///
+/// The reassert is the important part: Claude Code and Codex both rewrite the
+/// terminal title with their own OSC sequence while running, which would wipe
+/// out our marker. We can't set another tab's title from MindAttic.Console
+/// (Windows Terminal exposes no such API — only the process *inside* a tab can
+/// set that tab's title), so the watchdog has to live here, in-process, one per
+/// tab. It reads the current title back via <see cref="ConsoleBuffer.ReadTitle"/>
+/// and only rewrites when the CLI has clobbered it, so we win the title back
+/// within a quarter second without spamming redundant OSC writes.
+///
+/// The owning wt tab must be launched without --suppressApplicationTitle for
+/// these writes to actually show (see WindowsTerminalLauncher.BuildAgentTab).
 /// </summary>
 public sealed class TitlePinner : IDisposable
 {
@@ -27,6 +39,11 @@ public sealed class TitlePinner : IDisposable
         "ctrl+c to cancel"
     ];
 
+    // 250 ms keeps the watchdog tight: when the CLI clobbers the title with its
+    // own OSC write, we restore the marker within a quarter second instead of
+    // the old half-second window where the CLI's bare title showed through.
+    private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(250);
+
     private readonly string title;
     private readonly CancellationTokenSource cts = new();
     private readonly Task loop;
@@ -37,9 +54,28 @@ public sealed class TitlePinner : IDisposable
         // System.Console.Title can throw on redirected stdout (CI, piped runs) or on
         // hosts without a real console. Match the loop's swallow-and-continue
         // posture so a non-conhost environment doesn't kill the host command.
-        try { System.Console.Title = title; } catch { }
+        // Seed with the idle marker so the glyph is present from the first frame.
+        try { System.Console.Title = Compose(isBusy: false, title); } catch { }
         loop = Task.Run(() => RunLoop(cts.Token));
     }
+
+    /// <summary>
+    /// True when the visible buffer carries one of the agents' "working" prompts.
+    /// Case-insensitive substring match — Claude Code renders "(esc to interrupt)"
+    /// and Codex renders "(… • esc to interrupt)", so the same patterns cover both.
+    /// </summary>
+    public static bool LooksBusy(string? buffer)
+    {
+        if (string.IsNullOrEmpty(buffer)) return false;
+        var lower = buffer.ToLowerInvariant();
+        foreach (var pattern in BusyPatterns)
+            if (lower.Contains(pattern)) return true;
+        return false;
+    }
+
+    /// <summary>Builds the pinned title: <c>{marker}  {title}</c> (two spaces).</summary>
+    public static string Compose(bool isBusy, string title) =>
+        $"{(isBusy ? BusyMarker : IdleMarker)}  {title}";
 
     private void RunLoop(CancellationToken ct)
     {
@@ -47,18 +83,13 @@ public sealed class TitlePinner : IDisposable
         {
             try
             {
-                var buf = ConsoleBuffer.ReadBottomRows(20);
-                var isBusy = false;
-                if (!string.IsNullOrEmpty(buf))
-                {
-                    var lower = buf.ToLowerInvariant();
-                    foreach (var pattern in BusyPatterns)
-                    {
-                        if (lower.Contains(pattern)) { isBusy = true; break; }
-                    }
-                }
-                var marker = isBusy ? BusyMarker : IdleMarker;
-                System.Console.Title = $"{marker}  {title}";
+                var desired = Compose(LooksBusy(ConsoleBuffer.ReadBottomRows(20)), title);
+                // Only rewrite when the title has drifted from what we want — the
+                // CLI overwriting it, or a busy/idle transition. Skipping the no-op
+                // write avoids needless OSC churn (and the title flicker it causes
+                // in Windows Terminal) when nothing has changed.
+                if (!string.Equals(ConsoleBuffer.ReadTitle(), desired, StringComparison.Ordinal))
+                    System.Console.Title = desired;
             }
             catch
             {
@@ -66,7 +97,7 @@ public sealed class TitlePinner : IDisposable
                 // or closing. Don't take the agent down with us — just loop.
             }
 
-            try { Task.Delay(500, ct).Wait(ct); }
+            try { Task.Delay(PollInterval, ct).Wait(ct); }
             catch (OperationCanceledException) { return; }
         }
     }

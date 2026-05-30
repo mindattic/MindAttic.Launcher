@@ -39,6 +39,21 @@ public static partial class ConsoleBuffer
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Reads the console's current title via GetConsoleTitleW. Lets the title
+    /// watchdog notice when Claude/Codex has overwritten the tab title with its
+    /// own OSC sequence (conhost reflects the child's OSC title write here) so
+    /// it only reasserts on actual drift instead of rewriting every tick.
+    /// </summary>
+    public static string ReadTitle()
+    {
+        // 1024 chars is generously past any wt tab title; a clobbered title we
+        // care about is short. Truncation just forces a (harmless) reassert.
+        var sb = new StringBuilder(1024);
+        var len = GetConsoleTitleW(sb, (uint)sb.Capacity);
+        return len == 0 ? string.Empty : sb.ToString();
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     private struct COORD { public short X; public short Y; }
 
@@ -57,6 +72,11 @@ public static partial class ConsoleBuffer
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
     private static partial IntPtr GetStdHandle(int nStdHandle);
+
+    // LibraryImport can't marshal StringBuilder directly, so this one stays
+    // DllImport — same pattern as ReadConsoleOutputCharacterW below.
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode, EntryPoint = "GetConsoleTitleW")]
+    private static extern uint GetConsoleTitleW([Out] StringBuilder lpConsoleTitle, uint nSize);
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
