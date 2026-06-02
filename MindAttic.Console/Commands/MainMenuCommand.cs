@@ -25,7 +25,7 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
         var pull     = new PullMenu(store, git);
         var open     = new OpenProjectMenu(store, providers, wt);
         var run      = new RunProjectMenu(store, wt);
-        var backup   = new BackupMenu(new BackupService());
+        var backup   = new BackupMenu(new BackupService(), store, new SqlBackupService());
         var provider = new ProviderMenu(store, providers);
 
         while (true)

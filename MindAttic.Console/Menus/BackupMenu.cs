@@ -4,19 +4,28 @@ using Spectre.Console;
 
 namespace MindAttic.Console.Menus;
 
-public sealed class BackupMenu(BackupService backup)
+public sealed class BackupMenu(BackupService backup, SettingsStore store, SqlBackupService sql)
 {
-    public BackupMenu() : this(new BackupService()) { }
+    public BackupMenu() : this(new BackupService(), new SettingsStore(), new SqlBackupService()) { }
 
     public void Run()
     {
         Screen.Header("Backup");
 
         var target = backup.ResolveTargetFolder();
+        var dbTargets = SqlBackupService.CollectTargets(store.Load());
+
         AnsiConsole.MarkupLine("  You are about to back up:");
         AnsiConsole.WriteLine();
         AnsiConsole.MarkupLine($"    [yellow]From:[/] {Markup.Escape(backup.Source)}");
         AnsiConsole.MarkupLine($"    [yellow]To:  [/] {Markup.Escape(target)}");
+        if (dbTargets.Count > 0)
+        {
+            AnsiConsole.WriteLine();
+            AnsiConsole.MarkupLine($"    [yellow]Databases ({dbTargets.Count}):[/]");
+            foreach (var t in dbTargets)
+                AnsiConsole.MarkupLine($"      [grey50]{Markup.Escape(t.Database)} @ {Markup.Escape(t.Server)}[/]");
+        }
         AnsiConsole.WriteLine();
 
         if (!AnsiConsole.Confirm("  Start backup?", defaultValue: false))
@@ -32,7 +41,7 @@ public sealed class BackupMenu(BackupService backup)
         var sw = System.Diagnostics.Stopwatch.StartNew();
         AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots)
-            .Start("  Backing up...", ctx =>
+            .Start("  Backing up files...", ctx =>
             {
                 // Spectre runs the spinner on a separate thread; the delegate
                 // is the work, so calling backup.Run inline is correct — the
@@ -43,7 +52,7 @@ public sealed class BackupMenu(BackupService backup)
                 {
                     result = backup.Run(
                         target,
-                        onTick: elapsed => ctx.Status($"  Backing up... [grey50]{Format(elapsed)}[/]"));
+                        onTick: elapsed => ctx.Status($"  Backing up files... [grey50]{Format(elapsed)}[/]"));
                 }
                 catch (Exception ex)
                 {
@@ -51,19 +60,51 @@ public sealed class BackupMenu(BackupService backup)
                 }
             });
 
+        // Database backups run regardless of the file outcome — they write into
+        // the same dated folder, and a file-copy hiccup shouldn't skip the SQL
+        // snapshots (or vice-versa).
+        var dbResults = new List<DatabaseBackupResult>();
+        if (dbTargets.Count > 0)
+        {
+            AnsiConsole.Status()
+                .Spinner(Spinner.Known.Dots)
+                .Start("  Backing up databases...", ctx =>
+                {
+                    try
+                    {
+                        dbResults = sql.Backup(
+                            dbTargets, target,
+                            onDone: r => ctx.Status($"  Backing up databases... [grey50]{Markup.Escape(r.Database)}[/]"))
+                            .ToList();
+                    }
+                    catch (Exception ex)
+                    {
+                        AnsiConsole.MarkupLine($"  [red]Database backup error: {Markup.Escape(ex.Message)}[/]");
+                    }
+                });
+        }
+
         AnsiConsole.WriteLine();
+        ReportFileResult(result);
+        ReportDatabaseResults(dbResults);
+
+        Screen.PressAnyKey();
+    }
+
+    private static void ReportFileResult(BackupResult? result)
+    {
         if (result is null)
         {
-            AnsiConsole.MarkupLine("  [red]Backup did not run.[/]");
+            AnsiConsole.MarkupLine("  [red]File backup did not run.[/]");
         }
         else if (result.Ok)
         {
-            AnsiConsole.MarkupLine($"  [green]Backup complete in {Format(result.Elapsed)}[/]");
+            AnsiConsole.MarkupLine($"  [green]Files backed up in {Format(result.Elapsed)}[/]");
             AnsiConsole.MarkupLine($"    [grey50]To: {Markup.Escape(result.TargetFolder)}[/]");
         }
         else
         {
-            AnsiConsole.MarkupLine($"  [red]Backup failed (robocopy exit {result.RobocopyExitCode}) after {Format(result.Elapsed)}[/]");
+            AnsiConsole.MarkupLine($"  [red]File backup failed (robocopy exit {result.RobocopyExitCode}) after {Format(result.Elapsed)}[/]");
             if (!string.IsNullOrWhiteSpace(result.Output))
             {
                 foreach (var line in result.Output.Split('\n'))
@@ -71,8 +112,31 @@ public sealed class BackupMenu(BackupService backup)
                         AnsiConsole.MarkupLine($"    [grey50]{Markup.Escape(line.TrimEnd())}[/]");
             }
         }
+    }
 
-        Screen.PressAnyKey();
+    private static void ReportDatabaseResults(IReadOnlyList<DatabaseBackupResult> results)
+    {
+        if (results.Count == 0) return;
+
+        AnsiConsole.WriteLine();
+        var okCount = results.Count(r => r.Ok);
+        AnsiConsole.MarkupLine($"  [yellow]Databases: {okCount}/{results.Count} backed up[/]");
+        foreach (var r in results)
+        {
+            if (r.Ok)
+            {
+                AnsiConsole.MarkupLine(
+                    $"    [green]OK[/] [grey50]{Markup.Escape(r.Database)} @ {Markup.Escape(r.Server)} ({Format(r.Elapsed)}) -> {Markup.Escape(r.BackupFile)}[/]");
+            }
+            else
+            {
+                AnsiConsole.MarkupLine(
+                    $"    [red]FAILED {Markup.Escape(r.Database)} @ {Markup.Escape(r.Server)} (sqlcmd exit {r.ExitCode})[/]");
+                foreach (var line in r.Output.Split('\n'))
+                    if (!string.IsNullOrWhiteSpace(line))
+                        AnsiConsole.MarkupLine($"      [grey50]{Markup.Escape(line.TrimEnd())}[/]");
+            }
+        }
     }
 
     private static string Format(TimeSpan t) =>
