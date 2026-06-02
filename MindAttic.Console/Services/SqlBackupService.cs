@@ -45,20 +45,39 @@ public sealed class SqlBackupService
     /// instance). Two projects naming the same db on the same instance collapse
     /// to one backup.
     /// </summary>
-    public static IReadOnlyList<BackupTarget> CollectTargets(AppSettings settings) =>
-        ProjectRoster.Sorted(settings)
-            .SelectMany(p => (p.Databases ?? [])
-                .Where(d => !string.IsNullOrWhiteSpace(d))
-                .Select(d => new BackupTarget(ResolveInstance(p.SqlServer), d.Trim())))
-            .Distinct()
-            .ToList();
+    public static IReadOnlyList<BackupTarget> CollectTargets(AppSettings settings)
+    {
+        // Dedup case-insensitively on (server, database): SQL Server identifiers
+        // and Windows file paths are both case-insensitive, so "MyDb" and "mydb"
+        // on the same instance are one database — backing both up would just run
+        // the second over the first's .bak. The NUL separator keeps a server that
+        // ends in a db-like suffix from colliding with the next pair.
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var targets = new List<BackupTarget>();
+        foreach (var p in ProjectRoster.Sorted(settings))
+            foreach (var raw in p.Databases ?? [])
+            {
+                if (string.IsNullOrWhiteSpace(raw)) continue;
+                var server = ResolveInstance(p.SqlServer);
+                var database = raw.Trim();
+                if (seen.Add($"{server}\u0000{database}"))
+                    targets.Add(new BackupTarget(server, database));
+            }
+        return targets;
+    }
 
     public static string ResolveInstance(string? instance) =>
         string.IsNullOrWhiteSpace(instance) ? DefaultInstance : instance.Trim();
 
-    /// <summary>Maps a database name to its .bak path under the dated folder, scrubbing path-illegal chars.</summary>
-    public static string ResolveBackupFilePath(string targetFolder, string database) =>
-        Path.Combine(targetFolder, DatabasesSubfolder, SanitizeFileName(database) + ".bak");
+    /// <summary>
+    /// Maps a (server, database) pair to its .bak path under the dated folder,
+    /// scrubbing path-illegal chars from both. The server is part of the path so
+    /// the same database name on two different instances (e.g. <c>App</c> on
+    /// <c>localhost</c> and on <c>.\SQLEXPRESS</c>) lands in distinct files
+    /// instead of the second silently overwriting the first.
+    /// </summary>
+    public static string ResolveBackupFilePath(string targetFolder, string server, string database) =>
+        Path.Combine(targetFolder, DatabasesSubfolder, SanitizeFileName(server), SanitizeFileName(database) + ".bak");
 
     private static string SanitizeFileName(string database)
     {
@@ -80,8 +99,11 @@ public sealed class SqlBackupService
     {
         var ident = "[" + database.Replace("]", "]]") + "]";
         var disk = backupFile.Replace("'", "''");
+        // CHECKSUM has the engine checksum every page as it writes, so a torn or
+        // bit-rotted page is caught at backup time rather than discovered to be
+        // unrestorable later — the whole point of taking the backup.
         return $"BACKUP DATABASE {ident} TO DISK = N'{disk}' " +
-               "WITH FORMAT, INIT, COPY_ONLY, NAME = N'MindAttic.Console backup';";
+               "WITH FORMAT, INIT, COPY_ONLY, CHECKSUM, NAME = N'MindAttic.Console backup';";
     }
 
     /// <summary>
@@ -121,7 +143,7 @@ public sealed class SqlBackupService
 
     public DatabaseBackupResult BackupOne(BackupTarget target, string targetFolder, CancellationToken ct = default)
     {
-        var file = ResolveBackupFilePath(targetFolder, target.Database);
+        var file = ResolveBackupFilePath(targetFolder, target.Server, target.Database);
         Directory.CreateDirectory(Path.GetDirectoryName(file)!);
 
         var args = BuildArguments(target.Server, BuildBackupSql(target.Database, file));
@@ -140,10 +162,18 @@ public sealed class SqlBackupService
             code = -1;
             output = "cancelled";
         }
+        catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 2)
+        {
+            // ERROR_FILE_NOT_FOUND from Process.Start — sqlcmd isn't on PATH.
+            // Say so plainly instead of leaking "The system cannot find the file
+            // specified", which reads like a backup-path problem.
+            code = -1;
+            output = $"'{Executable}' not found on PATH — install the SQL Server command-line tools (sqlcmd).";
+        }
         catch (Exception ex)
         {
-            // A missing sqlcmd (Process.Start throws Win32Exception) lands here —
-            // surface it as a failed result rather than taking down the menu.
+            // Any other start/IO failure — surface it as a failed result rather
+            // than taking down the menu.
             code = -1;
             output = ex.Message;
         }

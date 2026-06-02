@@ -13,7 +13,21 @@ public sealed class BackupMenu(BackupService backup, SettingsStore store, SqlBac
         Screen.Header("Backup");
 
         var target = backup.ResolveTargetFolder();
-        var dbTargets = SqlBackupService.CollectTargets(store.Load());
+
+        // A settings read failure must not block the file backup — degrade to
+        // "no databases" and warn, rather than aborting the whole backup because
+        // the roster couldn't be loaded.
+        IReadOnlyList<BackupTarget> dbTargets;
+        try
+        {
+            dbTargets = SqlBackupService.CollectTargets(store.Load());
+        }
+        catch (Exception ex)
+        {
+            dbTargets = [];
+            AnsiConsole.MarkupLine($"  [yellow]Could not read project databases: {Markup.Escape(ex.Message)}[/]");
+            AnsiConsole.MarkupLine("  [grey50]Continuing with the file backup only.[/]");
+        }
 
         AnsiConsole.MarkupLine("  You are about to back up:");
         AnsiConsole.WriteLine();
@@ -64,6 +78,7 @@ public sealed class BackupMenu(BackupService backup, SettingsStore store, SqlBac
         // the same dated folder, and a file-copy hiccup shouldn't skip the SQL
         // snapshots (or vice-versa).
         var dbResults = new List<DatabaseBackupResult>();
+        string? dbError = null;
         if (dbTargets.Count > 0)
         {
             AnsiConsole.Status()
@@ -79,13 +94,17 @@ public sealed class BackupMenu(BackupService backup, SettingsStore store, SqlBac
                     }
                     catch (Exception ex)
                     {
-                        AnsiConsole.MarkupLine($"  [red]Database backup error: {Markup.Escape(ex.Message)}[/]");
+                        // Capture, don't print: writing markup inside a live
+                        // Status display fights it for the cursor and gets erased.
+                        dbError = ex.Message;
                     }
                 });
         }
 
         AnsiConsole.WriteLine();
         ReportFileResult(result);
+        if (dbError is not null)
+            AnsiConsole.MarkupLine($"  [red]Database backup error: {Markup.Escape(dbError)}[/]");
         ReportDatabaseResults(dbResults);
 
         Screen.PressAnyKey();

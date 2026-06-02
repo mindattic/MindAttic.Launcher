@@ -21,6 +21,9 @@ public sealed class WindowsTerminalLauncher
 
     public void Open(Tab tab)
     {
+        if (tab.Command.Count == 0)
+            throw new ArgumentException("Tab.Command must contain at least the executable.", nameof(tab));
+
         var args = new List<string> { "-w", "0", "new-tab" };
 
         if (!string.IsNullOrWhiteSpace(tab.Title))
@@ -87,13 +90,20 @@ public sealed class WindowsTerminalLauncher
 
     public Tab BuildRunCommandTab(Project project)
     {
+        // A blank RunCommand as `cmd /c ""` opens a tab that flashes and dies with
+        // no explanation. Keep the pane open (`/k`) with a message instead so the
+        // user can see why nothing ran — RunProjectMenu filters these out, but the
+        // method is public and shouldn't manufacture a silently-broken tab.
+        IReadOnlyList<string> command = string.IsNullOrWhiteSpace(project.RunCommand)
+            ? ["cmd", "/k", $"echo No RunCommand configured for {project.Name}."]
+            : ["cmd", "/c", project.RunCommand];
         return new Tab
         {
             Title = project.TabTitle,
             WorkingDirectory = project.Path,
             TabColor = project.TabColor,
             ColorScheme = project.ColorScheme,
-            Command = ["cmd", "/c", project.RunCommand ?? ""]
+            Command = command
         };
     }
 

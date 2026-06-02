@@ -34,19 +34,34 @@ public sealed class SqlBackupServiceTests
     [Test]
     public void ResolveBackupFilePath_places_bak_under_databases_subfolder()
     {
-        Assert.That(SqlBackupService.ResolveBackupFilePath(@"R:\Backup\MindAttic\2026-05-23", "Legion"),
-            Is.EqualTo(@"R:\Backup\MindAttic\2026-05-23\Databases\Legion.bak"));
+        Assert.That(SqlBackupService.ResolveBackupFilePath(@"R:\Backup\MindAttic\2026-05-23", "localhost", "Legion"),
+            Is.EqualTo(@"R:\Backup\MindAttic\2026-05-23\Databases\localhost\Legion.bak"));
     }
 
     [Test]
-    public void ResolveBackupFilePath_scrubs_path_illegal_characters()
+    public void ResolveBackupFilePath_namespaces_by_server_so_same_db_on_two_instances_does_not_collide()
     {
-        var path = SqlBackupService.ResolveBackupFilePath(@"R:\Backup", "weird:name*db");
-        Assert.That(Path.GetFileName(path), Is.EqualTo("weird_name_db.bak"));
+        var a = SqlBackupService.ResolveBackupFilePath(@"R:\Backup", "localhost", "App");
+        var b = SqlBackupService.ResolveBackupFilePath(@"R:\Backup", @".\SQLEXPRESS", "App");
+        Assert.That(a, Is.Not.EqualTo(b));
     }
 
     [Test]
-    public void BuildBackupSql_is_a_full_copy_only_backup_with_escaped_identifiers()
+    public void ResolveBackupFilePath_scrubs_path_illegal_characters_in_server_and_database()
+    {
+        var path = SqlBackupService.ResolveBackupFilePath(@"R:\Backup", @".\SQLEXPRESS", "weird:name*db");
+        Assert.Multiple(() =>
+        {
+            Assert.That(Path.GetFileName(path), Is.EqualTo("weird_name_db.bak"));
+            // The server segment's backslash is scrubbed (the dot is a legal
+            // filename char), so it stays a single folder level rather than
+            // nesting under ".\".
+            Assert.That(Path.GetFileName(Path.GetDirectoryName(path)), Is.EqualTo("._SQLEXPRESS"));
+        });
+    }
+
+    [Test]
+    public void BuildBackupSql_is_a_full_copy_only_checksummed_backup_with_escaped_identifiers()
     {
         var sql = SqlBackupService.BuildBackupSql("My]Db", @"R:\a'b\My]Db.bak");
         Assert.Multiple(() =>
@@ -55,6 +70,7 @@ public sealed class SqlBackupServiceTests
             Assert.That(sql, Does.Contain("BACKUP DATABASE [My]]Db]"));
             Assert.That(sql, Does.Contain(@"TO DISK = N'R:\a''b\My]Db.bak'"));
             Assert.That(sql, Does.Contain("COPY_ONLY"));
+            Assert.That(sql, Does.Contain("CHECKSUM"));
             Assert.That(sql, Does.Contain("FORMAT"));
             Assert.That(sql, Does.Contain("INIT"));
         });
@@ -102,6 +118,25 @@ public sealed class SqlBackupServiceTests
     }
 
     [Test]
+    public void CollectTargets_dedupes_case_insensitively_on_server_and_database()
+    {
+        var settings = new AppSettings
+        {
+            Projects =
+            [
+                new Project { Name = "Alpha", SqlServer = "localhost", Databases = ["MyDb"] },
+                // Same db, different case + server-host case — one backup, not two
+                // that would write over each other's .bak on a case-insensitive FS.
+                new Project { Name = "Beta", SqlServer = "LOCALHOST", Databases = ["mydb"] }
+            ]
+        };
+
+        var targets = SqlBackupService.CollectTargets(settings);
+
+        Assert.That(targets, Has.Count.EqualTo(1));
+    }
+
+    [Test]
     public void BackupOne_returns_success_and_creates_the_databases_folder_on_exit_zero()
     {
         IReadOnlyList<string>? captured = null;
@@ -118,8 +153,8 @@ public sealed class SqlBackupServiceTests
             Assert.That(result.Ok, Is.True);
             Assert.That(result.ExitCode, Is.EqualTo(0));
             Assert.That(result.Output, Is.Empty);
-            Assert.That(result.BackupFile, Is.EqualTo(Path.Combine(tempFolder, "Databases", "Legion.bak")));
-            Assert.That(Directory.Exists(Path.Combine(tempFolder, "Databases")), Is.True);
+            Assert.That(result.BackupFile, Is.EqualTo(Path.Combine(tempFolder, "Databases", "localhost", "Legion.bak")));
+            Assert.That(Directory.Exists(Path.Combine(tempFolder, "Databases", "localhost")), Is.True);
             Assert.That(captured, Is.Not.Null);
             Assert.That(captured![1], Is.EqualTo("localhost"));
         });
@@ -137,6 +172,24 @@ public sealed class SqlBackupServiceTests
             Assert.That(result.Ok, Is.False);
             Assert.That(result.ExitCode, Is.EqualTo(1));
             Assert.That(result.Output, Does.Contain("3201"));
+        });
+    }
+
+    [Test]
+    public void BackupOne_gives_a_clear_message_when_sqlcmd_is_not_on_path()
+    {
+        // ERROR_FILE_NOT_FOUND (2) is what Process.Start surfaces when the exe
+        // isn't found — the service should translate it to a plain explanation.
+        var subject = new SqlBackupService("sqlcmd",
+            (_, _) => throw new System.ComponentModel.Win32Exception(2, "The system cannot find the file specified."));
+
+        var result = subject.BackupOne(new BackupTarget("localhost", "Legion"), tempFolder);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Ok, Is.False);
+            Assert.That(result.Output, Does.Contain("not found on PATH"));
+            Assert.That(result.Output, Does.Contain("sqlcmd"));
         });
     }
 

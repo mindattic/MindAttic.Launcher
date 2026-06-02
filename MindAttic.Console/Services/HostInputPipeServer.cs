@@ -68,6 +68,14 @@ public sealed class HostInputPipeServer : IDisposable
                 // the agent down — but log it so a silent injection failure
                 // (WriteConsoleInputW returning false) isn't invisible.
                 try { System.Console.Error.WriteLine($"[host-pipe] {ex.Message}"); } catch { }
+
+                // Back off before retrying. If the failure is persistent — the
+                // pipe name is squatted, or NamedPipeServerStream creation keeps
+                // throwing — looping straight back would peg a core and flood
+                // stderr. The delay honours cancellation so Dispose still exits
+                // promptly.
+                try { await Task.Delay(TimeSpan.FromMilliseconds(500), ct).ConfigureAwait(false); }
+                catch (OperationCanceledException) { return; }
             }
         }
     }

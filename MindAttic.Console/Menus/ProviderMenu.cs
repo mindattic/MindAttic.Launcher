@@ -20,7 +20,16 @@ public sealed class ProviderMenu(SettingsStore store, AgentProviderRegistry prov
             };
             foreach (var p in ProjectRoster.Sorted(settings))
             {
-                var label = string.IsNullOrWhiteSpace(p.Provider) ? $"default: {defaultKey}" : p.Provider!;
+                // Resolve through the registry so the label reflects what would
+                // actually launch: a blank override shows the default, and a
+                // stale override (a key no longer in AgentProviders) is flagged
+                // rather than shown as if it were live — EffectiveProviderKey
+                // falls back to the default for an unknown key.
+                var effective = providers.EffectiveProviderKey(p);
+                var label =
+                    string.IsNullOrWhiteSpace(p.Provider) ? $"default: {effective}"
+                    : string.Equals(p.Provider, effective, StringComparison.OrdinalIgnoreCase) ? p.Provider!
+                    : $"default: {effective}  (ignoring unknown '{p.Provider}')";
                 items.Add(new MenuItem { Name = p.Name, Description = label, Tag = p });
             }
 
