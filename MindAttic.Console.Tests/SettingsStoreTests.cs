@@ -60,6 +60,38 @@ public sealed class SettingsStoreTests
     }
 
     [Test]
+    public void Save_preserves_unknown_top_level_and_per_project_keys()
+    {
+        // The live settings.json carries keys this app's models don't define
+        // (a top-level "mobile" block, per-project "mobileEnabled") — written by
+        // a sibling tool / future schema. A naive POCO round-trip would drop them
+        // on the next Save (e.g. changing a provider), silently wiping the user's
+        // mobile config. They must survive a load -> save cycle.
+        Directory.CreateDirectory(Path.GetDirectoryName(subject.SettingsFilePath)!);
+        File.WriteAllText(subject.SettingsFilePath, """
+        {
+            "provider": "Claude",
+            "mobile": { "serverUrl": "http://127.0.0.1:7780", "enabled": true },
+            "agentProviders": [],
+            "projects": [
+                { "name": "Alpha", "path": "C:\\a", "mobileEnabled": true }
+            ]
+        }
+        """);
+
+        var loaded = subject.Load();
+        subject.Save(loaded); // simulate any settings mutation
+
+        var raw = File.ReadAllText(subject.SettingsFilePath);
+        Assert.Multiple(() =>
+        {
+            Assert.That(raw, Does.Contain("mobile"), "top-level 'mobile' block was dropped on save");
+            Assert.That(raw, Does.Contain("127.0.0.1:7780"), "mobile contents were dropped on save");
+            Assert.That(raw, Does.Contain("mobileEnabled"), "per-project 'mobileEnabled' was dropped on save");
+        });
+    }
+
+    [Test]
     public void Load_seeds_from_legacy_file_when_vault_is_empty()
     {
         var legacyPath = Path.Combine(tempRoot, "legacy-settings.json");

@@ -1,3 +1,6 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
 namespace MindAttic.Console.Models;
 
 public sealed class Project
@@ -28,6 +31,14 @@ public sealed class Project
     /// </summary>
     public List<string> Databases { get; set; } = new();
 
+    /// <summary>
+    /// Captures per-project keys this app doesn't model (e.g. "mobileEnabled")
+    /// so they survive a settings Save instead of being silently dropped. See
+    /// <see cref="AppSettings.Extra"/>.
+    /// </summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? Extra { get; set; }
+
     private const string NamePrefix = "MindAttic.";
 
     /// <summary>
@@ -36,6 +47,7 @@ public sealed class Project
     /// shows as "Legion" — tab titles have very little room and the prefix is
     /// redundant when every project carries it.
     /// </summary>
+    [JsonIgnore]
     public string TabTitle =>
         !string.IsNullOrWhiteSpace(TabAlias) ? TabAlias!
         : Name.StartsWith(NamePrefix, StringComparison.OrdinalIgnoreCase) ? Name[NamePrefix.Length..]

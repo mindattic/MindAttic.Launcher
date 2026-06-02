@@ -13,6 +13,12 @@ public sealed class ProviderMenu(SettingsStore store, AgentProviderRegistry prov
         {
             var settings = store.Load();
             var defaultKey = providers.CurrentDefaultKey();
+            // Snapshot the provider keys once so the per-project label resolution
+            // below is plain in-memory work — calling EffectiveProviderKey per
+            // project would reload settings N times to render a single screen.
+            var knownKeys = providers.All()
+                .Select(a => a.Key)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
             var items = new List<MenuItem>
             {
@@ -20,16 +26,14 @@ public sealed class ProviderMenu(SettingsStore store, AgentProviderRegistry prov
             };
             foreach (var p in ProjectRoster.Sorted(settings))
             {
-                // Resolve through the registry so the label reflects what would
-                // actually launch: a blank override shows the default, and a
-                // stale override (a key no longer in AgentProviders) is flagged
-                // rather than shown as if it were live — EffectiveProviderKey
-                // falls back to the default for an unknown key.
-                var effective = providers.EffectiveProviderKey(p);
+                // Reflect what would actually launch: a blank override shows the
+                // default, a valid override shows itself, and a stale override
+                // (a key no longer in AgentProviders) is flagged rather than
+                // shown as if live — the launcher falls back to the default.
                 var label =
-                    string.IsNullOrWhiteSpace(p.Provider) ? $"default: {effective}"
-                    : string.Equals(p.Provider, effective, StringComparison.OrdinalIgnoreCase) ? p.Provider!
-                    : $"default: {effective}  (ignoring unknown '{p.Provider}')";
+                    string.IsNullOrWhiteSpace(p.Provider) ? $"default: {defaultKey}"
+                    : knownKeys.Contains(p.Provider!) ? p.Provider!
+                    : $"default: {defaultKey}  (ignoring unknown '{p.Provider}')";
                 items.Add(new MenuItem { Name = p.Name, Description = label, Tag = p });
             }
 

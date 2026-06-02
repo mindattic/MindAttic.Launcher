@@ -14,7 +14,9 @@ public sealed class AgentProviderRegistry(SettingsStore store)
 
     private static IReadOnlyList<AgentProvider> ProvidersFrom(AppSettings settings)
     {
-        var configured = settings.AgentProviders
+        // Coalesce: an explicit "agentProviders": null in settings.json
+        // deserializes to null and would NRE here (same trap as Projects).
+        var configured = (settings.AgentProviders ?? [])
             .Where(a => !string.IsNullOrWhiteSpace(a.Key)
                      && !string.IsNullOrWhiteSpace(a.Name)
                      && !string.IsNullOrWhiteSpace(a.RunCommand))

@@ -194,6 +194,46 @@ public sealed class SqlBackupServiceTests
     }
 
     [Test]
+    public void BackupOne_deletes_a_partial_bak_when_the_backup_fails()
+    {
+        // Simulate sqlcmd writing a partial .bak then erroring — the failed
+        // backup file must not be left behind looking restorable.
+        var subject = new SqlBackupService("sqlcmd", (_, _) =>
+        {
+            var file = SqlBackupService.ResolveBackupFilePath(tempFolder, "localhost", "Legion");
+            File.WriteAllText(file, "partial");
+            return (1, "Msg 3271: a nonrecoverable I/O error occurred.");
+        });
+
+        var result = subject.BackupOne(new BackupTarget("localhost", "Legion"), tempFolder);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Ok, Is.False);
+            Assert.That(File.Exists(result.BackupFile), Is.False, "partial .bak should be removed on failure");
+        });
+    }
+
+    [Test]
+    public void BackupOne_keeps_the_bak_on_success()
+    {
+        var subject = new SqlBackupService("sqlcmd", (_, _) =>
+        {
+            var file = SqlBackupService.ResolveBackupFilePath(tempFolder, "localhost", "Legion");
+            File.WriteAllText(file, "complete");
+            return (0, "");
+        });
+
+        var result = subject.BackupOne(new BackupTarget("localhost", "Legion"), tempFolder);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Ok, Is.True);
+            Assert.That(File.Exists(result.BackupFile), Is.True);
+        });
+    }
+
+    [Test]
     public void BackupOne_turns_runner_exception_into_a_failed_result()
     {
         var subject = new SqlBackupService("sqlcmd", (_, _) => throw new InvalidOperationException("sqlcmd missing"));

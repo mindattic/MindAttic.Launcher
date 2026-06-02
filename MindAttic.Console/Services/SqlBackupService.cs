@@ -180,6 +180,13 @@ public sealed class SqlBackupService
         sw.Stop();
 
         var ok = ComputeOk(code, cancelled || ct.IsCancellationRequested);
+        if (!ok)
+        {
+            // A failed/cancelled/killed BACKUP can leave a half-written or
+            // zero-byte .bak behind. Removing it keeps a failed run from
+            // masquerading as a restorable backup in the dated folder.
+            try { if (File.Exists(file)) File.Delete(file); } catch { /* best-effort */ }
+        }
         return new DatabaseBackupResult(
             target.Server, target.Database, ok, code, sw.Elapsed, file, ok ? "" : Tail(output, 2000));
     }

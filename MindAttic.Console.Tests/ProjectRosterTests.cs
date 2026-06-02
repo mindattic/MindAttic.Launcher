@@ -27,6 +27,20 @@ public sealed class ProjectRosterTests
     }
 
     [Test]
+    public void Handles_null_projects_without_throwing()
+    {
+        // "projects": null in settings.json deserializes to a null list — both
+        // accessors must treat that as an empty roster, not NRE.
+        var settings = new AppSettings { Projects = null! };
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(ProjectRoster.Sorted(settings), Is.Empty);
+            Assert.That(ProjectRoster.FindByName(settings, "anything"), Is.Null);
+        });
+    }
+
+    [Test]
     public void FindByName_is_case_insensitive()
     {
         var settings = new AppSettings

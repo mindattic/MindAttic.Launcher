@@ -12,7 +12,19 @@ public sealed class BackupMenu(BackupService backup, SettingsStore store, SqlBac
     {
         Screen.Header("Backup");
 
-        var target = backup.ResolveTargetFolder();
+        string target;
+        try
+        {
+            target = backup.ResolveTargetFolder();
+        }
+        catch (Exception ex)
+        {
+            // ResolveTargetFolder throws when all 27 dated slots for today are
+            // taken — surface it as a notice instead of an unhandled crash.
+            Screen.Notice($"[red]{Markup.Escape(ex.Message)}[/]");
+            Screen.PressAnyKey();
+            return;
+        }
 
         // A settings read failure must not block the file backup — degrade to
         // "no databases" and warn, rather than aborting the whole backup because
