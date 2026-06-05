@@ -64,10 +64,29 @@ public sealed class WindowsTerminalLauncher
         using var launcher = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start wt.");
     }
 
-    /// <summary>Builds an "agent host" tab — invokes `mindattic host …` for the given project + provider.</summary>
-    public Tab BuildAgentTab(Project project, AgentProvider provider, string hostExePath)
+    /// <summary>
+    /// Builds an "agent host" tab — invokes `mindattic host …` for the given
+    /// project + provider. When <paramref name="prompt"/> is set it's passed
+    /// through as <c>--prompt</c> so the agent opens with that text pre-loaded
+    /// (used by Overlord to seed its workspace-root session with the order).
+    /// </summary>
+    public Tab BuildAgentTab(Project project, AgentProvider provider, string hostExePath, string? prompt = null)
     {
         var agentTitle = $"{project.TabTitle} [{provider.Key}]";
+        var command = new List<string>
+        {
+            hostExePath,
+            "host",
+            "--name", project.Name,
+            "--title", agentTitle,
+            "--provider", provider.Key
+        };
+        if (!string.IsNullOrWhiteSpace(prompt))
+        {
+            command.Add("--prompt");
+            command.Add(prompt);
+        }
+
         return new Tab
         {
             Title = agentTitle,
@@ -77,14 +96,7 @@ public sealed class WindowsTerminalLauncher
             // TitlePinner toggles "Paused" into the tab title when the agent
             // isn't running; --suppressApplicationTitle would block those writes.
             SuppressApplicationTitle = false,
-            Command =
-            [
-                hostExePath,
-                "host",
-                "--name", project.Name,
-                "--title", agentTitle,
-                "--provider", provider.Key
-            ]
+            Command = command
         };
     }
 

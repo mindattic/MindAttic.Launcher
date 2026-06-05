@@ -29,6 +29,10 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
         [CommandOption("--provider <PROVIDER>")]
         [Description("Override the project's configured agent provider.")]
         public string? Provider { get; init; }
+
+        [CommandOption("--prompt <PROMPT>")]
+        [Description("Seed the agent's first turn with this text (e.g. the Overlord order). Pre-fills the input; the CLI does not auto-submit.")]
+        public string? Prompt { get; init; }
     }
 
     public override int Execute(CommandContext context, Settings settings)
@@ -92,6 +96,12 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
             WorkingDirectory = Directory.Exists(project.Path) ? project.Path : Environment.CurrentDirectory
         };
         for (var i = 1; i < parts.Length; i++) psi.ArgumentList.Add(parts[i]);
+        // A seed prompt is the agent's first positional arg — `claude <flags>
+        // "<order>"` / `codex <flags> "<order>"`. Both start interactive with
+        // the prompt loaded; Overlord uses this so one session at the workspace
+        // root opens with the order ready to send.
+        if (!string.IsNullOrWhiteSpace(settings.Prompt))
+            psi.ArgumentList.Add(settings.Prompt!);
 
         try
         {

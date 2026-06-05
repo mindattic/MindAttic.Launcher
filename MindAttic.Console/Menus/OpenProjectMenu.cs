@@ -15,17 +15,28 @@ public sealed class OpenProjectMenu(SettingsStore store, AgentProviderRegistry p
         {
             var settings = store.Load();
             var sortedProjects = ProjectRoster.Sorted(settings);
-            var items = sortedProjects
-                .Select(p => new MenuItem
+
+            // Overlord rides at the top of the list: one agent session rooted
+            // at the MindAttic workspace, so a single order reaches every repo
+            // under it without opening a tab per project.
+            var items = new List<MenuItem>
+            {
+                new()
                 {
-                    Name = p.Name,
-                    Description = DescribeProject(p, providers),
-                    Tag = p
-                })
-                .ToList();
+                    Name = "Overlord",
+                    Description = "open one agent session over the whole MindAttic workspace",
+                    Tag = OverlordMenu.MenuTag
+                }
+            };
+            items.AddRange(sortedProjects.Select(p => new MenuItem
+            {
+                Name = p.Name,
+                Description = DescribeProject(p, providers),
+                Tag = p
+            }));
 
             Screen.Header("Open Project Tab");
-            if (items.Count == 0)
+            if (sortedProjects.Count == 0)
             {
                 Screen.Notice("[grey50]No projects configured.[/]");
                 Screen.PressAnyKey();
@@ -42,6 +53,12 @@ public sealed class OpenProjectMenu(SettingsStore store, AgentProviderRegistry p
 
             if (result.Selected is { } sel)
             {
+                if (ReferenceEquals(sel.Tag, OverlordMenu.MenuTag))
+                {
+                    new OverlordMenu(providers, wt).Run();
+                    continue;
+                }
+
                 var project = (Project)sel.Tag!;
                 if (!Directory.Exists(project.Path))
                 {
