@@ -28,9 +28,14 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
         var backup   = new BackupMenu(new BackupService(), store, new SqlBackupService());
         var provider = new ProviderMenu(store, providers);
 
+        // Checked once at launch: running git every menu redraw would be wasteful,
+        // and the build can't change underneath a running process anyway.
+        var staleness = BuildFreshness.Check();
+
         while (true)
         {
             Screen.Header();
+            RenderStaleness(staleness);
 
             var items = new List<MenuItem>
             {
@@ -70,6 +75,18 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
                 case "exit":     return 0;
             }
         }
+    }
+
+    private static void RenderStaleness(BuildFreshness.Result? r)
+    {
+        if (r is null) return;
+
+        // The menu process can't rebuild itself; Restart republishes and reloads.
+        var age = r.DaysBehind >= 1
+            ? $"[yellow]{r.DaysBehind} day{(r.DaysBehind == 1 ? "" : "s")}[/] behind the latest commit"
+            : "[yellow]behind the latest commit[/] (built today)";
+        AnsiConsole.MarkupLine($"  [grey50]Heads up:[/] this menu build is {age}. [grey50]Choose Restart to republish & reload.[/]");
+        AnsiConsole.WriteLine();
     }
 
     private static async Task RunRemoteControl()

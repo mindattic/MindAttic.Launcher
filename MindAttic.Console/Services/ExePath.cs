@@ -25,6 +25,14 @@ public static class ExePath
         }
     }
 
+    /// <summary>
+    /// The MindAttic.Console repo root (the directory containing
+    /// <c>scripts\publish.ps1</c>), walking up from the running exe. Null when
+    /// the exe lives outside the repo (e.g. an installed copy). Used by
+    /// <see cref="BuildFreshness"/> to compare the build against the latest commit.
+    /// </summary>
+    public static string? RepoRoot => FindRepoRoot();
+
     public static void EnsureFresh()
     {
         var root = FindRepoRoot();
