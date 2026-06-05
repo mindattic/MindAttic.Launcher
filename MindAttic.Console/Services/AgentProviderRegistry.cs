@@ -6,7 +6,7 @@ public sealed class AgentProviderRegistry(SettingsStore store)
 {
     public static IReadOnlyList<AgentProvider> Defaults { get; } =
     [
-        new AgentProvider { Key = "Claude", Name = "Claude Code",  RunCommand = "claude --dangerously-skip-permissions" },
+        new AgentProvider { Key = "Claude", Name = "Claude Code",  RunCommand = "claude --dangerously-skip-permissions --model claude-opus-4-8" },
         new AgentProvider { Key = "Codex",  Name = "OpenAI Codex", RunCommand = "codex --dangerously-bypass-approvals-and-sandbox" }
     ];
 
