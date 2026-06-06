@@ -146,16 +146,38 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
 
     private static void RestartInNewTab(WindowsTerminalLauncher wt)
     {
-        // Republish if source has changed so the new tab runs current code,
-        // and target the canonical Release exe in artifacts/ rather than
-        // ExePath.Self (which could be a Debug bin path during dev).
-        ExePath.EnsureFresh();
+        // We CAN'T republish here: this menu runs from artifacts\MindAttic.Console.exe,
+        // and Windows locks a running exe image — dotnet publish can't overwrite it, so
+        // an in-process EnsureFresh() silently fails and we'd respawn the stale binary.
+        // Instead launch scripts\restart.ps1 in a fresh tab; it waits for THIS process
+        // to exit (releasing the lock), republishes, then runs the fresh exe. We return
+        // 0 right after, so this tab closes and the lock drops.
+        var root = ExePath.RepoRoot;
+        var restartScript = root is null ? null : Path.Combine(root, "scripts", "restart.ps1");
+
+        if (restartScript is null || !File.Exists(restartScript))
+        {
+            // No repo/script to publish from (e.g. an installed copy) — just relaunch
+            // whatever exe currently exists; there's nothing to rebuild against.
+            wt.Open(new WindowsTerminalLauncher.Tab
+            {
+                Title = "MindAttic.Console",
+                WorkingDirectory = MindAtticRoot(),
+                Command = [ExePath.Release]
+            });
+            return;
+        }
+
         wt.Open(new WindowsTerminalLauncher.Tab
         {
             Title = "MindAttic.Console",
             WorkingDirectory = MindAtticRoot(),
-            Command = [ExePath.Release]
+            Command =
+            [
+                "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
+                "-File", restartScript,
+                "-WaitPid", Environment.ProcessId.ToString()
+            ]
         });
-        Thread.Sleep(600);
     }
 }

@@ -38,7 +38,46 @@ function Test-NeedsPublish {
     return [bool]$newer
 }
 
+$artifacts = Split-Path -Parent $exe
+
+# Clear away exe/pdb copies parked by a previous self-republish (see below).
+# Best-effort: any still locked by a live menu are skipped and retried next run.
+function Remove-StaleArtifacts {
+    if (-not (Test-Path $artifacts)) { return }
+    Get-ChildItem -Path $artifacts -Filter '*.stale-*' -File -ErrorAction SilentlyContinue |
+        ForEach-Object { try { Remove-Item $_.FullName -Force -ErrorAction Stop } catch { } }
+}
+
+# True when the file can't be opened for writing — i.e. it's the running exe
+# image (Windows holds an exclusive write/delete lock on it while it executes).
+function Test-Locked([string]$path) {
+    try {
+        $fs = [System.IO.File]::Open($path, 'Open', 'Write', 'None')
+        $fs.Dispose()
+        return $false
+    } catch { return $true }
+}
+
+# Rename a LOCKED file out of the way. The menu often runs FROM
+# artifacts\MindAttic.Console.exe, and dotnet publish can't overwrite a running
+# exe image — but it CAN be renamed: the live process keeps executing from the
+# moved image, and publish then writes a fresh exe at the original path. When the
+# file isn't locked (manual publish, or a restart after the old process exited)
+# we leave it for publish to overwrite directly — no .stale-* churn. Leftovers
+# are reaped by Remove-StaleArtifacts on a later run once they're unlocked.
+function Move-Aside([string]$path) {
+    if (-not (Test-Path $path)) { return }
+    if (-not (Test-Locked $path)) { return }
+    $stamp = Get-Date -Format 'yyyyMMddHHmmssfff'
+    try { Move-Item -LiteralPath $path -Destination "$path.stale-$stamp" -Force -ErrorAction Stop } catch { }
+}
+
+Remove-StaleArtifacts
+
 if (Test-NeedsPublish) {
+    $pdb = [System.IO.Path]::ChangeExtension($exe, '.pdb')
+    Move-Aside $exe
+    Move-Aside $pdb
     & (Join-Path $here 'publish.ps1')
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
