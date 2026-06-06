@@ -7,6 +7,14 @@ public sealed class Project
 {
     public string Name { get; set; } = "";
     public string? Repo { get; set; }
+
+    /// <summary>
+    /// The git remote URL (origin) this repo clones from. Captured when a project
+    /// is auto-discovered under the MindAttic root; not consumed by launch logic,
+    /// but recorded so the roster carries each repo's canonical clone URL.
+    /// </summary>
+    public string? RepoUrl { get; set; }
+
     public string Path { get; set; } = "";
     public string? Description { get; set; }
     public string? OpenWith { get; set; }

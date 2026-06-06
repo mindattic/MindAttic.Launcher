@@ -32,6 +32,11 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
         // and the build can't change underneath a running process anyway.
         var staleness = BuildFreshness.Check();
 
+        // Offer any git repos found under the workspace that aren't in the roster
+        // yet, so a freshly-created repo is added (with its color scheme) instead
+        // of staying invisible to every menu until someone edits settings by hand.
+        new DiscoverProjectsMenu(store, git, new WindowsTerminalSchemes()).Run();
+
         while (true)
         {
             Screen.Header();

@@ -134,6 +134,23 @@ public sealed class GitService
         return results;
     }
 
+    /// <summary>
+    /// The repo's <c>origin</c> remote URL, or null when there's no origin, the
+    /// path isn't a git repo, or git fails. Used to pre-fill the URL prompt when
+    /// auto-discovering a project.
+    /// </summary>
+    public string? RemoteUrl(string repoPath)
+    {
+        if (!Directory.Exists(repoPath)) return null;
+        var dotGit = Path.Combine(repoPath, ".git");
+        if (!Directory.Exists(dotGit) && !File.Exists(dotGit)) return null;
+
+        var (code, stdout, _) = Run(repoPath, DefaultTimeout, "remote", "get-url", "origin");
+        if (code != 0) return null;
+        var url = stdout.Trim();
+        return string.IsNullOrWhiteSpace(url) ? null : url;
+    }
+
     public (bool ok, string? message) Pull(string repoPath)
     {
         // Mirror Status()/Commit()'s pre-checks so the caller sees the same

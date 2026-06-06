@@ -11,6 +11,14 @@ public sealed class AppSettings
     public List<Project> Projects { get; set; } = new();
 
     /// <summary>
+    /// Full paths of git repos under the MindAttic root that the user chose to
+    /// never auto-add to the roster ("never ask again" during startup discovery).
+    /// <see cref="Services.ProjectDiscovery"/> excludes these from its candidate
+    /// list so a deliberately-unmanaged repo isn't re-offered every launch.
+    /// </summary>
+    public List<string>? DiscoveryIgnore { get; set; }
+
+    /// <summary>
     /// Captures top-level settings keys this app doesn't model (e.g. the "mobile"
     /// block a sibling tool writes) so a Save — triggered by any in-app change
     /// like setting a provider — round-trips them instead of silently wiping
