@@ -1,4 +1,3 @@
-using MindAttic.Console.Models;
 using MindAttic.Console.Services;
 using MindAttic.Console.Ui;
 using Spectre.Console;
@@ -6,11 +5,12 @@ using Spectre.Console;
 namespace MindAttic.Console.Menus;
 
 /// <summary>
-/// "Overlord" — one CLI to rule them all. Opens a single agent tab rooted at the
-/// MindAttic workspace (the parent that holds every project repo). Because the
-/// agent can see every repo as a subdirectory, one order reaches the whole
-/// workspace without any fan-out: the order is seeded as the session's first
-/// prompt, and that single agent walks the repos itself.
+/// "Overlord" — one CLI to rule them all. Opens a single agent session rooted at
+/// the MindAttic workspace root (<c>D:\Projects\MindAttic</c>), which holds every
+/// project repo as a subdirectory. From there one agent can answer questions
+/// about and give directions to any repo under the root — it scans recursively
+/// itself, no fan-out and no per-project tab. An optional opening order is seeded
+/// as the session's first prompt.
 /// </summary>
 public sealed class OverlordMenu(AgentProviderRegistry providers, WindowsTerminalLauncher wt)
 {
@@ -42,14 +42,15 @@ public sealed class OverlordMenu(AgentProviderRegistry providers, WindowsTermina
             return;
         }
 
-        // Synthetic project so the tab reuses the normal agent-host plumbing
-        // (title pinner, provider resolution) but roots at the whole workspace.
-        var overlord = new Project { Name = "Overlord", Path = root };
-        var provider = providers.EffectiveProvider(overlord);
+        // Root the agent at the workspace directly via host --path: no synthetic
+        // roster entry (the old approach passed --name Overlord, which the host
+        // couldn't find in settings.json, so the tab died on launch).
+        var provider = providers.Current();
 
         ExePath.EnsureFresh();
-        wt.Open(wt.BuildAgentTab(overlord, provider, ExePath.Release,
-            string.IsNullOrWhiteSpace(order) ? null : order));
+        wt.Open(wt.BuildAgentTabAtPath(
+            $"Overlord [{provider.Key}]", root, provider, ExePath.Release,
+            prompt: string.IsNullOrWhiteSpace(order) ? null : order));
 
         if (!string.IsNullOrWhiteSpace(order))
             Screen.Notice($"[green]Overlord tab opened[/] [grey50]({provider.Key} at {Markup.Escape(root)}).[/] " +

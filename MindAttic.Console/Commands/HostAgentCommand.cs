@@ -9,7 +9,9 @@ using Spectre.Console.Cli;
 namespace MindAttic.Console.Commands;
 
 /// <summary>
-/// Per-tab agent host: looks up the project + provider, splits the provider's
+/// Per-tab agent host: resolves where to root the agent (a registered project by
+/// <c>--name</c>, or any directory by <c>--path</c> — the latter is how Overlord
+/// roots one session at the whole MindAttic workspace), splits the provider's
 /// RunCommand into argv, sets the tab title and starts the title-pinner, then
 /// execs the agent with inherited stdio.
 /// </summary>
@@ -19,8 +21,12 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
     public sealed class Settings : CommandSettings
     {
         [CommandOption("--name <NAME>")]
-        [Description("Project name as listed in settings.json.")]
+        [Description("Project name as listed in settings.json. Optional when --path is given.")]
         public string Name { get; init; } = "";
+
+        [CommandOption("--path <PATH>")]
+        [Description("Root the agent at this directory instead of a registered project (Overlord uses the MindAttic workspace root). Takes precedence over --name.")]
+        public string? Path { get; init; }
 
         [CommandOption("--title <TITLE>")]
         [Description("Tab title (defaults to --name).")]
@@ -37,19 +43,33 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
 
     public override int Execute(CommandContext context, Settings settings)
     {
-        if (string.IsNullOrWhiteSpace(settings.Name))
-        {
-            System.Console.Error.WriteLine("--name is required.");
-            return 64;
-        }
-
         var store = new SettingsStore();
         var registry = new AgentProviderRegistry(store);
-        var project = ProjectRoster.FindByName(store.Load(), settings.Name);
-        if (project is null)
+
+        // Two ways to root the agent. --path wins: it hosts a session at an
+        // arbitrary directory with no roster entry, which is how Overlord opens
+        // one agent over the whole MindAttic workspace. Otherwise --name looks a
+        // registered project up the usual way.
+        Project? project = null;
+        string workingDir;
+        if (!string.IsNullOrWhiteSpace(settings.Path))
         {
-            System.Console.Error.WriteLine($"Unknown project: {settings.Name}");
-            return 1;
+            workingDir = settings.Path!;
+        }
+        else if (!string.IsNullOrWhiteSpace(settings.Name))
+        {
+            project = ProjectRoster.FindByName(store.Load(), settings.Name);
+            if (project is null)
+            {
+                System.Console.Error.WriteLine($"Unknown project: {settings.Name}");
+                return 1;
+            }
+            workingDir = project.Path;
+        }
+        else
+        {
+            System.Console.Error.WriteLine("--name or --path is required.");
+            return 64;
         }
 
         AgentProvider provider;
@@ -68,10 +88,14 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
         }
         else
         {
-            provider = registry.EffectiveProvider(project);
+            // No project to read a per-project default from in --path mode —
+            // fall back to the workspace default provider.
+            provider = project is not null ? registry.EffectiveProvider(project) : registry.Current();
         }
 
-        var title = string.IsNullOrWhiteSpace(settings.Title) ? settings.Name : settings.Title!;
+        var title = !string.IsNullOrWhiteSpace(settings.Title) ? settings.Title!
+                  : !string.IsNullOrWhiteSpace(settings.Name) ? settings.Name
+                  : System.IO.Path.GetFileName(workingDir.TrimEnd(System.IO.Path.DirectorySeparatorChar));
 
         var parts = CommandLineParser.Split(provider.RunCommand);
         if (parts.Length == 0)
@@ -91,9 +115,9 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
         {
             UseShellExecute = false,
             // Working directory matches the wt tab so the agent starts in the
-            // right project root; menu code already passes -d to wt, but be
-            // defensive in case someone runs `mindattic host` directly.
-            WorkingDirectory = Directory.Exists(project.Path) ? project.Path : Environment.CurrentDirectory
+            // right root; menu code already passes -d to wt, but be defensive in
+            // case someone runs `mindattic host` directly.
+            WorkingDirectory = Directory.Exists(workingDir) ? workingDir : Environment.CurrentDirectory
         };
         for (var i = 1; i < parts.Length; i++) psi.ArgumentList.Add(parts[i]);
         // A seed prompt is the agent's first positional arg — `claude <flags>

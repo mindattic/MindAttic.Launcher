@@ -100,6 +100,44 @@ public sealed class WindowsTerminalLauncher
         };
     }
 
+    /// <summary>
+    /// Builds an "agent host" tab rooted at an arbitrary directory rather than a
+    /// registered project — invokes `mindattic host --path …`. Overlord uses this
+    /// to open one agent over the whole MindAttic workspace, so a single session
+    /// can answer questions about and give directions to every repo under it. When
+    /// <paramref name="prompt"/> is set it's forwarded as <c>--prompt</c> so the
+    /// session opens with that order pre-loaded.
+    /// </summary>
+    public Tab BuildAgentTabAtPath(
+        string title, string workingDirectory, AgentProvider provider, string hostExePath,
+        string? tabColor = null, string? colorScheme = null, string? prompt = null)
+    {
+        var command = new List<string>
+        {
+            hostExePath,
+            "host",
+            "--path", workingDirectory,
+            "--title", title,
+            "--provider", provider.Key
+        };
+        if (!string.IsNullOrWhiteSpace(prompt))
+        {
+            command.Add("--prompt");
+            command.Add(prompt);
+        }
+
+        return new Tab
+        {
+            Title = title,
+            WorkingDirectory = workingDirectory,
+            TabColor = tabColor,
+            ColorScheme = colorScheme,
+            // Match BuildAgentTab: let TitlePinner write "Paused" into the title.
+            SuppressApplicationTitle = false,
+            Command = command
+        };
+    }
+
     public Tab BuildRunCommandTab(Project project)
     {
         // A blank RunCommand as `cmd /c ""` opens a tab that flashes and dies with
