@@ -8,7 +8,18 @@
 .DESCRIPTION
     Called by MindAttic.Console.bat on every launch, and by the in-app
     "Restart" command before it respawns the Release exe in a new wt tab.
+
+.PARAMETER Force
+    Publish unconditionally, skipping the source-newer-than-exe heuristic. The
+    launcher relies on the heuristic (a fast no-op when nothing changed), but an
+    explicit "Restart" is a direct "rebuild now" request: a stale-mtime read or a
+    git pull/checkout that didn't bump working-tree mtimes past the exe must NOT
+    quietly relaunch the old binary. Restart passes -Force.
 #>
+
+param(
+    [switch]$Force
+)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -74,10 +85,13 @@ function Move-Aside([string]$path) {
 
 Remove-StaleArtifacts
 
-if (Test-NeedsPublish) {
+if ($Force -or (Test-NeedsPublish)) {
     $pdb = [System.IO.Path]::ChangeExtension($exe, '.pdb')
     Move-Aside $exe
     Move-Aside $pdb
-    & (Join-Path $here 'publish.ps1')
+    # A forced (Restart) publish does a clean, timestamp-independent rebuild so no
+    # stale-mtime state can leave the old code in place; the launcher's auto path
+    # publishes incrementally for speed.
+    & (Join-Path $here 'publish.ps1') -Clean:$Force
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
