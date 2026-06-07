@@ -34,6 +34,15 @@ public sealed class RunProjectMenu(SettingsStore store, WindowsTerminalLauncher 
             if (sel is null) return;
 
             var project = (Project)sel.Tag!;
+            if (!Directory.Exists(project.Path))
+            {
+                // wt opened with -d <missing path> fails to spawn the tab and the
+                // user sees nothing happen — worse, the "Started" notice would lie.
+                // Say why instead, matching OpenProjectMenu's path-not-found guard.
+                Screen.Notice($"[red]Path not found:[/] [grey50]{Markup.Escape(project.Path)}[/]");
+                Screen.PressAnyKey();
+                continue;
+            }
             wt.Open(wt.BuildRunCommandTab(project));
             Screen.Notice($"[green]Started:[/] [cyan1]{Markup.Escape(project.Name)}[/] → {Markup.Escape(project.RunCommand!)}");
             Thread.Sleep(800);

@@ -26,15 +26,25 @@ public sealed class WindowsTerminalSchemes
         result = contents;
         if (string.IsNullOrEmpty(contents)) return false;
 
-        // Already present (matches the exact spacing WT and this writer emit).
-        if (contents.Contains($"\"name\": \"{schemeName}\"", StringComparison.Ordinal))
-            return true;
-
         var keyIdx = contents.IndexOf("\"schemes\"", StringComparison.Ordinal);
         if (keyIdx < 0) return false;
 
         var openIdx = contents.IndexOf('[', keyIdx);
         if (openIdx < 0) return false;
+
+        // The array's ']' — scheme objects hold no nested arrays, so the first
+        // ']' after '[' closes the schemes array.
+        var closeIdx = contents.IndexOf(']', openIdx);
+        if (closeIdx < 0) return false;
+
+        // Already present — but only count a match *inside the schemes array*.
+        // A profile or theme named the same (WT files have a "profiles" list with
+        // its own "name" keys) must not make us think the scheme exists and skip
+        // writing it while still reporting success. Match the exact spacing WT and
+        // this writer emit.
+        var existingIdx = contents.IndexOf($"\"name\": \"{schemeName}\"", openIdx, StringComparison.Ordinal);
+        if (existingIdx >= 0 && existingIdx < closeIdx)
+            return true;
 
         // Is the array empty? (next non-whitespace after '[' is ']')
         var cursor = openIdx + 1;

@@ -36,12 +36,11 @@ public sealed class OpenProjectMenu(SettingsStore store, AgentProviderRegistry p
             }));
 
             Screen.Header("Open Project Tab");
+            // Don't bail when the roster is empty — the Overlord row sits over the
+            // whole workspace and needs no registered project, so it must stay
+            // reachable here. Just note that nothing else is configured yet.
             if (sortedProjects.Count == 0)
-            {
-                Screen.Notice("[grey50]No projects configured.[/]");
-                Screen.PressAnyKey();
-                return;
-            }
+                Screen.Notice("[grey50]No projects configured yet — only the workspace-wide Overlord is available.[/]");
 
             var result = Menu.PromptWithKeys(
                 "Choose a project to open:",

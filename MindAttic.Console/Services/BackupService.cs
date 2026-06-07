@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 
 namespace MindAttic.Console.Services;
 
@@ -44,7 +45,10 @@ public sealed class BackupService
     /// </summary>
     public string ResolveTargetFolder()
     {
-        var date = Now().ToString("yyyy-MM-dd");
+        // Invariant culture so the folder name is always Gregorian ASCII digits
+        // (yyyy-MM-dd) — a non-Gregorian system locale would otherwise name the
+        // folder with a Hijri/other-calendar year and break the dated sequence.
+        var date = Now().ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         var baseFolder = Path.Combine(BackupBase, date);
         if (!Exists(baseFolder)) return baseFolder;
 

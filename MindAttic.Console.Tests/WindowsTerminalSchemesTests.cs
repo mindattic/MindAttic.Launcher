@@ -81,6 +81,39 @@ public sealed class WindowsTerminalSchemesTests
     }
 
     [Test]
+    public void Insert_ignores_a_same_named_profile_outside_the_schemes_array()
+    {
+        // A WT profile named the same as the scheme we're adding. The old check
+        // ("does the file contain this name anywhere?") would treat the scheme as
+        // already present and skip the write while reporting success, leaving the
+        // tab with no matching scheme. The scheme must still be inserted.
+        const string profileCollision =
+            """
+            {
+                "profiles": { "list": [ { "name": "MindAttic-Auth" } ] },
+                "schemes":
+                [
+                    {
+                        "name": "MindAttic-Console",
+                        "background": "#0A1929",
+                        "foreground": "#CCCCCC"
+                    }
+                ]
+            }
+            """;
+
+        var ok = WindowsTerminalSchemes.TryInsertScheme(profileCollision, "MindAttic-Auth", "#071408", out var result);
+
+        Assert.That(ok, Is.True);
+        Assert.DoesNotThrow(() => JsonDocument.Parse(result));
+        using var doc = JsonDocument.Parse(result);
+        var schemeNames = doc.RootElement.GetProperty("schemes").EnumerateArray()
+            .Select(s => s.GetProperty("name").GetString())
+            .ToList();
+        Assert.That(schemeNames, Is.EquivalentTo(new[] { "MindAttic-Auth", "MindAttic-Console" }));
+    }
+
+    [Test]
     public void Insert_returns_false_when_no_schemes_array()
     {
         var ok = WindowsTerminalSchemes.TryInsertScheme("{ \"profiles\": [] }", "MindAttic-Auth", "#071408", out var result);

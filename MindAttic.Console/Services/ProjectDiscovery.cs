@@ -31,8 +31,22 @@ public static class ProjectDiscovery
             if (!string.IsNullOrWhiteSpace(ignored))
                 known.Add(Normalize(ignored));
 
+        // Materialize the listing inside the guard: this runs at startup (the
+        // discovery walk-through), and an unreadable root — a permission-denied
+        // mount, a disconnected network drive — would otherwise throw straight
+        // out of the menu's launch path and crash it. Degrade to "nothing found".
+        string[] subdirs;
+        try
+        {
+            subdirs = Directory.GetDirectories(root);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return [];
+        }
+
         var found = new List<DiscoveredRepo>();
-        foreach (var dir in Directory.EnumerateDirectories(root))
+        foreach (var dir in subdirs)
         {
             if (!IsGitRepo(dir)) continue;
             if (known.Contains(Normalize(dir))) continue;

@@ -161,7 +161,14 @@ public sealed class GitService
         if (!Directory.Exists(dotGit) && !File.Exists(dotGit)) return (false, "not a git repo");
 
         var (code, stdout, stderr) = Run(repoPath, DefaultTimeout, "pull", "--ff-only");
-        if (code != 0) return (false, $"{stdout}\n{stderr}".Trim());
+        if (code != 0)
+        {
+            // git usually explains itself on stdout/stderr, but a killed/odd run
+            // can leave both blank — fall back to the exit code so the menu shows
+            // a reason instead of a bare "pull failed".
+            var detail = $"{stdout}\n{stderr}".Trim();
+            return (false, detail.Length == 0 ? $"git pull failed (exit {code})" : detail);
+        }
         return (true, stdout.Contains("Already up to date", StringComparison.OrdinalIgnoreCase)
             ? "up to date"
             : "updated");

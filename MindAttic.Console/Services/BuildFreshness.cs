@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 
 namespace MindAttic.Console.Services;
 
@@ -77,7 +78,13 @@ public static class BuildFreshness
             }
             if (p.ExitCode != 0) return null;
 
-            return DateTimeOffset.TryParse(stdout.Trim(), out var when) ? when : null;
+            // %cI is strict ISO-8601 with offset; parse it invariantly and keep the
+            // offset (RoundtripKind) so a non-Gregorian / non-invariant system
+            // culture can't misread the year or shift the instant.
+            return DateTimeOffset.TryParse(
+                stdout.Trim(), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var when)
+                ? when
+                : null;
         }
         catch
         {

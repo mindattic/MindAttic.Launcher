@@ -71,7 +71,13 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
                 case "provider": provider.Run(); break;
                 case "remote":   await RunRemoteControl(); break;
                 case "cmd":
-                    wt.Open(wt.BuildCmdTab(MindAtticRoot()));
+                    // Open at the MindAttic workspace root (the parent that holds
+                    // every repo), matching "the root directory" in the hint —
+                    // MindAtticRoot() is the Console *repo* (Deploy needs it that
+                    // way), which is a subfolder, not the workspace.
+                    var cmdRoot = Menus.OverlordMenu.ResolveMindAtticRoot();
+                    if (!Directory.Exists(cmdRoot)) cmdRoot = MindAtticRoot();
+                    wt.Open(wt.BuildCmdTab(cmdRoot));
                     Thread.Sleep(600);
                     break;
                 case "restart":
@@ -87,9 +93,12 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
         if (r is null) return;
 
         // The menu process can't rebuild itself; Restart republishes and reloads.
+        // DaysBehind floors to whole days, so 0 means "behind by less than a day"
+        // — not "built today" (the build itself may be days old; it's the *gap*
+        // to HEAD that's under a day).
         var age = r.DaysBehind >= 1
             ? $"[yellow]{r.DaysBehind} day{(r.DaysBehind == 1 ? "" : "s")}[/] behind the latest commit"
-            : "[yellow]behind the latest commit[/] (built today)";
+            : "[yellow]less than a day[/] behind the latest commit";
         AnsiConsole.MarkupLine($"  [grey50]Heads up:[/] this menu build is {age}. [grey50]Choose Restart to republish & reload.[/]");
         AnsiConsole.WriteLine();
     }
@@ -102,6 +111,12 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
         if (result.Delivered == 0 && result.Failed.Count == 0)
         {
             AnsiConsole.MarkupLine("[yellow]No open Claude tabs found.[/]");
+        }
+        else if (result.Delivered == 0)
+        {
+            // Tabs were found but every send failed — don't report "Sent ... to 0
+            // tabs", which reads like a success.
+            AnsiConsole.MarkupLine($"[red]Found {result.Failed.Count} Claude tab(s) but none responded.[/]");
         }
         else
         {
