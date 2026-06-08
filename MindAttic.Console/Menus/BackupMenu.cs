@@ -78,11 +78,11 @@ public sealed class BackupMenu(BackupService backup, SettingsStore store, SqlBac
                 {
                     result = backup.Run(
                         target,
-                        onTick: elapsed => ctx.Status($"  Backing up files... [grey50]{Format(elapsed)}[/]"));
+                        onTick: bytes => ctx.Status($"  Backing up files... [grey50]{FormatBytes(bytes)}[/]"));
                 }
                 catch (Exception ex)
                 {
-                    result = new BackupResult(false, -1, sw.Elapsed, target, ex.Message);
+                    result = new BackupResult(false, -1, sw.Elapsed, target, Output: ex.Message);
                 }
             });
 
@@ -130,7 +130,7 @@ public sealed class BackupMenu(BackupService backup, SettingsStore store, SqlBac
         }
         else if (result.Ok)
         {
-            AnsiConsole.MarkupLine($"  [green]Files backed up in {Format(result.Elapsed)}[/]");
+            AnsiConsole.MarkupLine($"  [green]Files backed up — {FormatBytes(result.BytesCopied)} in {Format(result.Elapsed)}[/]");
             AnsiConsole.MarkupLine($"    [grey50]To: {Markup.Escape(result.TargetFolder)}[/]");
         }
         else
@@ -174,4 +174,13 @@ public sealed class BackupMenu(BackupService backup, SettingsStore store, SqlBac
         t.TotalHours >= 1
             ? t.ToString(@"h\:mm\:ss")
             : t.ToString(@"m\:ss");
+
+    private static string FormatBytes(long bytes) =>
+        bytes switch
+        {
+            < 1024L                => $"{bytes} B",
+            < 1024L * 1024        => $"{bytes / 1024.0:F2} KB",
+            < 1024L * 1024 * 1024 => $"{bytes / (1024.0 * 1024):F2} MB",
+            _                     => $"{bytes / (1024.0 * 1024 * 1024):F2} GB"
+        };
 }

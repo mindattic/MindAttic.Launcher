@@ -3,7 +3,7 @@ using System.Globalization;
 
 namespace MindAttic.Console.Services;
 
-public sealed record BackupResult(bool Ok, int RobocopyExitCode, TimeSpan Elapsed, string TargetFolder, string Output = "");
+public sealed record BackupResult(bool Ok, int RobocopyExitCode, TimeSpan Elapsed, string TargetFolder, long BytesCopied = 0, string Output = "");
 
 /// <summary>
 /// robocopy-backed backup of <c>D:\Projects\MindAttic</c> →
@@ -63,11 +63,11 @@ public sealed class BackupService
     }
 
     /// <summary>
-    /// Synchronous robocopy invocation. <paramref name="onTick"/> is called
-    /// once with the current elapsed TimeSpan whenever the caller wants a
-    /// progress refresh — wire it from a Spectre Status loop.
+    /// Synchronous robocopy invocation. <paramref name="onTick"/> is called once
+    /// per second with the running byte total in the target folder — wire it from
+    /// a Spectre Status loop to show live MB transferred.
     /// </summary>
-    public BackupResult Run(string targetFolder, Action<TimeSpan>? onTick = null, CancellationToken ct = default)
+    public BackupResult Run(string targetFolder, Action<long>? onTick = null, CancellationToken ct = default)
     {
         Directory.CreateDirectory(targetFolder);
 
@@ -115,7 +115,7 @@ public sealed class BackupService
             if (onTick is not null && elapsedSec != lastTickSec)
             {
                 lastTickSec = elapsedSec;
-                onTick(sw.Elapsed);
+                onTick(GetDirectorySize(targetFolder));
             }
         }
 
@@ -143,7 +143,19 @@ public sealed class BackupService
         var stderrText = stderrTask.IsCompletedSuccessfully ? stderrTask.Result : "";
         var stdoutText = stdoutTask.IsCompletedSuccessfully ? stdoutTask.Result : "";
         var output = ok ? "" : Tail(string.Join("\n", stderrText, stdoutText), 2000);
-        return new BackupResult(ok, code, sw.Elapsed, targetFolder, output);
+        var finalBytes = GetDirectorySize(targetFolder);
+        return new BackupResult(ok, code, sw.Elapsed, targetFolder, finalBytes, output);
+    }
+
+    private static long GetDirectorySize(string path)
+    {
+        try
+        {
+            return new DirectoryInfo(path)
+                .EnumerateFiles("*", SearchOption.AllDirectories)
+                .Sum(f => { try { return f.Length; } catch { return 0L; } });
+        }
+        catch { return 0L; }
     }
 
     /// <summary>

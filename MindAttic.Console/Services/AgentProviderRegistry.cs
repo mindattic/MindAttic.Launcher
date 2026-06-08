@@ -6,7 +6,7 @@ public sealed class AgentProviderRegistry(SettingsStore store)
 {
     public static IReadOnlyList<AgentProvider> Defaults { get; } =
     [
-        new AgentProvider { Key = "Claude", Name = "Claude Code",  RunCommand = "claude --dangerously-skip-permissions --model claude-opus-4-8" },
+        new AgentProvider { Key = "Claude", Name = "Claude Code",  RunCommand = "claude --dangerously-skip-permissions --model claude-sonnet-4-6" },
         new AgentProvider { Key = "Codex",  Name = "OpenAI Codex", RunCommand = "codex --dangerously-bypass-approvals-and-sandbox" }
     ];
 
@@ -86,6 +86,30 @@ public sealed class AgentProviderRegistry(SettingsStore store)
     {
         if (ByKey(providerKey) is null) throw new ArgumentException($"Unknown provider: {providerKey}", nameof(providerKey));
         store.Update(s => s.Provider = providerKey);
+    }
+
+    /// <summary>
+    /// Sets the model for a provider by rewriting the <c>--model</c> token in its
+    /// RunCommand (see <see cref="ProviderModel"/>). A blank/null model clears the
+    /// flag so the CLI uses its own default.
+    /// </summary>
+    public void SetModel(string providerKey, string? model)
+    {
+        if (ByKey(providerKey) is null) throw new ArgumentException($"Unknown provider: {providerKey}", nameof(providerKey));
+
+        store.Update(s =>
+        {
+            // Defaults live in code, not the file. If nothing's configured yet,
+            // materialize them (cloned, so the static Defaults aren't mutated)
+            // so the model edit has a persisted home.
+            if (s.AgentProviders is null || s.AgentProviders.Count == 0)
+                s.AgentProviders = Defaults.Select(p => p.Clone()).ToList();
+
+            var p = s.AgentProviders.FirstOrDefault(a =>
+                        string.Equals(a.Key, providerKey, StringComparison.OrdinalIgnoreCase))
+                    ?? throw new ArgumentException($"Unknown provider: {providerKey}", nameof(providerKey));
+            p.RunCommand = ProviderModel.Set(p.RunCommand, model);
+        });
     }
 
     public void SetProjectProvider(string projectName, string? providerKey)

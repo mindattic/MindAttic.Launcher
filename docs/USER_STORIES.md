@@ -35,6 +35,15 @@ updated: 2026-06-07
   scheme via `wt`). *WT command-line composition is covered, but the menu-driven open flow itself is
   exercised only interactively.* *(launcher partly verified by `WindowsTerminalLauncherTests`; menu
   path unverified.)*
+- **MCO-US-A6 ✅** As a Dev, I can set the model each agent CLI runs with — or revert to the CLI's
+  own default — from the Settings screen, so I can switch Claude/Codex models without retyping the
+  whole `RunCommand`. *Given a provider's RunCommand; When I set a model; Then the `--model` token is
+  rewritten in place (or appended/removed) and persisted, leaving the static Defaults untouched.*
+  *(token rewrite verified by `Set_rewrites_existing_flag_in_place`,
+  `Set_appends_flag_when_absent`, `Set_blank_removes_flag_without_leaving_double_space`,
+  `Set_then_Get_round_trips`; persistence by `SetModel_appends_flag_and_persists`,
+  `SetModel_blank_clears_the_flag`, `SetModel_unknown_key_throws`,
+  `SetModel_materializes_defaults_when_none_configured`.)*
 
 ## Epic B — Tab title & remote control
 - **MCO-US-B1 ✅** As a Dev, each host tab shows whether the agent is busy, so I can read the tab

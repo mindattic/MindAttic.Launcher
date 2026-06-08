@@ -98,4 +98,41 @@ public sealed class AgentProviderRegistryTests
     {
         Assert.Throws<ArgumentException>(() => registry.SetProjectProvider("Alpha", "Bogus"));
     }
+
+    [Test]
+    public void SetModel_appends_flag_and_persists()
+    {
+        registry.SetModel("Claude", "claude-sonnet-4-6");
+        var claude = new AgentProviderRegistry(store).ByKey("Claude")!;
+        Assert.That(claude.RunCommand, Is.EqualTo("claude --dangerously-skip-permissions --model claude-sonnet-4-6"));
+    }
+
+    [Test]
+    public void SetModel_blank_clears_the_flag()
+    {
+        registry.SetModel("Claude", "claude-opus-4-8");
+        registry.SetModel("Claude", "");
+        var claude = new AgentProviderRegistry(store).ByKey("Claude")!;
+        Assert.That(claude.RunCommand, Is.EqualTo("claude --dangerously-skip-permissions"));
+    }
+
+    [Test]
+    public void SetModel_unknown_key_throws()
+    {
+        Assert.Throws<ArgumentException>(() => registry.SetModel("Bogus", "x"));
+    }
+
+    [Test]
+    public void SetModel_materializes_defaults_when_none_configured()
+    {
+        store.Save(new AppSettings());
+        var fresh = new AgentProviderRegistry(store);
+        fresh.SetModel("Claude", "model-under-test");
+
+        // The static Defaults must be untouched — only the persisted copy changes.
+        Assert.That(AgentProviderRegistry.Defaults.First(p => p.Key == "Claude").RunCommand,
+            Does.Not.Contain("model-under-test"));
+        Assert.That(new AgentProviderRegistry(store).ByKey("Claude")!.RunCommand,
+            Does.Contain("--model model-under-test"));
+    }
 }

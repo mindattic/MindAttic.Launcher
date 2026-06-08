@@ -77,7 +77,7 @@ an LLM or owns an FTP/deploy pipeline. (`Commands/HostAgentCommand.cs`, `Service
 - **Sibling repo** — another repo under the workspace root (e.g. MindAttic.Deploy).
 
 ## Status index (docs/USER_STORIES.md)
-- done: 21
+- done: 22
 - partial: 4
 - planned: 3
 - cut: 1

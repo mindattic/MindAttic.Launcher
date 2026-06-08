@@ -59,22 +59,7 @@ public sealed class OpenProjectMenu(SettingsStore store, AgentProviderRegistry p
                 }
 
                 var project = (Project)sel.Tag!;
-                if (!Directory.Exists(project.Path))
-                {
-                    // wt opened with -d <missing path> fails to spawn the tab and
-                    // the user sees nothing happen. Say why instead, matching the
-                    // path-not-found checks in CommitMenu/PullMenu.
-                    Screen.Notice($"[red]Path not found:[/] [grey50]{Markup.Escape(project.Path)}[/]");
-                    Screen.PressAnyKey();
-                    continue;
-                }
-                var provider = providers.EffectiveProvider(project);
-                // Match RestartInNewTab: republish if source changed, then spawn
-                // the canonical Release exe from artifacts/. Using ExePath.Self
-                // here meant dev tabs ran whatever Debug bin happened to be live.
-                ExePath.EnsureFresh();
-                wt.Open(wt.BuildAgentTab(project, provider, ExePath.Release));
-                Thread.Sleep(800); // PS launcher's anti-flicker wait
+                new ProjectActionMenu(store, providers, wt, project).Run();
                 continue;
             }
 

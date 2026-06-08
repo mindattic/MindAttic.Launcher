@@ -24,44 +24,54 @@ public sealed class WindowsTerminalLauncher
         if (tab.Command.Count == 0)
             throw new ArgumentException("Tab.Command must contain at least the executable.", nameof(tab));
 
-        var args = new List<string> { "-w", "0", "new-tab" };
-
-        if (!string.IsNullOrWhiteSpace(tab.Title))
-        {
-            args.Add("--title");
-            args.Add(tab.Title);
-        }
-        if (tab.SuppressApplicationTitle)
-            args.Add("--suppressApplicationTitle");
-        if (!string.IsNullOrWhiteSpace(tab.WorkingDirectory))
-        {
-            args.Add("-d");
-            args.Add(tab.WorkingDirectory);
-        }
-        if (!string.IsNullOrWhiteSpace(tab.TabColor))
-        {
-            args.Add("--tabColor");
-            args.Add(tab.TabColor);
-        }
-        if (!string.IsNullOrWhiteSpace(tab.ColorScheme))
-        {
-            args.Add("--colorScheme");
-            args.Add(tab.ColorScheme);
-        }
-
-        args.Add("--");
-        args.AddRange(tab.Command);
-
         var psi = new ProcessStartInfo("wt")
         {
             UseShellExecute = false,
             CreateNoWindow = true
         };
-        foreach (var a in args) psi.ArgumentList.Add(a);
+        foreach (var a in BuildArgList(tab)) psi.ArgumentList.Add(a);
 
         // wt forks the new tab and exits immediately. Dispose the launcher
         // Process handle right away — callers were leaking it.
         using var launcher = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start wt.");
+    }
+
+    /// <summary>
+    /// Like <see cref="Open"/> but launches <c>wt</c> elevated via UAC so the new
+    /// tab runs as Administrator. If the user cancels the UAC prompt the call returns
+    /// silently (Win32 error 1223 is swallowed).
+    /// </summary>
+    public void OpenElevated(Tab tab)
+    {
+        if (tab.Command.Count == 0)
+            throw new ArgumentException("Tab.Command must contain at least the executable.", nameof(tab));
+
+        var psi = new ProcessStartInfo("wt")
+        {
+            UseShellExecute = true,
+            Verb = "runas"
+        };
+        foreach (var a in BuildArgList(tab)) psi.ArgumentList.Add(a);
+
+        try { using var _ = Process.Start(psi); }
+        catch (System.ComponentModel.Win32Exception) { /* user cancelled UAC */ }
+    }
+
+    private static IEnumerable<string> BuildArgList(Tab tab)
+    {
+        yield return "-w"; yield return "0"; yield return "new-tab";
+        if (!string.IsNullOrWhiteSpace(tab.Title))
+            { yield return "--title"; yield return tab.Title; }
+        if (tab.SuppressApplicationTitle)
+            yield return "--suppressApplicationTitle";
+        if (!string.IsNullOrWhiteSpace(tab.WorkingDirectory))
+            { yield return "-d"; yield return tab.WorkingDirectory; }
+        if (!string.IsNullOrWhiteSpace(tab.TabColor))
+            { yield return "--tabColor"; yield return tab.TabColor; }
+        if (!string.IsNullOrWhiteSpace(tab.ColorScheme))
+            { yield return "--colorScheme"; yield return tab.ColorScheme; }
+        yield return "--";
+        foreach (var c in tab.Command) yield return c;
     }
 
     /// <summary>
@@ -159,9 +169,16 @@ public sealed class WindowsTerminalLauncher
 
     public Tab BuildCmdTab(string workingDirectory) => new()
     {
-        Title = "Command Prompt",
+        Title = "Command Prompt (Administrator)",
         WorkingDirectory = workingDirectory,
         Command = ["cmd"]
+    };
+
+    public Tab BuildPowerShellTab(string workingDirectory) => new()
+    {
+        Title = "PowerShell (Administrator)",
+        WorkingDirectory = workingDirectory,
+        Command = ["powershell"]
     };
 
     /// <summary>

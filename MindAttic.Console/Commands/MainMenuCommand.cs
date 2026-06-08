@@ -12,7 +12,7 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
 {
     public sealed class Settings : CommandSettings { }
 
-    public override async Task<int> ExecuteAsync(CommandContext context, Settings settings)
+    public override Task<int> ExecuteAsync(CommandContext context, Settings settings)
     {
         var store = new SettingsStore();
         _ = store.Load(); // surface legacy-seed migration on launch
@@ -24,9 +24,8 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
         var commit   = new CommitMenu(store, git);
         var pull     = new PullMenu(store, git);
         var open     = new OpenProjectMenu(store, providers, wt);
-        var run      = new RunProjectMenu(store, wt);
         var backup   = new BackupMenu(new BackupService(), store, new SqlBackupService());
-        var provider = new ProviderMenu(store, providers);
+        var settingsMenu = new SettingsMenu(store, providers);
 
         // Checked once at launch: running git every menu redraw would be wasteful,
         // and the build can't change underneath a running process anyway.
@@ -44,46 +43,47 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
 
             var items = new List<MenuItem>
             {
-                new() { Name = "Commit and sync",     Description = "commit and push changes per project or across all", Tag = "commit" },
-                new() { Name = "Pull",                Description = "git pull --ff-only per project or across all", Tag = "pull" },
-                new() { Name = "Open Project Tab",    Description = "select a project to open with its configured coding agent", Tag = "open" },
-                new() { Name = "Run Project",         Description = "run a project in a new terminal tab", Tag = "run" },
-                new() { Name = "Backup",              Description = "back up MindAttic to R:\\Backup\\MindAttic", Tag = "backup" },
-                new() { Name = "Deploy All",          Description = "push every catalog page, root site, and app via MindAttic.Deploy", Tag = "deploy" },
-                new() { Name = "Provider",            Description = "set default coding agent or per-project override", Tag = "provider" },
-                new() { Name = "Remote Control",      Description = "run /remote-control in every open Claude tab", Tag = "remote" },
-                new() { Name = "Open Command Prompt", Description = "open cmd at the root directory", Tag = "cmd" },
-                new() { Name = "Restart",             Description = "reload this console in a new tab; other tabs are untouched", Tag = "restart" },
-                new() { Name = "Exit",                Description = "close this menu (other tabs are untouched)", Tag = "exit" }
+                new() { Name = "Commit and sync",               Description = "commit and push changes per project or across all", Tag = "commit" },
+                new() { Name = "Pull",                          Description = "git pull --ff-only per project or across all", Tag = "pull" },
+                new() { Name = "Open Project Tab",              Description = "select a project to open with its configured coding agent", Tag = "open" },
+                new() { Name = "Backup",                        Description = "back up MindAttic to R:\\Backup\\MindAttic", Tag = "backup" },
+                new() { Name = "Settings",                      Description = "CLI development: default agent, model per agent, per-project overrides", Tag = "settings" },
+                new() { Name = "Open Command Prompt (Admin)",   Description = "open cmd as Administrator at the workspace root", Tag = "cmd" },
+                new() { Name = "Open PowerShell (Admin)",       Description = "open PowerShell as Administrator at the workspace root", Tag = "ps" },
+                new() { Name = "Restart",                       Description = "reload this console in a new tab; other tabs are untouched", Tag = "restart" },
+                new() { Name = "Exit",                          Description = "close this menu (other tabs are untouched)", Tag = "exit" }
             };
 
             var sel = Ui.Menu.Prompt("MindAttic Console — choose an action:", items, allowBack: false);
-            if (sel is null) return 0;
+            if (sel is null) return Task.FromResult(0);
 
             switch (sel.Tag)
             {
                 case "commit":   commit.Run(); break;
                 case "pull":     pull.Run(); break;
                 case "open":     open.Run(); break;
-                case "run":      run.Run(); break;
                 case "backup":   backup.Run(); break;
-                case "deploy":   RunDeployAll(wt); break;
-                case "provider": provider.Run(); break;
-                case "remote":   await RunRemoteControl(); break;
+                case "settings": settingsMenu.Run(); break;
                 case "cmd":
+                case "ps":
+                {
                     // Open at the MindAttic workspace root (the parent that holds
                     // every repo), matching "the root directory" in the hint —
                     // MindAtticRoot() is the Console *repo* (Deploy needs it that
                     // way), which is a subfolder, not the workspace.
-                    var cmdRoot = Menus.OverlordMenu.ResolveMindAtticRoot();
-                    if (!Directory.Exists(cmdRoot)) cmdRoot = MindAtticRoot();
-                    wt.Open(wt.BuildCmdTab(cmdRoot));
+                    var adminRoot = Menus.OverlordMenu.ResolveMindAtticRoot();
+                    if (!Directory.Exists(adminRoot)) adminRoot = MindAtticRoot();
+                    var tab = sel.Tag is "ps"
+                        ? wt.BuildPowerShellTab(adminRoot)
+                        : wt.BuildCmdTab(adminRoot);
+                    wt.OpenElevated(tab);
                     Thread.Sleep(600);
                     break;
+                }
                 case "restart":
                     RestartInNewTab(wt);
-                    return 0;
-                case "exit":     return 0;
+                    return Task.FromResult(0);
+                case "exit":     return Task.FromResult(0);
             }
         }
     }
@@ -101,55 +101,6 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
             : "[yellow]less than a day[/] behind the latest commit";
         AnsiConsole.MarkupLine($"  [grey50]Heads up:[/] this menu build is {age}. [grey50]Choose Restart to republish & reload.[/]");
         AnsiConsole.WriteLine();
-    }
-
-    private static async Task RunRemoteControl()
-    {
-        var broadcaster = new RemoteControlBroadcaster();
-        var result = await broadcaster.BroadcastAsync("Claude", "/remote-control\n");
-
-        if (result.Delivered == 0 && result.Failed.Count == 0)
-        {
-            AnsiConsole.MarkupLine("[yellow]No open Claude tabs found.[/]");
-        }
-        else if (result.Delivered == 0)
-        {
-            // Tabs were found but every send failed — don't report "Sent ... to 0
-            // tabs", which reads like a success.
-            AnsiConsole.MarkupLine($"[red]Found {result.Failed.Count} Claude tab(s) but none responded.[/]");
-        }
-        else
-        {
-            var tabWord = result.Delivered == 1 ? "tab" : "tabs";
-            AnsiConsole.MarkupLine($"[green]Sent /remote-control to {result.Delivered} Claude {tabWord}.[/]");
-            if (result.Failed.Count > 0)
-                AnsiConsole.MarkupLine($"[red]{result.Failed.Count} tab(s) didn't respond.[/]");
-        }
-        Thread.Sleep(1200);
-    }
-
-    private static void RunDeployAll(WindowsTerminalLauncher wt)
-    {
-        var root = MindAtticRoot();
-        var deploy = new DeployService();
-        var exe = deploy.ResolveExe(root);
-        if (exe is null)
-        {
-            AnsiConsole.MarkupLine(
-                $"[red]MindAttic.Deploy artifact not found.[/] Expected sibling repo at " +
-                $"[grey]{Markup.Escape(Path.Combine(Path.GetDirectoryName(root) ?? root, DeployService.SiblingRepoName, "artifacts", DeployService.ArtifactExeName))}[/]");
-            AnsiConsole.MarkupLine("[grey]Publish MindAttic.Deploy first (run its scripts/publish.ps1).[/]");
-            Thread.Sleep(2000);
-            return;
-        }
-
-        var cmd = DeployService.BuildDeployAllCommandLine(exe);
-        // Tab wd is the Deploy repo root (grandparent of artifacts\…\exe) so
-        // follow-up commands in that pane resolve against the right tree.
-        var deployRepo = Path.GetDirectoryName(Path.GetDirectoryName(exe)) ?? root;
-        wt.Open(wt.BuildDeployAllTab(deployRepo, cmd));
-        AnsiConsole.MarkupLine("[green]Deploy All tab opened.[/] [grey](catalog → site --all → app --all --include-disabled)[/]");
-        Thread.Sleep(900);
     }
 
     private static string MindAtticRoot()

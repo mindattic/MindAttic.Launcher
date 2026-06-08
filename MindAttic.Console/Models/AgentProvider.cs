@@ -16,4 +16,18 @@ public sealed class AgentProvider
     /// </summary>
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? Extra { get; set; }
+
+    /// <summary>
+    /// A detached copy. Used when materializing the code-level
+    /// <see cref="Services.AgentProviderRegistry.Defaults"/> into settings so an
+    /// edit (e.g. changing the model) persists without mutating the shared
+    /// static defaults.
+    /// </summary>
+    public AgentProvider Clone() => new()
+    {
+        Key = Key,
+        Name = Name,
+        RunCommand = RunCommand,
+        Extra = Extra is null ? null : new Dictionary<string, JsonElement>(Extra)
+    };
 }
