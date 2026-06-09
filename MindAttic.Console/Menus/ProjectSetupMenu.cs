@@ -80,11 +80,12 @@ public sealed class ProjectSetupMenu(SettingsStore store, AgentProviderRegistry 
                 .DefaultValue(current ?? "")
                 .ShowDefaultValue(!string.IsNullOrWhiteSpace(current)));
 
+        var trimmed = entered.Trim();
         store.Update(s =>
         {
             var p = ProjectRoster.FindByName(s, projectName);
             if (p is null) return;
-            set(p, string.IsNullOrWhiteSpace(entered) ? null : entered);
+            set(p, string.IsNullOrWhiteSpace(trimmed) ? null : trimmed);
         });
 
         Screen.Notice($"[green]{Markup.Escape(label)} saved.[/]");

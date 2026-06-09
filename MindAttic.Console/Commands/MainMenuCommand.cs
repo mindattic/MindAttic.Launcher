@@ -76,6 +76,7 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
                     var tab = sel.Tag is "ps"
                         ? wt.BuildPowerShellTab(adminRoot)
                         : wt.BuildCmdTab(adminRoot);
+                    Screen.Working("Opening elevated tab…  Please wait.");
                     wt.OpenElevated(tab);
                     Thread.Sleep(600);
                     break;

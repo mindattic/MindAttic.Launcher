@@ -31,6 +31,12 @@ public static class Screen
         AnsiConsole.WriteLine();
     }
 
+    public static void Working(string message = "Loading…  Please wait.")
+    {
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine($"  [grey50]{Markup.Escape(message)}[/]");
+    }
+
     public static void Notice(string markup)
     {
         AnsiConsole.WriteLine();

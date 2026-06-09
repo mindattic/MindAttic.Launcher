@@ -161,6 +161,7 @@ public sealed class OverlordMenu(AgentProviderRegistry providers, WindowsTermina
     {
         var provider = providers.Current();
 
+        Screen.Working();
         ExePath.EnsureFresh();
         wt.Open(wt.BuildAgentTabAtPath(
             $"Overlord [{provider.Key}]", root, provider, ExePath.Release,

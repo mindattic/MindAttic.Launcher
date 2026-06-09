@@ -19,27 +19,13 @@ public sealed class ProjectActionMenu(
             var current = ProjectRoster.FindByName(settings, project.Name) ?? project;
             var provider = providers.EffectiveProvider(current);
 
+            var hasCmd = !string.IsNullOrWhiteSpace(current.RunCommand);
             var items = new List<MenuItem>
             {
-                new() { Name = "Run", Description = $"open agent tab ({provider.Name})", Tag = "run" }
+                new() { Name = "Start Editing", Description = $"open agent tab ({provider.Name})", Tag = "run" },
+                new() { Name = "Run Command",   Description = hasCmd ? current.RunCommand! : "(none — configure in Settings)", Tag = "runcmd" },
+                new() { Name = "Settings",      Description = "alias, description, color, provider", Tag = "setup" },
             };
-
-            if (!string.IsNullOrWhiteSpace(current.RunCommand))
-            {
-                items.Add(new MenuItem
-                {
-                    Name = "Run Command",
-                    Description = current.RunCommand,
-                    Tag = "runcmd"
-                });
-            }
-
-            items.Add(new MenuItem
-            {
-                Name = "Setup",
-                Description = "alias, description, color, provider",
-                Tag = "setup"
-            });
 
             Screen.Header(current.Name);
             var sel = Menu.Prompt($"Choose an action for {Markup.Escape(current.Name)}:", items);
@@ -54,12 +40,19 @@ public sealed class ProjectActionMenu(
                         Screen.PressAnyKey();
                         break;
                     }
+                    Screen.Working();
                     ExePath.EnsureFresh();
                     wt.Open(wt.BuildAgentTab(current, provider, ExePath.Release));
                     Thread.Sleep(800);
                     return;
 
                 case "runcmd":
+                    if (string.IsNullOrWhiteSpace(current.RunCommand))
+                    {
+                        Screen.Notice("[yellow]No run command configured — use Settings to add one.[/]");
+                        Screen.PressAnyKey();
+                        break;
+                    }
                     if (!Directory.Exists(current.Path))
                     {
                         Screen.Notice($"[red]Path not found:[/] [grey50]{Markup.Escape(current.Path)}[/]");
