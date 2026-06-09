@@ -80,12 +80,22 @@ public sealed class SettingsMenu(SettingsStore store, AgentProviderRegistry prov
     private void EditModel(AgentProvider provider)
     {
         var current = ProviderModel.Get(provider.RunCommand);
+        AgentProviderRegistry.KnownModels.TryGetValue(provider.Key, out var knownModels);
 
-        var items = new List<MenuItem>
+        var items = new List<MenuItem>();
+        foreach (var (id, label) in knownModels ?? [])
         {
-            new() { Name = "Enter model id…", Description = "type the exact CLI model id", Tag = "custom" },
-            new() { Name = "Use CLI default", Description = "remove --model so the CLI picks", Tag = "clear" }
-        };
+            items.Add(new MenuItem
+            {
+                Name = id,
+                Description = string.Equals(id, current, StringComparison.OrdinalIgnoreCase)
+                    ? $"{label}  ← current"
+                    : label,
+                Tag = id
+            });
+        }
+        items.Add(new() { Name = "Enter model id…", Description = "type the exact CLI model id", Tag = "custom" });
+        items.Add(new() { Name = "Use CLI default", Description = "remove --model so the CLI picks", Tag = "clear" });
 
         Screen.Header("Settings", provider.Name, "Model");
         AnsiConsole.MarkupLine(
@@ -97,18 +107,22 @@ public sealed class SettingsMenu(SettingsStore store, AgentProviderRegistry prov
         if (sel is null) return;
 
         string? model;
-        if (sel.Tag is "clear")
+        switch (sel.Tag)
         {
-            model = null;
-        }
-        else
-        {
-            AnsiConsole.WriteLine();
-            model = AnsiConsole.Prompt(
-                new TextPrompt<string>("  [cyan1]Model id[/]:")
-                    .AllowEmpty()
-                    .DefaultValue(current ?? "")
-                    .ShowDefaultValue(false));
+            case "clear":
+                model = null;
+                break;
+            case "custom":
+                AnsiConsole.WriteLine();
+                model = AnsiConsole.Prompt(
+                    new TextPrompt<string>("  [cyan1]Model id[/]:")
+                        .AllowEmpty()
+                        .DefaultValue(current ?? "")
+                        .ShowDefaultValue(false));
+                break;
+            default:
+                model = (string)sel.Tag!;
+                break;
         }
 
         providers.SetModel(provider.Key, model);

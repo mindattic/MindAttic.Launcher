@@ -123,6 +123,17 @@ public sealed class AgentProviderRegistryTests
     }
 
     [Test]
+    public void KnownModels_Claude_includes_Fable5_and_current_models()
+    {
+        Assert.That(AgentProviderRegistry.KnownModels, Contains.Key("Claude"));
+        var ids = AgentProviderRegistry.KnownModels["Claude"].Select(m => m.Id).ToList();
+        Assert.That(ids, Contains.Item("claude-fable-5"));
+        Assert.That(ids, Contains.Item("claude-opus-4-8"));
+        Assert.That(ids, Contains.Item("claude-sonnet-4-6"));
+        Assert.That(ids[0], Is.EqualTo("claude-fable-5"), "Fable 5 must be first (newest)");
+    }
+
+    [Test]
     public void SetModel_materializes_defaults_when_none_configured()
     {
         store.Save(new AppSettings());

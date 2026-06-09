@@ -10,6 +10,21 @@ public sealed class AgentProviderRegistry(SettingsStore store)
         new AgentProvider { Key = "Codex",  Name = "OpenAI Codex", RunCommand = "codex --dangerously-bypass-approvals-and-sandbox" }
     ];
 
+    /// <summary>Known model IDs per provider key, newest first, shown as presets in the model picker.</summary>
+    public static IReadOnlyDictionary<string, IReadOnlyList<(string Id, string Label)>> KnownModels { get; } =
+        new Dictionary<string, IReadOnlyList<(string Id, string Label)>>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Claude"] = new (string Id, string Label)[]
+            {
+                ("claude-fable-5",    "Fable 5    · 1M ctx · highest intelligence"),
+                ("claude-opus-4-8",   "Opus 4.8   · 1M ctx · reasoning + coding"),
+                ("claude-opus-4-7",   "Opus 4.7   · 1M ctx"),
+                ("claude-opus-4-6",   "Opus 4.6   · 1M ctx"),
+                ("claude-sonnet-4-6", "Sonnet 4.6 · 1M ctx · balanced"),
+                ("claude-haiku-4-5",  "Haiku 4.5  · 200K ctx · fast"),
+            }
+        };
+
     public IReadOnlyList<AgentProvider> All() => ProvidersFrom(store.Load());
 
     private static IReadOnlyList<AgentProvider> ProvidersFrom(AppSettings settings)
