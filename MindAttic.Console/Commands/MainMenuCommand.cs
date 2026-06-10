@@ -30,34 +30,46 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
         // Checked once at launch: running git every menu redraw would be wasteful,
         // and the build can't change underneath a running process anyway.
         var staleness = BuildFreshness.Check();
+        var status = new ClaudeStatusService();
 
         // Offer any git repos found under the workspace that aren't in the roster
         // yet, so a freshly-created repo is added (with its color scheme) instead
         // of staying invisible to every menu until someone edits settings by hand.
         new DiscoverProjectsMenu(store, git, new WindowsTerminalSchemes()).Run();
 
+        var items = new List<MenuItem>
+        {
+            new() { Name = "Commit and sync",               Description = "commit and push changes per project or across all", Tag = "commit" },
+            new() { Name = "Pull",                          Description = "git pull --ff-only per project or across all", Tag = "pull" },
+            new() { Name = "Open Project Tab",              Description = "select a project to open with its configured coding agent", Tag = "open" },
+            new() { Name = "Backup",                        Description = "back up MindAttic to R:\\Backup\\MindAttic", Tag = "backup" },
+            new() { Name = "Settings",                      Description = "CLI development: default agent, model per agent, per-project overrides", Tag = "settings" },
+            new() { Name = "Open Command Prompt (Admin)",   Description = "open cmd as Administrator at the workspace root", Tag = "cmd" },
+            new() { Name = "Open PowerShell (Admin)",       Description = "open PowerShell as Administrator at the workspace root", Tag = "ps" },
+            new() { Name = "Restart",                       Description = "reload this console in a new tab; other tabs are untouched", Tag = "restart" },
+            new() { Name = "Exit",                          Description = "close this menu (other tabs are untouched)", Tag = "exit" }
+        };
+
         while (true)
         {
             Screen.Header();
             RenderStaleness(staleness);
+            status.Render();
 
-            var items = new List<MenuItem>
-            {
-                new() { Name = "Commit and sync",               Description = "commit and push changes per project or across all", Tag = "commit" },
-                new() { Name = "Pull",                          Description = "git pull --ff-only per project or across all", Tag = "pull" },
-                new() { Name = "Open Project Tab",              Description = "select a project to open with its configured coding agent", Tag = "open" },
-                new() { Name = "Backup",                        Description = "back up MindAttic to R:\\Backup\\MindAttic", Tag = "backup" },
-                new() { Name = "Settings",                      Description = "CLI development: default agent, model per agent, per-project overrides", Tag = "settings" },
-                new() { Name = "Open Command Prompt (Admin)",   Description = "open cmd as Administrator at the workspace root", Tag = "cmd" },
-                new() { Name = "Open PowerShell (Admin)",       Description = "open PowerShell as Administrator at the workspace root", Tag = "ps" },
-                new() { Name = "Restart",                       Description = "reload this console in a new tab; other tabs are untouched", Tag = "restart" },
-                new() { Name = "Exit",                          Description = "close this menu (other tabs are untouched)", Tag = "exit" }
-            };
+            // Cancel after 60 s so the menu redraw loop wakes up and reprints
+            // fresh status even when the user is idle.
+            using var refreshCts = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+            var result = Ui.Menu.PromptWithKeys(
+                "MindAttic Console — choose an action:",
+                items,
+                customKeys: null,
+                allowBack: false,
+                refreshToken: refreshCts.Token);
 
-            var sel = Ui.Menu.Prompt("MindAttic Console — choose an action:", items, allowBack: false);
-            if (sel is null) return Task.FromResult(0);
+            if (result.Timeout) continue;
+            if (result.Selected is null) return Task.FromResult(0);
 
-            switch (sel.Tag)
+            switch (result.Selected.Tag)
             {
                 case "commit":   commit.Run(); break;
                 case "pull":     pull.Run(); break;
@@ -73,7 +85,7 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
                     // way), which is a subfolder, not the workspace.
                     var adminRoot = Menus.OverlordMenu.ResolveMindAtticRoot();
                     if (!Directory.Exists(adminRoot)) adminRoot = MindAtticRoot();
-                    var tab = sel.Tag is "ps"
+                    var tab = result.Selected.Tag is "ps"
                         ? wt.BuildPowerShellTab(adminRoot)
                         : wt.BuildCmdTab(adminRoot);
                     Screen.Working("Opening elevated tab…  Please wait.");

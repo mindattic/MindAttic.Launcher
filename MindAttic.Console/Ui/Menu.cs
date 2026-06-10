@@ -27,7 +27,8 @@ public static class Menu
         IReadOnlyList<MenuItem> items,
         IReadOnlySet<ConsoleKey>? customKeys,
         bool allowBack = true,
-        string? extraHint = null)
+        string? extraHint = null,
+        CancellationToken refreshToken = default)
     {
         var rows = new List<MenuItem>(items);
         if (allowBack)
@@ -59,18 +60,30 @@ public static class Menu
 
             while (true)
             {
-                ConsoleKeyInfo keyInfo;
-                try
+                // Poll for a keypress so a refreshToken cancellation (e.g. the
+                // 60-second main-menu redraw timer) can interrupt the wait.
+                ConsoleKeyInfo? next = null;
+                while (next is null)
                 {
-                    keyInfo = System.Console.ReadKey(intercept: true);
+                    bool available;
+                    try { available = System.Console.KeyAvailable; }
+                    catch (InvalidOperationException) { return new MenuResult { Back = true }; }
+
+                    if (available)
+                    {
+                        try { next = System.Console.ReadKey(intercept: true); }
+                        catch (InvalidOperationException) { return new MenuResult { Back = true }; }
+                    }
+                    else if (refreshToken.IsCancellationRequested)
+                    {
+                        return new MenuResult { Timeout = true };
+                    }
+                    else
+                    {
+                        Thread.Sleep(50);
+                    }
                 }
-                catch (InvalidOperationException)
-                {
-                    // stdin is redirected (piped run, CI, test harness). There's
-                    // no interactive user to drive the menu — unwind cleanly
-                    // instead of crashing.
-                    return new MenuResult { Back = true };
-                }
+                var keyInfo = next.Value;
                 var navigated = false;
 
                 switch (keyInfo.Key)
@@ -161,6 +174,7 @@ public sealed class MenuResult
 {
     public MenuItem? Selected { get; init; }
     public bool Back { get; init; }
+    public bool Timeout { get; init; }
     public ConsoleKey? CustomKey { get; init; }
     public MenuItem? KeyTarget { get; init; }
 }
