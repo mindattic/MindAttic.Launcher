@@ -130,7 +130,7 @@ public sealed class OverlordMenu(AgentProviderRegistry providers, WindowsTermina
                 {
                     var psi = new ProcessStartInfo("claude")
                     {
-                        ArgumentList = { "-p", RefinerSystemPrompt, draft },
+                        ArgumentList = { "--system-prompt", RefinerSystemPrompt, "-p", draft },
                         RedirectStandardOutput = true,
                         RedirectStandardError = true,
                         UseShellExecute = false,
