@@ -44,6 +44,7 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
             new() { Name = "Open Project Tab",              Description = "select a project to open with its configured coding agent", Tag = "open" },
             new() { Name = "Backup",                        Description = "back up MindAttic to R:\\Backup\\MindAttic", Tag = "backup" },
             new() { Name = "Settings",                      Description = "CLI development: default agent, model per agent, per-project overrides", Tag = "settings" },
+            new() { Name = "Status",                        Description = "open a Claude tab at the workspace root with /status pre-filled", Tag = "status" },
             new() { Name = "Open Command Prompt (Admin)",   Description = "open cmd as Administrator at the workspace root", Tag = "cmd" },
             new() { Name = "Open PowerShell (Admin)",       Description = "open PowerShell as Administrator at the workspace root", Tag = "ps" },
             new() { Name = "Restart",                       Description = "reload this console in a new tab; other tabs are untouched", Tag = "restart" },
@@ -76,6 +77,19 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
                 case "open":     open.Run(); break;
                 case "backup":   backup.Run(); break;
                 case "settings": settingsMenu.Run(); break;
+                case "status":
+                {
+                    var statusRoot = Menus.OverlordMenu.ResolveMindAtticRoot();
+                    if (!Directory.Exists(statusRoot)) statusRoot = MindAtticRoot();
+                    var provider = providers.Current();
+                    Screen.Working("Opening status tab…  Please wait.");
+                    ExePath.EnsureFresh();
+                    wt.Open(wt.BuildAgentTabAtPath(
+                        $"Status [{provider.Key}]", statusRoot, provider, ExePath.Release,
+                        prompt: "/status"));
+                    Thread.Sleep(800);
+                    break;
+                }
                 case "cmd":
                 case "ps":
                 {
