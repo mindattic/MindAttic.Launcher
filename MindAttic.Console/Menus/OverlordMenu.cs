@@ -121,6 +121,11 @@ public sealed class OverlordMenu(AgentProviderRegistry providers, WindowsTermina
     {
         string? result = null;
 
+        // Command-line arguments cannot contain embedded newlines on Windows —
+        // the WT/CreateProcess chain truncates or garbles the commandline at the
+        // first bare LF. Collapse to single line before passing to the subprocess.
+        var singleLineDraft = draft.Replace("\r\n", " ").Replace('\r', ' ').Replace('\n', ' ');
+
         AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots)
             .SpinnerStyle(Style.Parse("cyan1"))
@@ -130,7 +135,7 @@ public sealed class OverlordMenu(AgentProviderRegistry providers, WindowsTermina
                 {
                     var psi = new ProcessStartInfo("claude")
                     {
-                        ArgumentList = { "--system-prompt", RefinerSystemPrompt, "-p", draft },
+                        ArgumentList = { "--system-prompt", RefinerSystemPrompt, "-p", singleLineDraft },
                         RedirectStandardOutput = true,
                         RedirectStandardError = true,
                         UseShellExecute = false,
@@ -161,11 +166,16 @@ public sealed class OverlordMenu(AgentProviderRegistry providers, WindowsTermina
     {
         var provider = providers.Current();
 
+        // Sanitize newlines before passing the order into the WT → CreateProcess
+        // chain. Embedded newlines in command-line arguments break Windows Terminal's
+        // commandline reconstruction; collapse them to spaces so the intent survives.
+        var safeOrder = order?.Replace("\r\n", " ").Replace('\r', ' ').Replace('\n', ' ');
+
         Screen.Working();
         ExePath.EnsureFresh();
         wt.Open(wt.BuildAgentTabAtPath(
             $"Overlord [{provider.Key}]", root, provider, ExePath.Release,
-            prompt: string.IsNullOrWhiteSpace(order) ? null : order));
+            prompt: string.IsNullOrWhiteSpace(safeOrder) ? null : safeOrder));
 
         if (!string.IsNullOrWhiteSpace(order))
             Screen.Notice($"[green]Overlord tab opened[/] [grey50]({provider.Key} at {Markup.Escape(root)}).[/] " +
