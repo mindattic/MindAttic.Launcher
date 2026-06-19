@@ -1,6 +1,6 @@
-# MindAttic.Console — How to work here
+# MindAttic.Launcher — How to work here
 
-MindAttic.Console is a single Windows binary (`MindAttic.Console.exe`) that launches and
+MindAttic.Launcher is a single Windows binary (`MindAttic.Launcher.exe`) that launches and
 orchestrates the whole MindAttic workspace: an interactive Spectre.Console menu plus `host` /
 `commit` / `version` sub-commands. Target framework `net10.0-windows`, `win-x64`. See
 [README.md](README.md) for build/run; see [docs/BIBLE.md](docs/BIBLE.md) for how to think about it.

@@ -1,16 +1,27 @@
 ---
 codex: 1
-project: MindAttic.Console
+project: MindAttic.Launcher
 code: MCO
 layer: amendments
 status: living
-updated: 2026-06-08
+updated: 2026-06-19
 ---
 
-# MindAttic.Console — Amendments (append-only; amendment wins over the bible)
+# MindAttic.Launcher — Amendments (append-only; amendment wins over the bible)
 
 > Append only. Never rewrite an amendment — supersede it with a new one. Beyond ~25, fold into
 > [BIBLE.md](BIBLE.md) and start a new epoch (note the git tag).
+
+## MCO-A3 — Project renamed from MindAttic.Console to MindAttic.Launcher (supersedes —)
+The GitHub repo, solution, project folders, assembly name, exe output, all C# namespaces, settings
+bucket (`AppBucket`), and every doc reference have been renamed from `MindAttic.Console` to
+`MindAttic.Launcher`. The exe is now `artifacts\MindAttic.Launcher.exe`; the launcher bat is
+`MindAttic.Launcher.bat`. Settings previously stored at
+`%APPDATA%\MindAttic\MindAttic.Console\settings.json` must be manually copied to
+`%APPDATA%\MindAttic\MindAttic.Launcher\settings.json` on first run (the legacy-seed path at
+`D:\Projects\MindAttic\settings.json` remains functional as a fallback). The git remote was updated
+to `https://github.com/mindattic/MindAttic.Launcher.git`. The `mindatticconsole` deploy slug in
+`MindAttic.Deploy/projects.json` is unchanged (it is that project's responsibility to update if needed).
 
 ## MCO-A2 — Overlord multi-step prompt flow; subprocess LLM exception to MCO-LAW-5 (supersedes —)
 `OverlordMenu.Run()` now collects a multi-line draft (blank-line commit), asks Y/N to send it to the

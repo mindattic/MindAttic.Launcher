@@ -1,6 +1,6 @@
 #requires -Version 5.1
 <#
-    codex.ps1 - the MindAttic Codex doctor + digest CLI for MindAttic.Console (CODE: MCO).
+    codex.ps1 - the MindAttic Codex doctor + digest CLI for MindAttic.Launcher (CODE: MCO).
     No build step. Runs under Windows PowerShell 5.1 and PowerShell 7+.
 
     Usage:
@@ -24,7 +24,7 @@ $AmendPath  = Join-Path $DocsDir  'AMENDMENTS.md'
 $RfcDir     = Join-Path $DocsDir  'rfc'
 $DataDir    = Join-Path $DocsDir  'data'
 $DigestPath = Join-Path $DocsDir  'BIBLE.digest.md'
-$TestsDir   = Join-Path $RepoRoot 'MindAttic.Console.Tests'
+$TestsDir   = Join-Path $RepoRoot 'MindAttic.Launcher.Tests'
 
 # Status glyphs built from code points so this .ps1 stays pure ASCII on disk
 # (Windows PowerShell 5.1 reads scripts as the ANSI codepage, mangling raw UTF-8 emoji).
@@ -137,7 +137,7 @@ function Invoke-Digest {
     [void]$sb.AppendLine('AUTHORITATIVE - full detail in docs/BIBLE.md')
     [void]$sb.AppendLine('<!-- generatedFrom: MCO-bible -->')
     [void]$sb.AppendLine('')
-    [void]$sb.AppendLine('# MindAttic.Console (MCO) - Bible digest')
+    [void]$sb.AppendLine('# MindAttic.Launcher (MCO) - Bible digest')
     [void]$sb.AppendLine('')
     [void]$sb.AppendLine("## The one sentence (#MCO-${sect}1)")
     [void]$sb.AppendLine($s1); [void]$sb.AppendLine('')
@@ -251,11 +251,11 @@ function Invoke-Doctor {
     }
 
     # 5) code paths cited in the bible exist on disk. The bible cites source paths relative to
-    #    the main project dir (e.g. Models/Project.cs lives at MindAttic.Console/Models/Project.cs),
+    #    the main project dir (e.g. Models/Project.cs lives at MindAttic.Launcher/Models/Project.cs),
     #    so resolve against the repo root, the main project dir, and the test dir.
     if (Test-Path $BiblePath) {
         $bibleText = Read-Utf8Raw $BiblePath
-        $bases = @($RepoRoot, (Join-Path $RepoRoot 'MindAttic.Console'), $TestsDir)
+        $bases = @($RepoRoot, (Join-Path $RepoRoot 'MindAttic.Launcher'), $TestsDir)
         $seen = @{}
         foreach ($m in [regex]::Matches($bibleText, '`([A-Za-z0-9_./\\-]+\.(?:cs|csproj|ps1|json|slnx))`')) {
             $p = $m.Groups[1].Value
@@ -287,7 +287,7 @@ function Invoke-Doctor {
 
     # ---- report ----
     Write-Host ''
-    Write-Host 'codex doctor - MindAttic.Console (MCO)'
+    Write-Host 'codex doctor - MindAttic.Launcher (MCO)'
     Write-Host '--------------------------------------'
     $checks = @(
         'front-matter on every canon file',

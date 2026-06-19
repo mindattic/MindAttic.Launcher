@@ -1,18 +1,18 @@
 ---
 codex: 1
-project: MindAttic.Console
+project: MindAttic.Launcher
 code: MCO
 layer: bible
 status: living
-updated: 2026-06-07
+updated: 2026-06-19
 ---
 
-# MindAttic.Console — Project Bible
-> Single source of truth for what MindAttic.Console IS, is NOT, and the rules that keep it coherent.
+# MindAttic.Launcher — Project Bible
+> Single source of truth for what MindAttic.Launcher IS, is NOT, and the rules that keep it coherent.
 > README says how to build/run; this says how to think about the system.
 
 ## 1. The one sentence {#MCO-§1}
-MindAttic.Console is a single Windows binary (`MindAttic.Console.exe`) that is the launcher and
+MindAttic.Launcher is a single Windows binary (`MindAttic.Launcher.exe`) that is the launcher and
 orchestrator for the whole MindAttic workspace: an interactive [Spectre.Console](https://spectreconsole.net/)
 menu plus a small set of CLI sub-commands that spawn per-project agent tabs in Windows Terminal,
 commit/push repos, and back the workspace up.
@@ -67,12 +67,12 @@ call stateless/injectable services; the services own all external-process and fi
 ```
 
 ### 4.1 Projects
-- `MindAttic.Console/MindAttic.Console.csproj` — the exe (`net10.0-windows`, `OutputType=Exe`,
+- `MindAttic.Launcher/MindAttic.Launcher.csproj` — the exe (`net10.0-windows`, `OutputType=Exe`,
   `Version 1.0.0`; references MindAttic.Vault 1.0.0, Spectre.Console + Spectre.Console.Cli 0.49.1).
-- `MindAttic.Console.Tests/MindAttic.Console.Tests.csproj` — NUnit 4 test project.
+- `MindAttic.Launcher.Tests/MindAttic.Launcher.Tests.csproj` — NUnit 4 test project.
 - `scripts/publish.ps1`, `scripts/ensure-fresh.ps1`, `scripts/restart.ps1` — publish/refresh tooling.
 
-### 4.2 Domain model — NOUNS (`MindAttic.Console/Models/`)
+### 4.2 Domain model — NOUNS (`MindAttic.Launcher/Models/`)
 - **Project** (`Models/Project.cs`) — a managed repo: `Name`, `Path`, `RepoUrl`, provider override,
   tab alias/color/scheme, `SqlServer` + `Databases`, `[JsonExtensionData] Extra`. `TabTitle` strips
   the shared `MindAttic.` prefix.
@@ -84,7 +84,7 @@ call stateless/injectable services; the services own all external-process and fi
   (`Services/ProjectDiscovery.cs`), `PaletteColor` (`Services/ColorPalette.cs`),
   `DatabaseBackupResult`/`BackupTarget` (`Services/SqlBackupService.cs`).
 
-### 4.3 Key services — VERBS (`MindAttic.Console/Services/`)
+### 4.3 Key services — VERBS (`MindAttic.Launcher/Services/`)
 - **SettingsStore** — load/save `AppSettings` via Vault; one-time legacy-file seed.
 - **AgentProviderRegistry** — resolve / cycle providers; per-project override vs workspace default.
 - **GitService** — `git status --porcelain` snapshot, short summary, auto commit message.

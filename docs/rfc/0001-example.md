@@ -1,6 +1,6 @@
 ---
 codex: 1
-project: MindAttic.Console
+project: MindAttic.Launcher
 code: MCO
 layer: rfc
 status: planned

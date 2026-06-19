@@ -27,10 +27,10 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $repo     = Resolve-Path (Join-Path $PSScriptRoot '..')
-$proj     = Join-Path $repo 'MindAttic.Console\MindAttic.Console.csproj'
-$projDir  = Join-Path $repo 'MindAttic.Console'
+$proj     = Join-Path $repo 'MindAttic.Launcher\MindAttic.Launcher.csproj'
+$projDir  = Join-Path $repo 'MindAttic.Launcher'
 $outDir   = Join-Path $repo 'artifacts'
-$exeName  = 'MindAttic.Console.exe'
+$exeName  = 'MindAttic.Launcher.exe'
 
 if ($Clean) {
     Write-Host "Clean: removing bin/obj for a full rebuild"

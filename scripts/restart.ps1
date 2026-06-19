@@ -1,12 +1,12 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Republishes artifacts\MindAttic.Console.exe and then runs it, AFTER the
+    Republishes artifacts\MindAttic.Launcher.exe and then runs it, AFTER the
     previous menu process has exited.
 
 .DESCRIPTION
     The in-app "Restart" command can't republish itself synchronously: the menu
-    runs from artifacts\MindAttic.Console.exe, and Windows locks a running exe
+    runs from artifacts\MindAttic.Launcher.exe, and Windows locks a running exe
     image — dotnet publish can't overwrite it, so the publish silently fails and
     Restart respawns the *stale* binary. This script breaks that deadlock. It is
     launched in a fresh wt tab while the old menu is still up, waits for that
@@ -30,7 +30,7 @@ $ErrorActionPreference = 'Stop'
 
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repo = (Resolve-Path (Join-Path $here '..')).Path
-$exe  = Join-Path $repo 'artifacts\MindAttic.Console.exe'
+$exe  = Join-Path $repo 'artifacts\MindAttic.Launcher.exe'
 
 # Wait for the previous menu to exit so it releases the lock on the published
 # exe. Cap the wait — if it somehow lingers we still try to publish (and fall

@@ -1,12 +1,12 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Republishes artifacts\MindAttic.Console.exe when the exe is missing or any
+    Republishes artifacts\MindAttic.Launcher.exe when the exe is missing or any
     project source file (*.cs, *.csproj, Directory.Build.props) is newer than
     the exe. Otherwise it's a fast no-op.
 
 .DESCRIPTION
-    Called by MindAttic.Console.bat on every launch, and by the in-app
+    Called by MindAttic.Launcher.bat on every launch, and by the in-app
     "Restart" command before it respawns the Release exe in a new wt tab.
 
 .PARAMETER Force
@@ -26,8 +26,8 @@ $ErrorActionPreference = 'Stop'
 
 $here  = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repo  = (Resolve-Path (Join-Path $here '..')).Path
-$exe   = Join-Path $repo 'artifacts\MindAttic.Console.exe'
-$src   = Join-Path $repo 'MindAttic.Console'
+$exe   = Join-Path $repo 'artifacts\MindAttic.Launcher.exe'
+$src   = Join-Path $repo 'MindAttic.Launcher'
 $props = Join-Path $repo 'Directory.Build.props'
 
 function Test-NeedsPublish {
@@ -70,7 +70,7 @@ function Test-Locked([string]$path) {
 }
 
 # Rename a LOCKED file out of the way. The menu often runs FROM
-# artifacts\MindAttic.Console.exe, and dotnet publish can't overwrite a running
+# artifacts\MindAttic.Launcher.exe, and dotnet publish can't overwrite a running
 # exe image — but it CAN be renamed: the live process keeps executing from the
 # moved image, and publish then writes a fresh exe at the original path. When the
 # file isn't locked (manual publish, or a restart after the old process exited)

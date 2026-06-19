@@ -1,13 +1,13 @@
 ---
 codex: 1
-project: MindAttic.Console
+project: MindAttic.Launcher
 code: MCO
 layer: stories
 status: living
 updated: 2026-06-07
 ---
 
-# MindAttic.Console — User Stories
+# MindAttic.Launcher — User Stories
 > ✅ done (shipped & tested) · 🟡 partial · ⬜ planned · 🗑️ cut. Every ✅ cites the test.
 > Personas: **Dev** (the developer running the workspace) and **Overlord** (one agent over all repos).
 

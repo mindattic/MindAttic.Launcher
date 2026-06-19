@@ -1,10 +1,10 @@
 ﻿AUTHORITATIVE - full detail in docs/BIBLE.md
 <!-- generatedFrom: MCO-bible -->
 
-# MindAttic.Console (MCO) - Bible digest
+# MindAttic.Launcher (MCO) - Bible digest
 
 ## The one sentence (#MCO-§1)
-MindAttic.Console is a single Windows binary (`MindAttic.Console.exe`) that is the launcher and
+MindAttic.Launcher is a single Windows binary (`MindAttic.Launcher.exe`) that is the launcher and
 orchestrator for the whole MindAttic workspace: an interactive [Spectre.Console](https://spectreconsole.net/)
 menu plus a small set of CLI sub-commands that spawn per-project agent tabs in Windows Terminal,
 commit/push repos, and back the workspace up.
