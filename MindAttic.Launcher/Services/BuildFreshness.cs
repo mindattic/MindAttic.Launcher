@@ -69,13 +69,16 @@ public static class BuildFreshness
             using var p = Process.Start(psi);
             if (p is null) return null;
 
-            var stdout = p.StandardOutput.ReadToEnd();
-            _ = p.StandardError.ReadToEnd(); // drain so a chatty git can't deadlock the pipe
+            var stdoutTask = Task.Run(() => p.StandardOutput.ReadToEnd());
+            var stderrTask = Task.Run(() => p.StandardError.ReadToEnd());
             if (!p.WaitForExit(3000))
             {
                 try { p.Kill(entireProcessTree: true); } catch { /* best-effort */ }
+                Task.WaitAll([stdoutTask, stderrTask], TimeSpan.FromSeconds(2));
                 return null;
             }
+            Task.WaitAll([stdoutTask, stderrTask], TimeSpan.FromSeconds(2));
+            var stdout = stdoutTask.IsCompletedSuccessfully ? stdoutTask.Result : "";
             if (p.ExitCode != 0) return null;
 
             // %cI is strict ISO-8601 with offset; parse it invariantly and keep the

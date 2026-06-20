@@ -12,8 +12,9 @@ commit/push repos, and back the workspace up.
 ## What it is NOT (#MCO-§3)
 - NOT an agent itself. It hosts and launches agents (`mindattic host` execs the provider with
   inherited stdio); it does not call any LLM, and no code path references an LLM SDK.
-- NOT a SignalR/mobile bridge. The former MindAttic.Mobile bridge was removed; phone/iPad driving
-  is delegated to Claude Code's built-in `/remote-control`.
+- NOT a phone/iPad web terminal. That role belongs to the sibling **MindAttic.Mobile** repo — a
+  WebSocket + xterm.js bridge that streams a Windows terminal session to a mobile browser. This
+  repo only manages launching agents and orchestrating the workspace.
 - NOT a deploy engine. Landing-page deploys are delegated to the sibling **MindAttic.Deploy** repo
   (`MindAttic.Deploy.exe all` / the `/deploy` command); this repo owns no FTP pipeline or per-project
   deploy state.

@@ -89,8 +89,8 @@ public sealed class GitService
 
             var kind =
                 (indexCode == '?' && worktreeCode == '?') ? ChangeKind.Added :
-                (indexCode == 'A' || worktreeCode == 'A') ? ChangeKind.Added :
                 (indexCode == 'D' || worktreeCode == 'D') ? ChangeKind.Deleted :
+                (indexCode == 'A' || worktreeCode == 'A') ? ChangeKind.Added :
                                                             ChangeKind.Modified;
 
             changes.Add(new GitChange(kind, name));
