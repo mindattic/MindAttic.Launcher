@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using MindAttic.Launcher.Interop;
 
 namespace MindAttic.Launcher.Services;
@@ -6,8 +7,9 @@ namespace MindAttic.Launcher.Services;
 /// Background watchdog that runs inside each <c>mindattic host</c> tab. Every
 /// <see cref="PollInterval"/> it peeks the bottom of the console buffer to tell
 /// whether the agent is busy (an "esc to interrupt" / "ctrl+c to cancel" prompt
-/// is visible) or idle, then reasserts the tab title as
-/// <c>{marker}  {title}</c> — a play glyph while busy, a pause glyph otherwise.
+/// is visible, or a background shell it spawned is still running) or idle, then
+/// reasserts the tab title as <c>{marker}  {title}</c> — a play glyph while busy,
+/// a pause glyph otherwise.
 ///
 /// The reassert is the important part: Claude Code and Codex both rewrite the
 /// terminal title with their own OSC sequence while running, which would wipe
@@ -38,6 +40,15 @@ public sealed class TitlePinner : IDisposable
         "ctrl+c to interrupt",
         "ctrl+c to cancel"
     ];
+
+    // Claude Code's footer shows "N shell" / "N shells" while one or more
+    // background shells it spawned are still running. The agent's own prompt is
+    // idle in that state (no "esc to interrupt"), but work continues in the
+    // background — so a live background shell counts as busy and keeps the play
+    // glyph lit. The footer is a controlled context, so the bare word "shell"
+    // is signal enough; no need to anchor on the count.
+    private static readonly Regex BackgroundShellPattern =
+        new(@"\bshells?\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     // 250 ms keeps the watchdog tight: when the CLI clobbers the title with its
     // own OSC write, we restore the marker within a quarter second instead of
@@ -73,6 +84,15 @@ public sealed class TitlePinner : IDisposable
         return false;
     }
 
+    /// <summary>
+    /// True when Claude Code's footer shows a background shell it spawned is
+    /// still running ("1 shell", "2 shells", …). The agent prompt is idle in
+    /// that state — <see cref="LooksBusy"/> is false — yet work continues, so
+    /// the watchdog keeps the busy/play glyph lit on the title.
+    /// </summary>
+    public static bool HasBackgroundShell(string? buffer) =>
+        !string.IsNullOrEmpty(buffer) && BackgroundShellPattern.IsMatch(buffer);
+
     /// <summary>Builds the pinned title: <c>{marker}  {title}</c> (two spaces).</summary>
     public static string Compose(bool isBusy, string title) =>
         $"{(isBusy ? BusyMarker : IdleMarker)}  {title}";
@@ -83,7 +103,11 @@ public sealed class TitlePinner : IDisposable
         {
             try
             {
-                var desired = Compose(LooksBusy(ConsoleBuffer.ReadBottomRows(20)), title);
+                // Busy = the agent is actively thinking (esc-to-interrupt) OR a
+                // background shell it spawned is still running. Either keeps the
+                // play glyph lit; only a truly idle prompt falls back to pause.
+                var buffer = ConsoleBuffer.ReadBottomRows(20);
+                var desired = Compose(LooksBusy(buffer) || HasBackgroundShell(buffer), title);
                 // Only rewrite when the title has drifted from what we want — the
                 // CLI overwriting it, or a busy/idle transition. Skipping the no-op
                 // write avoids needless OSC churn (and the title flicker it causes

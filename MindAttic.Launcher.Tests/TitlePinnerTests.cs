@@ -45,6 +45,32 @@ public sealed class TitlePinnerTests
         });
     }
 
+    // Claude Code's footer shows "N shell"/"N shells" while background shells
+    // it spawned are still running — the agent prompt is idle then, but work
+    // continues, so the title should stay on the play glyph.
+    [Test]
+    public void HasBackgroundShell_matches_a_running_background_shell()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(TitlePinner.HasBackgroundShell("> \n  1 shell · ? for shortcuts"), Is.True);
+            Assert.That(TitlePinner.HasBackgroundShell("3 SHELLS running"), Is.True);
+            Assert.That(TitlePinner.HasBackgroundShell("background shell"), Is.True);
+        });
+    }
+
+    [Test]
+    public void HasBackgroundShell_is_false_for_an_idle_prompt_with_no_shells()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(TitlePinner.HasBackgroundShell(null), Is.False);
+            Assert.That(TitlePinner.HasBackgroundShell("> \n  ? for shortcuts"), Is.False);
+            // "shells?" is word-bounded, so the substring inside "shellfish"/"PowerShell" stays quiet.
+            Assert.That(TitlePinner.HasBackgroundShell("shellfish"), Is.False);
+        });
+    }
+
     [Test]
     public void Compose_uses_the_play_glyph_when_busy()
     {

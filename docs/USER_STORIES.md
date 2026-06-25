@@ -47,9 +47,12 @@ updated: 2026-06-07
 
 ## Epic B — Tab title & remote control
 - **MCO-US-B1 ✅** As a Dev, each host tab shows whether the agent is busy, so I can read the tab
-  strip at a glance. *Given a Claude/Codex working footer; When the pinner peeks the buffer; Then it
-  reports busy and uses the play glyph.* *(verified by `LooksBusy_matches_the_Claude_working_footer`,
+  strip at a glance. *Given a Claude/Codex working footer **or a background shell the agent spawned
+  still running**; When the pinner peeks the buffer; Then it reports busy and uses the play glyph.*
+  *(verified by `LooksBusy_matches_the_Claude_working_footer`,
   `LooksBusy_matches_the_Codex_working_footer`, `LooksBusy_is_false_for_an_idle_prompt`,
+  `HasBackgroundShell_matches_a_running_background_shell`,
+  `HasBackgroundShell_is_false_for_an_idle_prompt_with_no_shells`,
   `Compose_uses_the_play_glyph_when_busy`.)*
 - **MCO-US-B2 ✅** As a Dev, I can broadcast text (e.g. `/remote-control`) to every running host tab
   for a provider via per-tab named pipes. *Given several host pipes; When I broadcast; Then only
