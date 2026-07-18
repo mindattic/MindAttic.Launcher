@@ -108,7 +108,9 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
                     break;
                 }
                 case "restart":
+                    Screen.Working("Rebuilding and restarting…  Please wait.");
                     RestartInNewTab(wt);
+                    Thread.Sleep(1000);
                     return Task.FromResult(0);
                 case "exit":     return Task.FromResult(0);
             }
