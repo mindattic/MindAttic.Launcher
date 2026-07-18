@@ -7,7 +7,8 @@ public sealed class AgentProviderRegistry(SettingsStore store)
     public static IReadOnlyList<AgentProvider> Defaults { get; } =
     [
         new AgentProvider { Key = "Claude", Name = "Claude Code",  RunCommand = "claude --dangerously-skip-permissions --model claude-sonnet-4-6" },
-        new AgentProvider { Key = "Codex",  Name = "OpenAI Codex", RunCommand = "codex --dangerously-bypass-approvals-and-sandbox" }
+        new AgentProvider { Key = "Codex",  Name = "OpenAI Codex", RunCommand = "codex --dangerously-bypass-approvals-and-sandbox" },
+        new AgentProvider { Key = "Kimi",   Name = "Kimi Code",    RunCommand = "kimi --yolo" }
     ];
 
     /// <summary>Known model IDs per provider key, newest first, shown as presets in the model picker.</summary>
