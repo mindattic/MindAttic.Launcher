@@ -129,7 +129,7 @@ public sealed class AgentProviderRegistryTests
         var ids = AgentProviderRegistry.KnownModels["Claude"].Select(m => m.Id).ToList();
         Assert.That(ids, Contains.Item("claude-fable-5"));
         Assert.That(ids, Contains.Item("claude-opus-4-8"));
-        Assert.That(ids, Contains.Item("claude-sonnet-4-6"));
+        Assert.That(ids, Contains.Item("claude-sonnet-5"));
         Assert.That(ids[0], Is.EqualTo("claude-fable-5"), "Fable 5 must be first (newest)");
     }
 
