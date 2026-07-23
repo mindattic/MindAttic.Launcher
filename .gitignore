@@ -7,3 +7,4 @@ artifacts/
 *.suo
 TestResults/
 *.log
+.claude/checkpoint.md
