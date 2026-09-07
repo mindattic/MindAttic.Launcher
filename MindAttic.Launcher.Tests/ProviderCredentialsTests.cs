@@ -40,6 +40,7 @@ public sealed class ProviderCredentialsTests
     {
         var store = new FakeCredentialStore();
         var psi = new ProcessStartInfo("gemini");
+        psi.Environment.Remove("GEMINI_API_KEY");
 
         ProviderCredentials.Apply(psi, "Gemini", store);
 

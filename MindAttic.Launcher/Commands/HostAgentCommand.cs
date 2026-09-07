@@ -136,6 +136,10 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
         // Vault entry is a no-op; the CLI falls back to its own configured auth.
         ProviderCredentials.Apply(psi, provider.Key);
 
+        // Ensure any project companion services (e.g. Prose.Hub) are running
+        // across all providers (Claude, Codex, Gemini, Kimi).
+        ProjectCompanionService.EnsureStarted(project, workingDir);
+
         try
         {
             using var p = Process.Start(psi)

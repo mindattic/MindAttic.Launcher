@@ -30,9 +30,11 @@ public static class ExecutableResolver
         var extensions = (Environment.GetEnvironmentVariable("PATHEXT") ?? ".COM;.EXE;.BAT;.CMD")
             .Split(';', StringSplitOptions.RemoveEmptyEntries);
 
+        // Search PATH entries only. Do not prepend CurrentDirectory — agent provider
+        // CLIs are system tools on PATH; local project scripts (e.g. a local codex.bat)
+        // must never hijack the launcher's agent command resolution.
         var searchDirs = (Environment.GetEnvironmentVariable("PATH") ?? "")
-            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
-            .Prepend(Environment.CurrentDirectory);
+            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries);
 
         foreach (var dir in searchDirs)
         {
