@@ -66,10 +66,30 @@ public static class ProjectCompanionService
             return;
         }
 
-        var hookScript = Path.Combine(workingDirectory, ".claude", "hooks", "start-prose-hub.ps1");
-        var deployedExe = @"C:\Apps\Prose\Prose.Hub\Prose.Hub.exe";
+        // Both of these moved on 2026-09-11/12 and the old values were left behind, so this
+        // whole fallback had quietly stopped working: neither path existed, both File.Exists
+        // checks failed, and the method fell through to "start requested" having started nothing.
+        //   - the hook moved from .claude\hooks\ to .prose\hooks\ when command/skill/hook content
+        //     was consolidated into one provider-neutral home (commit 706e1a709);
+        //   - the Hub became Hub.exe in C:\Apps\MindAttic\Prose\ (alongside Writer/Launcher/
+        //     KdpPublish) instead of Prose.Hub.exe in its own C:\Apps\Prose\Prose.Hub\ folder.
+        // The old locations are still probed as fallbacks so this keeps working against a machine
+        // that has not been redeployed since.
+        var hookCandidates = new[]
+        {
+            Path.Combine(workingDirectory, ".prose", "hooks", "start-prose-hub.ps1"),
+            Path.Combine(workingDirectory, ".claude", "hooks", "start-prose-hub.ps1"),
+        };
+        var exeCandidates = new[]
+        {
+            @"C:\Apps\MindAttic\Prose\Hub.exe",
+            @"C:\Apps\Prose\Prose.Hub\Prose.Hub.exe",
+        };
 
-        if (File.Exists(hookScript))
+        var hookScript = Array.Find(hookCandidates, File.Exists);
+        var deployedExe = Array.Find(exeCandidates, File.Exists);
+
+        if (hookScript != null)
         {
             var psi = new ProcessStartInfo("powershell.exe")
             {
@@ -87,12 +107,15 @@ public static class ProjectCompanionService
                 Console.Error.WriteLine($"[launcher] Warning: failed to run start-prose-hub.ps1: {ex.Message}");
             }
         }
-        else if (File.Exists(deployedExe))
+        else if (deployedExe != null)
         {
             var psi = new ProcessStartInfo(deployedExe)
             {
                 WorkingDirectory = Path.GetDirectoryName(deployedExe)!,
-                UseShellExecute = true
+                // UseShellExecute must be false for Environment to be honoured - with it true the
+                // dictionary is ignored and the Hub inherits nothing, defaulting to Production,
+                // which makes AddMindAtticAuthentication fail closed.
+                UseShellExecute = false
             };
             psi.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
             try
@@ -101,8 +124,14 @@ public static class ProjectCompanionService
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[launcher] Warning: failed to launch Prose.Hub.exe: {ex.Message}");
+                Console.Error.WriteLine($"[launcher] Warning: failed to launch {Path.GetFileName(deployedExe)}: {ex.Message}");
             }
+        }
+        else
+        {
+            Console.Error.WriteLine(
+                "[launcher] Warning: no start-prose-hub.ps1 hook and no deployed Hub found. " +
+                "Looked for: " + string.Join(", ", exeCandidates));
         }
 
         for (var i = 0; i < 10; i++)
