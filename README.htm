@@ -4,11 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>MindAttic.Launcher</title>
-<meta name="description" content="A single Windows binary (MindAttic.Launcher.exe) that launches and orchestrates the whole
-MindAttic workspace — every sibling repo under D:\Projects\MindAttic. It is one interactive
-Spectre.Console(https://spectrecons...">
+<meta name="description" content="One Windows console for a whole workspace of repos: open any project in a colored Windows Terminal tab running Claude, Codex, Gemini or Kimi, commit and push everything at once, and back up files plus SQL databases.">
 <meta name="generator" content="MindAttic Codex build-readme.ps1">
-<meta name="generated" content="2026-08-25">
+<meta name="generated" content="2026-10-03">
 <style>:root{
   --bg:#0d1117;--bg2:#161b22;--bg3:#21262d;
   --border:#30363d;
@@ -113,31 +111,52 @@ pre:hover .cpbtn{opacity:1}
   </nav>
   <main id="content">
 <h1 id="mindatticlauncher">MindAttic.Launcher</h1>
-<p>A single Windows binary (<code>MindAttic.Launcher.exe</code>) that launches and orchestrates the whole MindAttic workspace — every sibling repo under <code>D:\Projects\MindAttic</code>. It is one interactive <a href="https://spectreconsole.net/">Spectre.Console</a> menu plus a handful of CLI sub-commands (<code>host</code> / <code>commit</code> / <code>version</code>), all built on <code>net10.0-windows</code>, published <code>win-x64</code>.</p>
-<p>For architecture, invariants, and verified state see <strong><a href="docs/BIBLE.md">docs/BIBLE.md</a></strong> (L0), <strong><a href="docs/AMENDMENTS.md">docs/AMENDMENTS.md</a></strong> (L1, amendments win over the bible), and <strong><a href="docs/USER<em>STORIES.md">docs/USER</em>STORIES.md</a></strong> (L2, every <code>✅</code> cites its test). This README is the engineering tour — how to build it, run it, and what every screen and flag does.</p>
-<h2 id="table-of-contents">Table of contents</h2>
+<p>One Windows console for a whole workspace of repos: open any project in a colored Windows Terminal tab running Claude, Codex, Gemini or Kimi, commit and push everything at once, and back up files plus SQL databases.</p>
+<p><img src="https://img.shields.io/badge/C%23-.NET%2010-512BD4" alt="C#"> <img src="https://img.shields.io/badge/platform-Windows%20x64-0078D6" alt="Platform"> <img src="https://img.shields.io/badge/UI-Spectre.Console-informational" alt="UI"> <img src="https://img.shields.io/badge/tests-NUnit%204-green" alt="Tests"> <img src="https://img.shields.io/badge/status-active-brightgreen" alt="Status"></p>
+<pre><code class="language-text"> MindAttic.Launcher                       (interactive menu, items from MainMenuCommand.cs)
+
+   Commit and sync               commit and push changes per project or across all
+   Pull                          git pull --ff-only per project or across all
+ &gt; Open Project Tab              select a project, then pick which agent CLI to open it with
+   Backup                        back up MindAttic to R:\Backup\MindAttic
+   Settings                      CLI development: the model each agent CLI runs with
+   Status                        open a Claude tab at the workspace root with /status pre-filled
+   Open Command Prompt (Admin)   open cmd as Administrator at the workspace root
+   Open PowerShell (Admin)       open PowerShell as Administrator at the workspace root
+   Restart                       reload this console in a new tab; other tabs are untouched
+   Exit                          close this menu (other tabs are untouched)</code></pre>
+<p>A single <code>MindAttic.Launcher.exe</code> (<code>net10.0-windows</code>, published <code>win-x64</code>) built on <a href="https://spectreconsole.net/">Spectre.Console</a>: one interactive menu plus scriptable <code>host</code>, <code>commit</code> and <code>version</code> sub-commands. It is a console app, so the menu above is a text rendering of its items rather than a screenshot.</p>
+<h2 id="why">Why</h2>
 <ul>
-<li><a href="#what-it-is--what-its-for">What it is / what it's for</a></li>
-<li><a href="#architecture-overview">Architecture overview</a></li>
-<li><a href="#cli-reference">CLI reference</a></li>
-<li><a href="#interactive-menu-reference">Interactive menu reference</a></li>
-<li><a href="#settings--persistence">Settings &amp; persistence</a></li>
-<li><a href="#agent-providers--host-tabs">Agent providers &amp; host tabs</a></li>
-<li><a href="#remote-control">Remote control</a></li>
-<li><a href="#backup--file--sql">Backup — file + SQL</a></li>
-<li><a href="#windows-terminal-color-schemes">Windows Terminal color schemes</a></li>
-<li><a href="#deploy-delegation">Deploy delegation</a></li>
-<li><a href="#sibling-repos--what-this-repo-does-not-do">Sibling repos &amp; what this repo does NOT do</a></li>
-<li><a href="#build-publish--test">Build, publish &amp; test</a></li>
-<li><a href="#directory-layout">Directory layout</a></li>
-<li><a href="#glossary">Glossary</a></li>
+<li>Go from "I want to work on that repo" to a live agent session in two keystrokes: pick a project, pick an agent, and a titled, colored Windows Terminal tab opens at the right folder.</li>
+<li>Switch agents freely: Claude, Codex, Gemini and Kimi are one menu apart, and the choice is never saved, so every session starts from a fresh pick.</li>
+<li>See at a glance which tabs are busy: each tab title carries a busy or idle marker that the launcher keeps pinned even when the agent CLI rewrites it.</li>
+<li>Commit and push every dirty repo in one pass, with a commit message written for you when you do not give one.</li>
+<li>Get a backup you can actually restore: a <code>robocopy</code> snapshot of the workspace plus genuine, checksummed <code>BACKUP DATABASE</code> dumps of every configured SQL Server database, in one dated folder.</li>
+<li>New repos announce themselves: anything cloned under the workspace root is offered for the roster at startup, with a matching terminal color scheme.</li>
 </ul>
-<h2 id="what-it-is-what-its-for">What it is / what it's for</h2>
-<p>Pick a project, then pick an agent CLI — a working Claude/Codex/Gemini/Kimi session opens in a titled, colored Windows Terminal tab rooted at the right repo. One menu (or <code>mindattic commit</code>) commits and pushes one project or every project, auto-generating a message when you give none. A real backup runs a <code>robocopy</code> snapshot of the workspace <em>and</em> full <code>sqlcmd BACKUP DATABASE</code> dumps of every project's SQL Server databases, into a collision-safe dated folder. Newly created repos under the workspace root are discovered and offered for the roster automatically, with a matching Windows Terminal color scheme spliced in. Settings round-trip losslessly through <a href="https://mindattic.com/mindatticvault.htm">MindAttic.Vault</a> — this app never has to know about every key another MindAttic tool writes to the same settings file to preserve them.</p>
-<p>It is <strong>not</strong> an agent: it execs a provider CLI with inherited stdio and never calls an LLM SDK or makes an LLM API call directly.</p>
-<h2 id="architecture-overview">Architecture overview</h2>
-<p><code>Program.cs</code> wires a <code>Spectre.Console.Cli</code> <code>CommandApp&lt;MainMenuCommand&gt;</code> with two named sub-commands (<code>host</code>, <code>commit</code>) plus <code>version</code>/<code>--version</code>. Running the exe with no arguments (or via <code>MainMenuCommand</code>, the app's default) drives the interactive menu; every named sub-command is a scriptable front door onto <strong>the same services</strong> — there is no separate code path for "menu mode" vs. "CLI mode" (HOUSE-LAW-6, "one engine, many front doors").</p>
-<pre><code>                         args
+<h2 id="features">Features</h2>
+<ul>
+<li>Interactive Spectre.Console menu for commit, pull, open-project, backup, model settings, status and elevated shells.</li>
+<li>Agent host tabs: every session runs inside <code>MindAttic.Launcher.exe host</code>, which execs the provider CLI with inherited stdio, injects any Vault-stored API key the CLI needs, and keeps the tab title pinned.</li>
+<li>Project discovery at startup for git repos under the workspace root, with "skip all", "never ask again" and per-repo skip.</li>
+<li>Per-project tab color and a matching <code>MindAttic-&lt;Name&gt;</code> Windows Terminal scheme, spliced into the user's WT settings without reformatting the file.</li>
+<li>Per-provider model picker that rewrites the <code>--model</code> flag inside the provider's run command.</li>
+<li>Lossless settings: unknown keys written by other MindAttic tools survive every save (<a href="https://github.com/mindattic/MindAttic.Vault">MindAttic.Vault</a> backs the store).</li>
+<li>Self-refreshing exe: the in-app Restart waits out the Windows file lock, republishes and relaunches; a header notice warns when the running build is behind the latest commit.</li>
+<li>A live Claude usage and rate-limit block above every menu redraw (read from <code>~/.claude/*</code>, cached 60 seconds).</li>
+</ul>
+<p>It is not an agent: it execs a provider CLI with inherited stdio and never calls an LLM SDK or makes an LLM API call directly.</p>
+<h2 id="quick-start">Quick start</h2>
+<p>Prerequisites: Windows, the .NET 10 SDK, Windows Terminal (<code>wt</code>) on <code>PATH</code>, at least one agent CLI (<code>claude</code>, <code>codex</code>, <code>agy</code> or <code>kimi</code>), and for backups <code>robocopy</code> and <code>sqlcmd</code>.</p>
+<pre><code class="language-powershell">git clone https://github.com/mindattic/MindAttic.Launcher.git
+cd MindAttic.Launcher
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\publish.ps1
+.\artifacts\MindAttic.Launcher.exe</code></pre>
+<p>You should see the menu above. On first run the launcher offers every git repo directly under the workspace root for the roster; pick a color for each, then choose Open Project Tab.</p>
+<h2 id="how-it-works">How it works</h2>
+<p><code>Program.cs</code> wires a <code>Spectre.Console.Cli</code> <code>CommandApp&lt;MainMenuCommand&gt;</code> with the named sub-commands <code>host</code> and <code>commit</code> plus <code>version</code>/<code>--version</code>. Running the exe with no arguments drives the interactive menu; every named sub-command is a scriptable front door onto the same services. There is no separate code path for "menu mode" versus "CLI mode" (HOUSE-LAW-6, "one engine, many front doors").</p>
+<pre><code class="language-text">                         args
                           |
                   Spectre.Console.Cli (Program.cs)
                           |
@@ -148,52 +167,74 @@ pre:hover .cpbtn{opacity:1}
   MainMenuCommand   HostAgentCommand   CommitCommand
         |                 |                  |
    Menus/* ------&gt; Services/* ------&gt; external tools
-   (Spectre UI)    (logic + IO)       wt | git | robocopy | sqlcmd | provider exe
+   (Spectre UI)    (logic + IO)       wt, git, robocopy, sqlcmd, provider exe
         |                 |
    Ui/* (Menu,        TitlePinner / HostInputPipeServer
    Screen, Theme)     (per-tab background loops)
         |
    Models/* (Project, AgentProvider, AppSettings)  &lt;--&gt; SettingsStore &lt;--&gt; MindAttic.Vault</code></pre>
-<p>Every external-process invocation (<code>wt</code>, <code>git</code>, <code>robocopy</code>, <code>sqlcmd</code>, an agent provider exe) is factored into an injectable service with a pure logic core (parsing, path/SQL/argv composition, idempotency checks) so the decision can be unit-tested even when the process never runs — the project's quality bar (see <a href="docs/BIBLE.md#MCO-§8">BIBLE §8</a>) requires this before a story is marked <code>✅</code>.</p>
-<h2 id="cli-reference">CLI reference</h2>
+<p>Every external-process invocation (<code>wt</code>, <code>git</code>, <code>robocopy</code>, <code>sqlcmd</code>, an agent provider exe) is factored into an injectable service with a pure logic core (parsing, path, SQL and argv composition, idempotency checks), so the decision can be unit-tested even when the process never runs. The project's quality bar (<a href="docs/BIBLE.md#MCO-§8">BIBLE section 8</a>) requires this before a story is marked done.</p>
+<h2 id="commands">Commands</h2>
 <p>All sub-commands are declared in <code>MindAttic.Launcher/Program.cs</code> and implemented in <code>MindAttic.Launcher/Commands/</code>.</p>
 <table><thead><tr>
 <th>Command</th>
-<th>Flags</th>
 <th>Behavior</th>
 <th>Exit codes</th>
 </tr></thead><tbody>
 <tr>
-<td><em>(none)</em></td>
-<td>—</td>
-<td>Runs <code>MainMenuCommand</code> — the interactive Spectre.Console menu.</td>
+<td>(none)</td>
+<td>Runs <code>MainMenuCommand</code>, the interactive Spectre.Console menu.</td>
 <td><code>0</code></td>
 </tr>
 <tr>
 <td><code>host</code></td>
-<td><code>--name &lt;NAME&gt;</code> — project name from settings (optional if <code>--path</code> given)&lt;br&gt;<code>--path &lt;PATH&gt;</code> — root the agent at an arbitrary directory instead of a registered project; <strong>takes precedence over <code>--name</code></strong> (this is how the Status menu item roots a session at the workspace root)&lt;br&gt;<code>--title &lt;TITLE&gt;</code> — tab title (defaults to <code>--name</code>, or the directory's leaf name)&lt;br&gt;<code>--provider &lt;PROVIDER&gt;</code> — provider key (<code>Claude</code>/<code>Codex</code>/<code>Gemini</code>/<code>Kimi</code> by default); omit to resolve to the first-listed provider&lt;br&gt;<code>--prompt &lt;PROMPT&gt;</code> — seeds the agent's first turn (pre-fills input; does not auto-submit)</td>
-<td>Splits the resolved provider's <code>RunCommand</code> into argv (<code>CommandLineParser.Split</code>), pushes any Vault-stored credential for that provider (env var for Gemini, <code>config.toml</code> splice for Kimi — see <a href="#agent-providers--host-tabs">ProviderCredentials</a>), starts <code>TitlePinner</code> (busy/idle tab-title watchdog) and <code>HostInputPipeServer</code> (per-tab named pipe for remote-control injection), then <code>Process.Start</code>s the provider exe with inherited stdio and waits for exit.</td>
-<td><code>0</code> provider ran and exited cleanly (its own exit code is passed through)&lt;br&gt;<code>1</code> unknown <code>--name</code>&lt;br&gt;<code>2</code> provider resolved but its <code>RunCommand</code> is empty&lt;br&gt;<code>3</code> provider process failed to start (exception)&lt;br&gt;<code>4</code> explicit <code>--provider</code> key doesn't resolve to a configured provider&lt;br&gt;<code>64</code> neither <code>--name</code> nor <code>--path</code> given</td>
+<td>Runs an agent provider inside the current tab. Options below.</td>
+<td>see below</td>
 </tr>
 <tr>
 <td><code>commit</code></td>
-<td>`-p\</td>
-<td>--project &lt;PROJECT&gt;<code> — limit to one project (defaults to every roster project)&lt;br&gt;</code>-m\</td>
-<td>--message &lt;MESSAGE&gt;<code> — commit message (defaults to an auto-generated summary of </code>git status --porcelain`)</td>
-<td>For each target: reads git status, skips clean repos, auto-generates a message from added/modified/deleted/renamed files (capped to 200 chars, falling back to counts) when none is given, then <code>git add -A &amp;&amp; git commit -m &lt;msg&gt; &amp;&amp; git push --quiet</code>.</td>
-<td><code>0</code> every targeted project committed/pushed cleanly (or was already clean)&lt;br&gt;<code>1</code> at least one project had a missing path, an invalid git status, or a failed add/commit/push</td>
+<td>Commits and pushes one project or every roster project. Options below.</td>
+<td><code>0</code> all clean or pushed; <code>1</code> at least one failure</td>
 </tr>
 <tr>
 <td><code>version</code> (alias <code>--version</code>)</td>
-<td>—</td>
 <td>Prints the assembly's informational version and the running exe's process path.</td>
 <td><code>0</code></td>
 </tr>
 </tbody></table>
-<p><code>host</code> is what a Windows Terminal tab actually runs — the interactive menu never launches a provider directly; it always builds a <code>wt … -- MindAttic.Launcher.exe host …</code> command line via <code>WindowsTerminalLauncher</code> and lets <code>wt</code> fork the tab. That's the "one engine, many front doors" seam: the exact same <code>HostAgentCommand.Execute</code> path fires whether the tab was opened from the menu or by hand from a script.</p>
-<h2 id="interactive-menu-reference">Interactive menu reference</h2>
-<p>Launching the exe with no arguments runs <code>MainMenuCommand</code>, which loads settings (surfacing a one-time legacy-file seed if needed — see <a href="#settings--persistence">Settings</a>), then — <strong>before</strong> the first menu paint — silently runs the startup <strong>Discover Projects</strong> walkthrough (<code>DiscoverProjectsMenu</code>, not itself a menu item) offering to add any git repo found directly under the workspace root that isn't yet in the roster or on the "never ask again" ignore list. It also computes a one-time build-staleness check (<code>BuildFreshness.Check()</code> — warns when the running exe is behind the latest commit in this repo) and renders a live Claude usage/rate-limit status block (<code>ClaudeStatusService</code>, cached 60s, read from <code>~/.claude/*</code>) above every menu redraw.</p>
-<h3 id="top-level-menu">Top-level menu</h3>
+<h3 id="host">host</h3>
+<pre><code class="language-powershell">MindAttic.Launcher.exe host --name MindAttic.Vault --provider Claude</code></pre>
+<p>Options:</p>
+<ul>
+<li><code>--name &lt;NAME&gt;</code>: project name from settings (optional if <code>--path</code> is given).</li>
+<li><code>--path &lt;PATH&gt;</code>: root the agent at an arbitrary directory instead of a registered project. Takes precedence over <code>--name</code>; this is how the Status menu item roots a session at the workspace root.</li>
+<li><code>--title &lt;TITLE&gt;</code>: tab title (defaults to <code>--name</code>, or the directory's leaf name).</li>
+<li><code>--provider &lt;PROVIDER&gt;</code>: provider key (<code>Claude</code>, <code>Codex</code>, <code>Gemini</code> or <code>Kimi</code> by default). Omit it to resolve to the first-listed provider.</li>
+<li><code>--prompt &lt;PROMPT&gt;</code>: seeds the agent's first turn (pre-fills input; does not auto-submit).</li>
+</ul>
+<p>Behavior: splits the resolved provider's <code>RunCommand</code> into argv (<code>CommandLineParser.Split</code>), pushes any Vault-stored credential for that provider (see <a href="#agent-providers-and-host-tabs">Agent providers and host tabs</a>), starts <code>TitlePinner</code> (busy/idle tab-title watchdog) and <code>HostInputPipeServer</code> (per-tab named pipe for input injection), then starts the provider exe with inherited stdio and waits for exit.</p>
+<p>Exit codes:</p>
+<ul>
+<li><code>0</code>: the provider ran and exited (its own exit code is passed through).</li>
+<li><code>1</code>: unknown <code>--name</code>.</li>
+<li><code>2</code>: provider resolved but its <code>RunCommand</code> is empty.</li>
+<li><code>3</code>: provider process failed to start.</li>
+<li><code>4</code>: an explicit <code>--provider</code> key does not resolve to a configured provider.</li>
+<li><code>64</code>: neither <code>--name</code> nor <code>--path</code> given.</li>
+</ul>
+<p><code>host</code> is what a Windows Terminal tab actually runs. The interactive menu never launches a provider directly; it always builds a <code>wt … -- MindAttic.Launcher.exe host …</code> command line via <code>WindowsTerminalLauncher</code> and lets <code>wt</code> fork the tab. The same <code>HostAgentCommand.Execute</code> path fires whether the tab was opened from the menu or by hand from a script.</p>
+<h3 id="commit">commit</h3>
+<pre><code class="language-powershell">MindAttic.Launcher.exe commit
+MindAttic.Launcher.exe commit --project MindAttic.Vault --message "Fix readme"</code></pre>
+<p>Options:</p>
+<ul>
+<li><code>-p</code>, <code>--project &lt;PROJECT&gt;</code>: limit to one project (defaults to every roster project).</li>
+<li><code>-m</code>, <code>--message &lt;MESSAGE&gt;</code>: commit message (defaults to an auto-generated summary of <code>git status --porcelain</code>).</li>
+</ul>
+<p>For each target it reads git status, skips clean repos, auto-generates a message from added, modified, deleted and renamed files (capped to 200 characters, falling back to counts) when none is given, then runs <code>git add -A</code>, <code>git commit -m &lt;msg&gt;</code> and <code>git push --quiet</code>. Exit <code>1</code> means at least one project had a missing path, an invalid git status, or a failed add, commit or push.</p>
+<h2 id="interactive-menu">Interactive menu</h2>
+<p>Launching the exe with no arguments runs <code>MainMenuCommand</code>, which loads settings (performing a one-time legacy-file seed if needed, see <a href="#settings-and-persistence">Settings and persistence</a>), then, before the first menu paint, runs the startup Discover Projects walkthrough (<code>DiscoverProjectsMenu</code>, not itself a menu item), offering to add any git repo found directly under the workspace root that is not yet in the roster or on the "never ask again" list. It also runs a one-time build-staleness check (<code>BuildFreshness.Check()</code>, which warns when the running exe is behind the latest commit in this repo) and renders a live Claude usage and rate-limit block (<code>ClaudeStatusService</code>, cached 60 seconds, read from <code>~/.claude/*</code>) above every menu redraw.</p>
+<h3 id="top-level-menu">Top level menu</h3>
 <table><thead><tr>
 <th>Item</th>
 <th>Tag</th>
@@ -202,7 +243,7 @@ pre:hover .cpbtn{opacity:1}
 <tr>
 <td>Commit and sync</td>
 <td><code>commit</code></td>
-<td>Opens <code>CommitMenu</code>: commit + push one project or all, prompting for an optional message (blank = auto-generated).</td>
+<td>Opens <code>CommitMenu</code>: commit and push one project or all, prompting for an optional message (blank means auto-generated).</td>
 </tr>
 <tr>
 <td>Pull</td>
@@ -212,12 +253,12 @@ pre:hover .cpbtn{opacity:1}
 <tr>
 <td>Open Project Tab</td>
 <td><code>open</code></td>
-<td>Opens <code>OpenProjectMenu</code>: pick a project, then pick which agent CLI to launch it with, then <code>ProjectActionMenu</code>.</td>
+<td>Opens <code>OpenProjectMenu</code>: pick a project, then which agent CLI to launch it with, then <code>ProjectActionMenu</code>.</td>
 </tr>
 <tr>
 <td>Backup</td>
 <td><code>backup</code></td>
-<td>Runs <code>BackupMenu</code> directly: confirms source/target/database list, then runs the file + SQL backup.</td>
+<td>Runs <code>BackupMenu</code> directly: confirms source, target and database list, then runs the file and SQL backup.</td>
 </tr>
 <tr>
 <td>Settings</td>
@@ -227,7 +268,7 @@ pre:hover .cpbtn{opacity:1}
 <tr>
 <td>Status</td>
 <td><code>status</code></td>
-<td>Opens a host tab at the resolved MindAttic workspace root using the first-listed provider, pre-filled with <code>/status</code>.</td>
+<td>Opens a host tab at the resolved workspace root using the first-listed provider, pre-filled with <code>/status</code>.</td>
 </tr>
 <tr>
 <td>Open Command Prompt (Admin)</td>
@@ -242,7 +283,7 @@ pre:hover .cpbtn{opacity:1}
 <tr>
 <td>Restart</td>
 <td><code>restart</code></td>
-<td>Launches <code>scripts\restart.ps1</code> in a fresh tab (waits for this process's PID to exit, force-republishes, then re-execs) and exits this instance — needed because Windows locks the running exe image so it can't republish itself in place.</td>
+<td>Launches <code>scripts\restart.ps1</code> in a fresh tab (waits for this process's PID to exit, force-republishes, then re-execs) and exits this instance. Needed because Windows locks the running exe image so it cannot republish itself in place.</td>
 </tr>
 <tr>
 <td>Exit</td>
@@ -250,12 +291,9 @@ pre:hover .cpbtn{opacity:1}
 <td>Closes the menu; other tabs are untouched.</td>
 </tr>
 </tbody></table>
-<p>The header also shows a staleness notice (when the running build is behind the latest commit) and the Claude usage/rate-limit block; neither is a menu item.</p>
-<h3 id="open-project-tab-provider-picker-project-action-menu">Open Project Tab → provider picker → Project Action Menu</h3>
-<p><code>OpenProjectMenu</code> lists every roster project sorted by name.</p>
-<ul>
-<li><strong>A project</strong> — prompts "Open <code>&lt;Project&gt;</code> with which agent?" over every configured provider (Claude, Codex, Gemini, Kimi by default, in that order — <strong>this choice is never persisted</strong>, see   <a href="docs/AMENDMENTS.md">MCO-A4</a>), then opens <code>ProjectActionMenu</code> for that project + provider pair:</li>
-</ul>
+<p>The header also shows the staleness notice and the Claude usage block; neither is a menu item.</p>
+<h3 id="open-project-tab">Open Project Tab</h3>
+<p><code>OpenProjectMenu</code> lists every roster project sorted by name. Picking one prompts "Open <code>&lt;Project&gt;</code> with which agent?" over every configured provider (Claude, Codex, Gemini, Kimi by default, in that order). This choice is never persisted (see <a href="docs/AMENDMENTS.md">MCO-A4</a>). It then opens <code>ProjectActionMenu</code> for that project and provider:</p>
 <table><thead><tr>
 <th>Item</th>
 <th>Tag</th>
@@ -264,12 +302,12 @@ pre:hover .cpbtn{opacity:1}
 <tr>
 <td>Start Editing</td>
 <td><code>run</code></td>
-<td>Opens a host tab (<code>wt … -- MindAttic.Launcher.exe host --name &lt;Project&gt; --provider &lt;Key&gt;</code>) rooted at the project path, titled <code>&lt;TabTitle&gt; [&lt;ProviderKey&gt;]</code>, colored per the project's <code>TabColor</code>/<code>ColorScheme</code>.</td>
+<td>Opens a host tab (<code>wt … -- MindAttic.Launcher.exe host --name &lt;Project&gt; --provider &lt;Key&gt;</code>) rooted at the project path, titled <code>&lt;TabTitle&gt; [&lt;ProviderKey&gt;]</code>, colored per the project's <code>TabColor</code> and <code>ColorScheme</code>.</td>
 </tr>
 <tr>
 <td>Run Command</td>
 <td><code>runcmd</code></td>
-<td>Opens a plain <code>cmd /c &lt;Project.RunCommand&gt;</code> tab (or a <code>cmd /k echo …</code> placeholder tab if none is configured, so the tab doesn't just flash and die).</td>
+<td>Opens a plain <code>cmd /c &lt;Project.RunCommand&gt;</code> tab, or a <code>cmd /k echo …</code> placeholder tab if none is configured, so the tab does not just flash and close.</td>
 </tr>
 <tr>
 <td>Settings</td>
@@ -277,13 +315,13 @@ pre:hover .cpbtn{opacity:1}
 <td>Opens <code>ProjectSetupMenu</code> for this project.</td>
 </tr>
 </tbody></table>
-<p><code>ProjectSetupMenu</code> edits four free-text fields, each a blank-to-clear prompt persisted via <code>SettingsStore.Update</code>: <strong>Alias</strong> (<code>TabAlias</code>), <strong>Description</strong>, <strong>Color Scheme</strong> (<code>ColorScheme</code>), <strong>Tab Color</strong> (<code>TabColor</code>). There is no "Provider" row here — provider choice is ephemeral (picked fresh every Open Project Tab), not project config.</p>
+<p><code>ProjectSetupMenu</code> edits four free-text fields, each a blank-to-clear prompt persisted via <code>SettingsStore.Update</code>: Alias (<code>TabAlias</code>), Description, Color Scheme (<code>ColorScheme</code>) and Tab Color (<code>TabColor</code>). There is no Provider row: provider choice is picked fresh every time, not project config.</p>
 <h3 id="settings-menu">Settings menu</h3>
-<p>Despite the generic name, <code>SettingsMenu</code> today edits exactly one thing per provider: <strong>the model each agent CLI runs with</strong>. For each configured provider it shows <code>&lt;Name&gt; model</code> → the model parsed out of its <code>RunCommand</code> (or "(CLI default)" if none is set). Selecting one opens a picker over <code>AgentProviderRegistry.KnownModels[key]</code> (currently populated only for <code>Claude</code>: Fable 5, Opus 4.8/4.7/4.6, Sonnet 5, Sonnet 4.6, Haiku 4.5) plus "Enter model id…" (free text) and "Use CLI default" (clears the flag). <code>ProviderModel.Set</code> rewrites the <code>--model</code>/<code>-m</code> token in place inside <code>RunCommand</code> (or appends/removes it), and <code>AgentProviderRegistry.SetModel</code> persists the change, materializing the code-level <code>Defaults</code> into settings on first edit so there's a row to mutate. There is no "Default Agent" row and no per-project provider override here — both were removed in <a href="docs/AMENDMENTS.md">MCO-A4</a>.</p>
-<h2 id="settings-persistence">Settings &amp; persistence</h2>
-<p>Settings are a single <code>AppSettings</code> object, loaded/saved through <code>SettingsStore</code> (<code>MindAttic.Launcher/Services/SettingsStore.cs</code>) via <strong>MindAttic.Vault</strong>, at:</p>
-<pre><code>%APPDATA%\MindAttic\MindAttic.Launcher\settings.json</code></pre>
-<p>On first run, if that Vault file doesn't yet exist, <code>SettingsStore</code> looks for a legacy file at <code>&lt;repo root&gt;\settings.json</code> (falling back to the historical <code>D:\Projects\MindAttic\settings.json</code> when the exe isn't running from a checkout) and seeds Vault from it once. A malformed legacy file logs a message to stderr rather than silently producing an empty roster.</p>
+<p><code>SettingsMenu</code> edits exactly one thing per provider: the model each agent CLI runs with. For each configured provider it shows <code>&lt;Name&gt; model</code> and the model parsed out of its <code>RunCommand</code> (or "(CLI default)"). Selecting one opens a picker over <code>AgentProviderRegistry.KnownModels[key]</code> (currently populated only for Claude: Fable 5, Opus 4.8, 4.7 and 4.6, Sonnet 5, Sonnet 4.6, Haiku 4.5) plus "Enter model id…" (free text) and "Use CLI default" (clears the flag). <code>ProviderModel.Set</code> rewrites the <code>--model</code>/<code>-m</code> token in place inside <code>RunCommand</code> (or appends or removes it), and <code>AgentProviderRegistry.SetModel</code> persists the change, materializing the code-level defaults into settings on first edit so there is a row to change. There is no "Default Agent" row and no per-project provider override; both were removed in <a href="docs/AMENDMENTS.md">MCO-A4</a>.</p>
+<h2 id="settings-and-persistence">Settings and persistence</h2>
+<p>Settings are a single <code>AppSettings</code> object, loaded and saved through <code>SettingsStore</code> (<code>MindAttic.Launcher/Services/SettingsStore.cs</code>) via MindAttic.Vault, at:</p>
+<pre><code class="language-text">%APPDATA%\MindAttic\MindAttic.Launcher\settings.json</code></pre>
+<p>On first run, if that Vault file does not yet exist, <code>SettingsStore</code> looks for a legacy file at <code>&lt;repo root&gt;\settings.json</code> (falling back to the historical <code>D:\Projects\MindAttic\settings.json</code> when the exe is not running from a checkout) and seeds Vault from it once. A malformed legacy file logs a message to stderr rather than silently producing an empty roster.</p>
 <p><code>AppSettings</code> shape (<code>MindAttic.Launcher/Models/AppSettings.cs</code>):</p>
 <table><thead><tr>
 <th>Field</th>
@@ -298,12 +336,12 @@ pre:hover .cpbtn{opacity:1}
 <tr>
 <td><code>AgentProviders</code></td>
 <td><code>List&lt;AgentProvider&gt;</code></td>
-<td>Configured provider list; empty/missing falls back to <code>AgentProviderRegistry.Defaults</code> (Claude/Codex/Gemini/Kimi) at read time — nothing is written to disk until a model edit materializes it.</td>
+<td>Configured provider list; empty or missing falls back to <code>AgentProviderRegistry.Defaults</code> at read time. Nothing is written to disk until a model edit materializes it.</td>
 </tr>
 <tr>
 <td><code>Projects</code></td>
 <td><code>List&lt;Project&gt;</code></td>
-<td>The roster — every managed repo.</td>
+<td>The roster: every managed repo.</td>
 </tr>
 <tr>
 <td><code>DiscoveryIgnore</code></td>
@@ -313,21 +351,17 @@ pre:hover .cpbtn{opacity:1}
 <tr>
 <td><code>Extra</code></td>
 <td><code>Dictionary&lt;string, JsonElement&gt;?</code></td>
-<td><code>[JsonExtensionData]</code> — any top-level key this version doesn't model (e.g. a <code>"mobile"</code> block a sibling tool writes) round-trips through a Save untouched.</td>
+<td><code>[JsonExtensionData]</code>: any top-level key this version does not model (for example a <code>"mobile"</code> block a sibling tool writes) round-trips through a save untouched.</td>
 </tr>
 </tbody></table>
-<p><code>Project</code> (<code>MindAttic.Launcher/Models/Project.cs</code>) carries <code>Name</code>, <code>Repo</code>, <code>RepoUrl</code> (captured from <code>origin</code> at discovery time, not consumed by launch logic), <code>Path</code>, <code>Description</code>, <code>OpenWith</code> (detected <code>.slnx</code>/<code>.sln</code> filename), <code>RunCommand</code>, <code>TabAlias</code>, <code>TabColor</code>, <code>ColorScheme</code>, <code>SqlServer</code></p>
-<ul>
-<li><code>Databases</code> (SQL backup targets), and its own <code>Extra</code> extension-data bag. <strong>No provider field</strong> —</li>
-</ul>
-<p>which CLI to launch a project with is chosen fresh at Open-Project-Tab time and never persisted per project.</p>
-<p><code>AgentProvider</code> (<code>MindAttic.Launcher/Models/AgentProvider.cs</code>) carries <code>Key</code>, <code>Name</code>, <code>RunCommand</code>, and <code>Extra</code>. Every model with an <code>Extra</code> bag round-trips unknown keys losslessly — this is project law <a href="docs/BIBLE.md#MCO-LAW-2">MCO-LAW-2</a>.</p>
-<h2 id="agent-providers-host-tabs">Agent providers &amp; host tabs</h2>
+<p><code>Project</code> (<code>MindAttic.Launcher/Models/Project.cs</code>) carries <code>Name</code>, <code>Repo</code>, <code>RepoUrl</code> (captured from <code>origin</code> at discovery time, not used by launch logic), <code>Path</code>, <code>Description</code>, <code>OpenWith</code> (detected <code>.slnx</code>/<code>.sln</code> filename), <code>RunCommand</code>, <code>TabAlias</code>, <code>TabColor</code>, <code>ColorScheme</code>, <code>SqlServer</code> and <code>Databases</code> (SQL backup targets), and its own <code>Extra</code> bag. It has no provider field.</p>
+<p><code>AgentProvider</code> (<code>MindAttic.Launcher/Models/AgentProvider.cs</code>) carries <code>Key</code>, <code>Name</code>, <code>RunCommand</code> and <code>Extra</code>. Every model with an <code>Extra</code> bag round-trips unknown keys losslessly; this is project law <a href="docs/BIBLE.md#MCO-LAW-2">MCO-LAW-2</a>.</p>
+<h2 id="agent-providers-and-host-tabs">Agent providers and host tabs</h2>
 <p><code>AgentProviderRegistry.Defaults</code> (<code>MindAttic.Launcher/Services/AgentProviderRegistry.cs</code>) ships four built-in providers, used whenever settings has none configured:</p>
 <table><thead><tr>
 <th>Key</th>
 <th>Name</th>
-<th>Default <code>RunCommand</code></th>
+<th>Default RunCommand</th>
 </tr></thead><tbody>
 <tr>
 <td><code>Claude</code></td>
@@ -341,8 +375,8 @@ pre:hover .cpbtn{opacity:1}
 </tr>
 <tr>
 <td><code>Gemini</code></td>
-<td>Google Gemini</td>
-<td><code>gemini --yolo</code></td>
+<td>Google Antigravity</td>
+<td><code>agy --dangerously-skip-permissions</code></td>
 </tr>
 <tr>
 <td><code>Kimi</code></td>
@@ -350,76 +384,92 @@ pre:hover .cpbtn{opacity:1}
 <td><code>kimi --yolo</code></td>
 </tr>
 </tbody></table>
-<p><code>AgentProviderRegistry.Current()</code> (the first-listed provider — Claude, by ordering) is what any launch path with no explicit choice resolves to: a bare <code>mindattic host</code> with no <code>--provider</code>, and the Status menu item. Opening a project tab from the menu always prompts fresh instead (see <a href="#open-project-tab--provider-picker--project-action-menu">Open Project Tab</a>); the pick is never saved.</p>
-<p><strong>Credential injection</strong> (<code>Services/ProviderCredentials.cs</code>) runs right before <code>HostAgentCommand</code> execs the provider: it resolves a per-provider API key from the shared MindAttic LLM credential keyring (<code>MindAttic.Vault.Credentials.LlmCredentialStore</code>, per <a href="../MindAttic.HouseRules.md#HOUSE-LAW-3">HOUSE-LAW-3</a>) and pushes it wherever that CLI expects to find it —</p>
+<p><code>AgentProviderRegistry.Current()</code> (the first-listed provider, Claude by ordering) is what any launch path with no explicit choice resolves to: a bare <code>host</code> with no <code>--provider</code>, and the Status menu item. Opening a project tab from the menu always prompts instead (see <a href="#open-project-tab">Open Project Tab</a>); the pick is never saved.</p>
+<h3 id="credential-injection">Credential injection</h3>
+<p><code>Services/ProviderCredentials.cs</code> runs right before <code>HostAgentCommand</code> execs the provider. It resolves a per-provider API key from the shared MindAttic LLM credential keyring (<code>MindAttic.Vault.Credentials.LlmCredentialStore</code>, per HOUSE-LAW-3) and pushes it wherever that CLI expects to find it:</p>
 <ul>
-<li><strong>Gemini</strong> reads its key from the <code>GEMINI_API_KEY</code> environment variable, so <code>ProviderCredentials</code> sets it directly on the child process's environment.</li>
-<li><strong>Kimi</strong> only reads its own <code>~/.kimi-code/config.toml</code>, so <code>Services/KimiConfigSync.cs</code> performs a targeted text splice: it locates <code>[providers."managed:kimi-code"]</code> and rewrites just its   <code>api_key = "…"</code> line, leaving every other table/model/comment in the user's file untouched   (idempotent — a no-op if the value already matches). It refuses to write when that provider   already has an <code>.oauth</code> sub-table, since Kimi rejects a provider with both <code>api_key</code> and <code>oauth</code>   set.</li>
-<li>Any other provider (or a missing/blank Vault entry) is a no-op — the CLI falls back to however it's already configured (its own login flow, an existing config key, etc.). This is never a hard   failure.</li>
+<li>Gemini (<code>agy</code>, the Google Antigravity CLI) normally authenticates via its own browser sign-in, but <code>ProviderCredentials</code> still sets <code>GEMINI_API_KEY</code> on the child process's environment when the keyring has an entry for it; otherwise it is a no-op.</li>
+<li>Kimi only reads its own <code>~/.kimi-code/config.toml</code>, so <code>Services/KimiConfigSync.cs</code> performs a targeted text splice: it locates <code>[providers."managed:kimi-code"]</code> and rewrites just its <code>api_key = "…"</code> line, leaving every other table, model and comment untouched (idempotent: a no-op if the value already matches). It refuses to write when that provider already has an <code>.oauth</code> sub-table, since Kimi rejects a provider with both <code>api_key</code> and <code>oauth</code> set.</li>
+<li>Any other provider, or a missing or blank keyring entry, is a no-op: the CLI falls back to however it is already configured. This is never a hard failure.</li>
 </ul>
-<p><strong>Host tabs.</strong> Every agent session is a Windows Terminal tab running <code>MindAttic.Launcher.exe host --name &lt;Project&gt; --provider &lt;Key&gt; --title "&lt;Title&gt; [&lt;Key&gt;]"</code> (or <code>--path &lt;dir&gt;</code> for Status), built by <code>WindowsTerminalLauncher.BuildAgentTab</code> / <code>BuildAgentTabAtPath</code> and opened with <code>--tabColor</code>/<code>--colorScheme</code> from the project. Inside that process, two background loops run for the tab's lifetime:</p>
+<h3 id="host-tabs">Host tabs</h3>
+<p>Every agent session is a Windows Terminal tab running <code>MindAttic.Launcher.exe host --name &lt;Project&gt; --provider &lt;Key&gt; --title "&lt;Title&gt; [&lt;Key&gt;]"</code> (or <code>--path &lt;dir&gt;</code> for Status), built by <code>WindowsTerminalLauncher.BuildAgentTab</code> / <code>BuildAgentTabAtPath</code> and opened with <code>--tabColor</code>/<code>--colorScheme</code> from the project. Inside that process, two background loops run for the tab's lifetime:</p>
 <ul>
-<li><strong><code>TitlePinner</code></strong> polls the console's bottom rows every 250ms (<code>ConsoleBuffer.ReadBottomRows</code>) looking for a busy signature ("esc to interrupt", "ctrl+c to cancel", or Claude Code's "N   shell(s)" background-job footer) and reasserts the tab title as <code>▶  &lt;title&gt;</code> (busy) or   <code>⏸  &lt;title&gt;</code> (idle) whenever the CLI's own OSC title write has clobbered it — Windows Terminal   exposes no API for the launcher process to set another tab's title from outside, so the watchdog   has to live inside the hosted process. This requires the tab be opened <em>without</em>   <code>--suppressApplicationTitle</code> (<code>BuildAgentTab</code> sets <code>SuppressApplicationTitle = false</code>).</li>
-<li><strong><code>HostInputPipeServer</code></strong> listens on a per-tab named pipe (<code>mindattic-host-{provider}-{pid}</code>, single-instance) and injects any text it receives into the console's input buffer via   <code>ConsoleInputInjector</code> — the delivery mechanism for <a href="#remote-control">Remote control</a>.</li>
+<li><code>TitlePinner</code> polls the console's bottom rows every 250 ms (<code>ConsoleBuffer.ReadBottomRows</code>) for a busy signature ("esc to interrupt", "ctrl+c to cancel", or Claude Code's "N shell(s)" background-job footer) and reasserts the tab title with a busy (<code>▶</code>) or idle (<code>⏸</code>) glyph whenever the CLI's own title write has clobbered it. Windows Terminal exposes no API for another process to set a tab's title, so the watchdog has to live inside the hosted process. This requires the tab be opened without <code>--suppressApplicationTitle</code> (<code>BuildAgentTab</code> sets <code>SuppressApplicationTitle = false</code>).</li>
+<li><code>HostInputPipeServer</code> listens on a per-tab named pipe (<code>mindattic-host-{provider}-{pid}</code>, single-instance) and injects any text it receives into the console's input buffer via <code>ConsoleInputInjector</code>, the delivery mechanism for <a href="#remote-control">Remote control</a>.</li>
 </ul>
 <h2 id="remote-control">Remote control</h2>
-<p>Driving an agent tab interactively from a phone or iPad is handled by Claude Code's own built-in <code>/remote-control</code> — typed inside the tab like any other slash command. The previous <code>MindAttic.Mobile</code> SignalR bridge has been removed from the workspace; that role no longer lives anywhere in this repo.</p>
-<p>Separately, <code>Services/RemoteControlBroadcaster.cs</code> implements a pipe-based fan-out: given a provider key and a payload, it enumerates <code>\\.\pipe\</code> for every live <code>mindattic-host-{provider}-*</code> pipe (one per open host tab for that provider — see <a href="#agent-providers--host-tabs">Host tabs</a> above) and writes the payload to each in parallel, so a single call could type <code>/remote-control</code> (or anything else) into every open Claude tab at once. This class is implemented and unit-tested (<code>RemoteControlBroadcasterTests</code> — pipe-prefix filtering, zero-match reporting), but as of this read of the source it is <strong>not currently wired into a menu item or CLI sub-command</strong> — nothing in <code>MainMenuCommand</code>/<code>Menus/*</code> constructs a <code>RemoteControlBroadcaster</code>. Treat it as a tested building block awaiting a front door, not an exposed feature yet.</p>
-<h2 id="backup-file-sql">Backup — file + SQL</h2>
-<p>The <strong>Backup</strong> menu item runs <code>BackupMenu.Run()</code> directly (no submenu). It:</p>
+<p>Driving an agent tab from a phone or tablet is handled by Claude Code's own built-in <code>/remote-control</code>, typed inside the tab like any other slash command. The previous MindAttic.Mobile SignalR bridge has been removed from the workspace.</p>
+<p>Separately, <code>Services/RemoteControlBroadcaster.cs</code> implements a pipe-based fan-out: given a provider key and a payload, it enumerates <code>\\.\pipe\</code> for every live <code>mindattic-host-{provider}-*</code> pipe (one per open host tab for that provider) and writes the payload to each in parallel, so a single call could type <code>/remote-control</code> (or anything else) into every open Claude tab at once. The class is implemented and unit-tested (<code>RemoteControlBroadcasterTests</code>: pipe-prefix filtering, zero-match reporting) but is not currently wired into a menu item or CLI sub-command. Treat it as a tested building block awaiting a front door.</p>
+<h2 id="backup">Backup</h2>
+<p>The Backup menu item runs <code>BackupMenu.Run()</code> directly (no submenu). It:</p>
 <ol>
-<li>Resolves a collision-safe target folder via <code>BackupService.ResolveTargetFolder()</code>: <code>R:\Backup\MindAttic\&lt;yyyy-MM-dd&gt;</code>, or the first free <code>&lt;date&gt;_a</code> … <code>&lt;date&gt;_z</code> if today's plain    folder is taken (throws only if all 27 slots are exhausted).</li>
-<li>Collects SQL backup targets via <code>SqlBackupService.CollectTargets(settings)</code> — every non-blank name in each project's <code>Databases</code>, paired with that project's <code>SqlServer</code> (or    <code>SqlBackupService.DefaultInstance</code>, <code>"localhost"</code>), deduplicated case-insensitively per    (server, database) pair.</li>
-<li>Shows the source/target/database list and asks for confirmation.</li>
-<li>Runs the file backup: <code>robocopy &lt;source&gt; &lt;target&gt; /E …</code> excluding <code>Library, Temp, Logs, obj, bin, Build, Builds, node_modules, .vs, .idea, .git</code> and    <code>*.log, *.tmp</code>, with a live byte-count status tick. Exit codes 0–7 are success; 8+ (or a    cancellation) is failure, regardless of what the raw exit code alone would suggest.</li>
-<li>Runs the database backups (unconditionally, even if the file backup failed) via <code>SqlBackupService.Backup</code>: each target gets <code>sqlcmd -S &lt;server&gt; -E -C -b -Q "&lt;BACKUP DATABASE …    WITH FORMAT, INIT, COPY_ONLY, CHECKSUM, NAME = N'MindAttic.Launcher backup';"</code>, written to    <code>&lt;target&gt;\Databases\&lt;server&gt;\&lt;database&gt;.bak</code> (both path segments sanitized of illegal filename    characters). A failed/cancelled backup deletes its own half-written <code>.bak</code> rather than leaving a    corrupt file behind masquerading as a real backup.</li>
-<li>Reports both outcomes (byte totals/elapsed for the file copy; per-database OK/FAILED with <code>sqlcmd</code> exit codes and a truncated error tail).</li>
+<li>Resolves a collision-safe target folder via <code>BackupService.ResolveTargetFolder()</code>: <code>R:\Backup\MindAttic\&lt;yyyy-MM-dd&gt;</code>, or the first free <code>&lt;date&gt;_a</code> through <code>&lt;date&gt;_z</code> if today's plain folder is taken (it throws only if all 27 slots are used).</li>
+<li>Collects SQL backup targets via <code>SqlBackupService.CollectTargets(settings)</code>: every non-blank name in each project's <code>Databases</code>, paired with that project's <code>SqlServer</code> (or <code>SqlBackupService.DefaultInstance</code>, <code>"localhost"</code>), deduplicated case-insensitively per server and database pair.</li>
+<li>Shows the source, target and database list and asks for confirmation.</li>
+<li>Runs the file backup: <code>robocopy &lt;source&gt; &lt;target&gt; /E …</code> excluding <code>Library, Temp, Logs, obj, bin, Build, Builds, node_modules, .vs, .idea, .git</code> and <code>*.log, *.tmp</code>, with a live byte-count status tick. Exit codes 0 to 7 are success; 8 or above (or a cancellation) is failure.</li>
+<li>Runs the database backups (unconditionally, even if the file backup failed) via <code>SqlBackupService.Backup</code>: each target gets <code>sqlcmd -S &lt;server&gt; -E -C -b -Q "BACKUP DATABASE … WITH FORMAT, INIT, COPY_ONLY, CHECKSUM, NAME = N'MindAttic.Launcher backup';"</code>, written to <code>&lt;target&gt;\Databases\&lt;server&gt;\&lt;database&gt;.bak</code> (both path segments sanitized of illegal filename characters). A failed or cancelled backup deletes its own half-written <code>.bak</code> rather than leaving a corrupt file behind.</li>
+<li>Reports both outcomes: byte totals and elapsed time for the file copy, and per-database OK or FAILED with <code>sqlcmd</code> exit codes and a truncated error tail.</li>
 </ol>
-<p>This exists because a <code>robocopy</code> snapshot of a live <code>.mdf</code> file is not a real database backup (<a href="docs/BIBLE.md#MCO-LAW-3">MCO-LAW-3</a>) — the SQL step runs a genuine, checksummed, schema+data <code>BACKUP DATABASE</code> per configured database, alongside the file snapshot, into the same dated folder.</p>
+<p>This exists because a <code>robocopy</code> snapshot of a live <code>.mdf</code> file is not a real database backup (<a href="docs/BIBLE.md#MCO-LAW-3">MCO-LAW-3</a>).</p>
 <h2 id="windows-terminal-color-schemes">Windows Terminal color schemes</h2>
-<p>Every project tab gets a <code>--tabColor</code> (a plain hex the tab strip itself renders) and optionally a matching <code>MindAttic-&lt;Name&gt;</code> <strong>scheme</strong> in Windows Terminal's own <code>settings.json</code> (all ANSI colors shared; only <code>background</code> differs, derived by scaling the tab color to ~16% brightness — <code>ColorPalette.DarkBackground</code>). <code>Services/WindowsTerminalSchemes.cs</code> writes this scheme with a targeted text splice — locate the <code>schemes</code> array, insert the block after its <code>[</code> — rather than a JSON parse/reserialize, so the user's large, hand-maintained WT settings file isn't reflowed by a round-trip. The splice is idempotent: re-running it with a scheme name that already exists in the array returns the file unchanged (<a href="docs/BIBLE.md#MCO-LAW-4">MCO-LAW-4</a>).</p>
-<p><code>Services/ProjectDiscovery.cs</code> scans the immediate subdirectories of the resolved MindAttic workspace root for git repos (<code>.git</code> directory or, for worktrees, a <code>.git</code> file) not already in <code>Projects</code> or <code>DiscoveryIgnore</code>, surfacing them at startup via <code>DiscoverProjectsMenu</code>. For each candidate it prompts for the git URL (pre-filled from <code>origin</code> if detectable), a tab color from <code>ColorPalette.Colors</code> (a curated 16-entry palette) or a typed custom hex, and an optional description, then appends the project to the roster and writes its WT scheme — with <code>S</code> = skip all remaining candidates this run, <code>N</code> = never ask about this one again (added to <code>DiscoveryIgnore</code>), and <code>Esc</code> = skip just this one.</p>
+<p>Every project tab gets a <code>--tabColor</code> (a plain hex the tab strip renders) and optionally a matching <code>MindAttic-&lt;Name&gt;</code> scheme in Windows Terminal's own <code>settings.json</code>: all ANSI colors shared, only <code>background</code> differs, derived by scaling the tab color to about 16% brightness (<code>ColorPalette.DarkBackground</code>). <code>Services/WindowsTerminalSchemes.cs</code> writes this scheme with a targeted text splice (locate the <code>schemes</code> array, insert the block after its <code>[</code>) rather than a JSON parse and reserialize, so the user's hand-maintained WT settings file is not reflowed. The splice is idempotent: re-running it with a scheme name that already exists returns the file unchanged (<a href="docs/BIBLE.md#MCO-LAW-4">MCO-LAW-4</a>).</p>
+<h3 id="project-discovery">Project discovery</h3>
+<p><code>Services/ProjectDiscovery.cs</code> scans the immediate subdirectories of the resolved workspace root for git repos (a <code>.git</code> directory or, for worktrees, a <code>.git</code> file) not already in <code>Projects</code> or <code>DiscoveryIgnore</code>, and surfaces them at startup via <code>DiscoverProjectsMenu</code>. For each candidate it prompts for the git URL (pre-filled from <code>origin</code> if detectable), a tab color from <code>ColorPalette.Colors</code> (a curated 16-entry palette) or a typed custom hex, and an optional description, then appends the project to the roster and writes its WT scheme. Press <code>S</code> to skip all remaining candidates this run, <code>N</code> to never ask about this one again (added to <code>DiscoveryIgnore</code>), or <code>Esc</code> to skip just this one.</p>
 <h2 id="deploy-delegation">Deploy delegation</h2>
-<p><code>Services/DeployService.cs</code> locates the sibling <strong>MindAttic.Deploy</strong> repo's published artifact (<code>../MindAttic.Deploy/artifacts/MindAttic.Deploy.exe</code>, relative to this repo's parent directory) and composes the command line for its non-interactive <code>all</code> sub-command (which itself iterates catalog + site + app batches and tallies failures). <code>WindowsTerminalLauncher.BuildDeployAllTab</code> wraps that command line in a <code>cmd /k</code> tab so the pane stays open to read the summary. Both are implemented and unit-tested (<code>DeployServiceTests</code> — exe resolution, null-safety, command-line composition), but as of this read of the source <strong>no menu item or CLI sub-command in this repo currently constructs a <code>DeployService</code>/<code>BuildDeployAllTab</code> call</strong> — the <code>.claude/commands/deploy.md</code> skill in this repo instead shells out to <code>MindAttic.Deploy</code>'s own <code>npm run deploy -- --only mindatticconsole</code> to publish this repo's landing page, and separately documents an in-app "Deploy All" menu item that is not present in <code>MainMenuCommand.cs</code> today. This binary owns no FTP pipeline and no per-project deploy state regardless (<a href="docs/BIBLE.md#MCO-LAW-5">MCO-LAW-5</a>) — deploying is, and will remain, MindAttic.Deploy's job.</p>
-<h2 id="sibling-repos-what-this-repo-does-not-do">Sibling repos &amp; what this repo does NOT do</h2>
-<p>MindAttic.Launcher is the orchestrator, not the thing being orchestrated. Concretely, it is <strong>NOT</strong>:</p>
+<p><code>Services/DeployService.cs</code> locates the sibling MindAttic.Deploy repo's published artifact (<code>../MindAttic.Deploy/artifacts/MindAttic.Deploy.exe</code>, relative to this repo's parent directory) and composes the command line for its non-interactive <code>all</code> sub-command (which iterates catalog, site and app batches and tallies failures). <code>WindowsTerminalLauncher.BuildDeployAllTab</code> wraps that command line in a <code>cmd /k</code> tab so the pane stays open to read the summary. Both are implemented and unit-tested (<code>DeployServiceTests</code>: exe resolution, null-safety, command-line composition), but no menu item or CLI sub-command in this repo currently constructs a <code>DeployService</code> or <code>BuildDeployAllTab</code> call.</p>
+<p>This repo itself has no web deploy: this GitHub README is the project page, and the old <code>mindattic.com/mindatticconsole.htm</code> landing page (formerly published via <code>npm run deploy -- --only mindatticconsole</code>) was retired (MindAttic.Deploy DEP-A6). This binary owns no FTP pipeline and no per-project deploy state (<a href="docs/BIBLE.md#MCO-LAW-5">MCO-LAW-5</a>); deploying is, and will remain, MindAttic.Deploy's job.</p>
+<h2 id="limitations">Limitations</h2>
+<p>MindAttic.Launcher is the orchestrator, not the thing being orchestrated. It is not:</p>
 <ul>
-<li><strong>An agent.</strong> It execs a provider CLI with inherited stdio (<code>mindattic host</code>); no code path here links an LLM SDK or makes an LLM API call.</li>
-<li><strong>A phone/iPad web terminal.</strong> That was <code>MindAttic.Mobile</code> (a WebSocket + xterm.js bridge); it has been removed from the workspace. Remote driving of a tab is Claude Code's own <code>/remote-control</code>.</li>
-<li><strong>A deploy engine.</strong> Landing-page and per-project deploys are <strong>MindAttic.Deploy</strong>'s job (<code>MindAttic.Deploy.exe all</code>, or the <code>/deploy</code> slash command in this repo, which shells out to it).   This repo owns no FTP pipeline.</li>
-<li><strong>A general settings UI.</strong> It edits only its own roster/provider settings and the Windows Terminal <code>schemes</code> array (an idempotent splice) — it is not a Windows Terminal settings editor.</li>
-<li><strong>Cross-platform.</strong> It targets <code>net10.0-windows</code>/<code>win-x64</code> and hard-depends on Windows Terminal (<code>wt</code>), <code>robocopy</code>, and <code>sqlcmd</code> all being on <code>PATH</code>.</li>
-<li><strong>A credential store.</strong> Vault/API keys are resolved through <strong>MindAttic.Vault</strong>'s shared keyring (<code>MindAttic.Vault.Credentials.LlmCredentialStore</code>); this repo never hard-codes a secret.</li>
+<li>An agent. It execs a provider CLI with inherited stdio (<code>host</code>); no code path here links an LLM SDK or makes an LLM API call.</li>
+<li>A phone or tablet web terminal. That was MindAttic.Mobile (a WebSocket and xterm.js bridge), now removed from the workspace. Remote driving of a tab is Claude Code's own <code>/remote-control</code>.</li>
+<li>A deploy engine. Landing-page and per-project deploys are MindAttic.Deploy's job (<code>MindAttic.Deploy.exe all</code>, or the <code>/deploy</code> slash command in this repo, which shells out to it).</li>
+<li>A general settings UI. It edits only its own roster and provider settings and the Windows Terminal <code>schemes</code> array.</li>
+<li>Cross-platform. It targets <code>net10.0-windows</code> / <code>win-x64</code> and depends on Windows Terminal (<code>wt</code>), <code>robocopy</code> and <code>sqlcmd</code> being on <code>PATH</code>.</li>
+<li>A credential store. API keys are resolved through MindAttic.Vault's shared keyring (<code>MindAttic.Vault.Credentials.LlmCredentialStore</code>); this repo never hard-codes a secret.</li>
 </ul>
-<h2 id="build-publish-test">Build, publish &amp; test</h2>
-<pre><code class="language-pwsh"># Build (TreatWarningsAsErrors=true, Nullable=enable, LangVersion=latest)
+<p>The backup target (<code>R:\Backup\MindAttic</code>) and the legacy settings fallback path are fixed in code (<code>BackupService.DefaultBackupBase</code>, <code>SettingsStore</code>).</p>
+<h2 id="building-and-testing">Building and testing</h2>
+<pre><code class="language-powershell"># Build (TreatWarningsAsErrors=true, Nullable=enable, LangVersion=latest)
 dotnet build
 
-# Test — NUnit 4, run from the repo root
+# Test: NUnit 4, run from the repo root
 dotnet test
 
 # Publish a single-file, framework-dependent win-x64 exe to artifacts\
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\publish.ps1
 #   -Clean   : wipe bin/obj first for a full, timestamp-independent rebuild</code></pre>
-<p><code>scripts\ensure-fresh.ps1</code> republishes <code>artifacts\MindAttic.Launcher.exe</code> only when it's missing or a source file is newer than it (a fast no-op otherwise); <code>-Force</code> skips that heuristic. It's called on every launch (by whatever wrapper invokes the exe) and by the in-app Restart flow. <code>scripts\restart.ps1</code> is what "Restart" actually launches in a fresh tab: it waits for the old process's PID to exit (releasing the Windows-held lock on the running exe image), force-republishes, then hands the tab to the fresh binary — loudly refusing to fall back to a stale exe on a failed rebuild.</p>
-<p>Test coverage (<code>MindAttic.Launcher.Tests/</code>, NUnit 4) spans: settings/Vault round-trip + legacy-seed migration + unknown-key preservation; agent-provider list resolution, default ordering, and <code>--model</code> token rewriting; <code>ProviderCredentials</code>/<code>KimiConfigSync</code> credential injection (env var + config.toml splice, oauth-guard, idempotency); <code>CommandLineToArgvW</code>-style argv quoting; <code>git --porcelain</code> parsing (renames, both-modified, untracked, quoted paths) and auto commit-message composition/truncation; the dated backup-folder allocator and exclude lists; SQL backup path/SQL/arg composition; Windows Terminal scheme-splice idempotency and launcher tab-building; project discovery and roster sorting; tab-title alias/prefix rules; deploy command-line composition; title-pinner busy detection (including the background-shell footer); remote-control pipe broadcast filtering; and build-freshness day-floor/timezone comparison.</p>
-<p>After editing anything under <code>docs/</code>, run <code>powershell -File tools/codex.ps1 doctor</code> (regenerates <code>docs/BIBLE.digest.md</code> and validates IDs/links/front-matter/cited tests). See <a href="CLAUDE.md">CLAUDE.md</a> for the full documentation-layering rules.</p>
-<h2 id="directory-layout">Directory layout</h2>
-<pre><code>MindAttic.Launcher/                  the exe project
+<p><code>scripts\ensure-fresh.ps1</code> republishes <code>artifacts\MindAttic.Launcher.exe</code> only when it is missing or a source file is newer than it (a fast no-op otherwise); <code>-Force</code> skips that heuristic. It is called on every launch (by whatever wrapper invokes the exe) and by the in-app Restart flow. <code>scripts\restart.ps1</code> is what Restart launches in a fresh tab: it waits for the old process's PID to exit (releasing the Windows lock on the running exe image), force-republishes, then hands the tab to the fresh binary, refusing to fall back to a stale exe on a failed rebuild.</p>
+<p>Test coverage (<code>MindAttic.Launcher.Tests/</code>, NUnit 4) spans:</p>
+<ul>
+<li>settings and Vault round-trip, legacy-seed migration and unknown-key preservation</li>
+<li>agent-provider list resolution, default ordering and <code>--model</code> token rewriting</li>
+<li><code>ProviderCredentials</code> / <code>KimiConfigSync</code> credential injection (environment variable and config.toml splice, oauth guard, idempotency)</li>
+<li><code>CommandLineToArgvW</code>-style argv quoting</li>
+<li><code>git --porcelain</code> parsing (renames, both-modified, untracked, quoted paths) and auto commit-message composition and truncation</li>
+<li>the dated backup-folder allocator and exclude lists, and SQL backup path, SQL and argument composition</li>
+<li>Windows Terminal scheme-splice idempotency and launcher tab-building</li>
+<li>project discovery and roster sorting, and tab-title alias and prefix rules</li>
+<li>deploy command-line composition, title-pinner busy detection (including the background-shell footer), remote-control pipe broadcast filtering, and build-freshness day-floor and timezone comparison</li>
+</ul>
+<p>After editing anything under <code>docs/</code>, run <code>powershell -File tools/codex.ps1 doctor</code> (validates IDs, links, front-matter and cited tests; <code>codex.ps1 digest</code> regenerates <code>docs/BIBLE.digest.md</code>).</p>
+<h2 id="project-layout">Project layout</h2>
+<pre><code class="language-text">MindAttic.Launcher/                  the exe project
   Commands/                          Spectre.Console.Cli sub-commands (host, commit, version, main menu)
   Menus/                             interactive Spectre.Console screens
-  Services/                          logic + external-process/filesystem seams (git, wt, robocopy, sqlcmd, Vault, …)
+  Services/                          logic + external-process/filesystem seams (git, wt, robocopy, sqlcmd, Vault, ...)
   Models/                            persisted nouns (Project, AgentProvider, AppSettings)
-  Ui/                                Menu/Screen/Theme — the keyboard-driven prompt widget + chrome
+  Ui/                                Menu/Screen/Theme: the keyboard-driven prompt widget + chrome
   Interop/                           CommandLineParser, ConsoleBuffer, ConsoleInputInjector (Win32-adjacent helpers)
   M.ico                              exe icon
-MindAttic.Launcher.Tests/            NUnit 4 test project (one *Tests.cs per service/model, roughly)
+MindAttic.Launcher.Tests/            NUnit 4 test project (roughly one *Tests.cs per service/model)
 docs/
-  BIBLE.md                           L0 — architecture, Laws, verified state, glossary
-  AMENDMENTS.md                      L1 — append-only change log (wins over the bible)
-  USER_STORIES.md                    L2 — test-cited stories
-  BIBLE.digest.md                    GENERATED — never hand-edit
-  rfc/                                design notes awaiting graduation
+  BIBLE.md                           L0: architecture, Laws, verified state, glossary
+  AMENDMENTS.md                      L1: append-only change log (wins over the bible)
+  USER_STORIES.md                    L2: test-cited stories
+  BIBLE.digest.md                    GENERATED, never hand-edit
+  rfc/                               design notes awaiting graduation
 scripts/
   publish.ps1                        dotnet publish -&gt; artifacts\MindAttic.Launcher.exe
   ensure-fresh.ps1                   conditional republish (staleness heuristic)
@@ -428,55 +478,65 @@ tools/
   codex.ps1                          docs doctor/digest tooling
   build-readme.ps1                   thin wrapper -&gt; workspace-shared README-&gt;HTML engine
 artifacts/                           publish output (gitignored)
-Directory.Build.props                shared MSBuild settings (Nullable, TreatWarningsAsErrors, …)
-MindAttic.Launcher.slnx               solution file
-NuGet.config, global.json             package source + SDK pin</code></pre>
+Directory.Build.props                shared MSBuild settings (Nullable, TreatWarningsAsErrors, ...)
+MindAttic.Launcher.slnx              solution file
+NuGet.config, global.json            package source + SDK roll-forward</code></pre>
 <h2 id="glossary">Glossary</h2>
 <table><thead><tr>
 <th>Term</th>
 <th>Meaning</th>
 </tr></thead><tbody>
 <tr>
-<td><strong>Workspace root</strong></td>
-<td><code>D:\Projects\MindAttic</code> — the parent directory holding every MindAttic repo.</td>
+<td>Workspace root</td>
+<td><code>D:\Projects\MindAttic</code>, the parent directory holding every MindAttic repo.</td>
 </tr>
 <tr>
-<td><strong>Roster</strong></td>
+<td>Roster</td>
 <td>The <code>Projects</code> list in settings; the set of managed repos.</td>
 </tr>
 <tr>
-<td><strong>Provider</strong></td>
-<td>A launchable agent CLI (<code>AgentProvider.RunCommand</code>) — e.g. Claude, Codex, Gemini, Kimi.</td>
+<td>Provider</td>
+<td>A launchable agent CLI (<code>AgentProvider.RunCommand</code>), for example Claude, Codex, Gemini, Kimi.</td>
 </tr>
 <tr>
-<td><strong>Host / host tab</strong></td>
-<td>A <code>wt</code> tab running <code>mindattic host</code>, which execs a provider with inherited stdio, rooted at a repo (or <code>--path</code> directory, e.g. the Status tab).</td>
+<td>Host tab</td>
+<td>A <code>wt</code> tab running <code>MindAttic.Launcher.exe host</code>, which execs a provider with inherited stdio, rooted at a repo (or a <code>--path</code> directory, for example the Status tab).</td>
 </tr>
 <tr>
-<td><strong>Pinner</strong></td>
-<td><code>TitlePinner</code> — the per-tab background loop that keeps a busy/idle glyph in the tab title.</td>
+<td>Pinner</td>
+<td><code>TitlePinner</code>, the per-tab background loop that keeps a busy or idle glyph in the tab title.</td>
 </tr>
 <tr>
-<td><strong>Discovery</strong></td>
-<td>The startup scan for git repos under the workspace root that aren't yet in the roster.</td>
+<td>Discovery</td>
+<td>The startup scan for git repos under the workspace root that are not yet in the roster.</td>
 </tr>
 <tr>
-<td><strong>Vault</strong></td>
-<td>MindAttic.Vault — the shared <code>%APPDATA%\MindAttic\…</code> settings/secret store this repo persists through.</td>
+<td>Vault</td>
+<td>MindAttic.Vault, the shared <code>%APPDATA%\MindAttic\…</code> settings and secret store this repo persists through.</td>
 </tr>
 <tr>
-<td><strong>Scheme</strong></td>
-<td>A <code>MindAttic-&lt;Name&gt;</code> Windows Terminal color scheme — one shared ANSI palette, a per-project background.</td>
+<td>Scheme</td>
+<td>A <code>MindAttic-&lt;Name&gt;</code> Windows Terminal color scheme: one shared ANSI palette, a per-project background.</td>
 </tr>
 <tr>
-<td><strong>Sibling repo</strong></td>
-<td>Another repo under the workspace root (e.g. MindAttic.Deploy, MindAttic.Vault).</td>
+<td>Sibling repo</td>
+<td>Another repo under the workspace root (for example MindAttic.Deploy, MindAttic.Vault).</td>
 </tr>
 </tbody></table>
+<h2 id="documentation">Documentation</h2>
+<ul>
+<li><a href="docs/BIBLE.md">docs/BIBLE.md</a> (L0): architecture canon, invariants and the Laws.</li>
+<li><a href="docs/AMENDMENTS.md">docs/AMENDMENTS.md</a> (L1): what has changed since; amendments win over the bible.</li>
+<li><a href="docs/USER<em>STORIES.md">docs/USER</em>STORIES.md</a> (L2): per-capability status, each done story citing the test that verifies it.</li>
+<li><a href="docs/BIBLE.digest.md">docs/BIBLE.digest.md</a>: generated digest of the bible.</li>
+<li><a href="AGENTS.md">AGENTS.md</a> and <a href="CLAUDE.md">CLAUDE.md</a>: agent instructions and the documentation-layering rules.</li>
+</ul>
+<h2 id="license">License</h2>
+<p>This repository has no license file; all rights reserved.</p>
 <hr>
-<p>See <a href="docs/BIBLE.md">docs/BIBLE.md</a> for the architecture canon and the Laws, <a href="docs/AMENDMENTS.md">docs/AMENDMENTS.md</a> for what has changed since, and <a href="docs/USER<em>STORIES.md">docs/USER</em>STORIES.md</a> for the per-capability status and the test that verifies each one.</p>
+<p>Part of <a href="https://mindattic.com">MindAttic</a> — see more projects at <a href="https://github.com/mindattic">github.com/mindattic</a>. Related: <a href="https://github.com/mindattic/MindAttic.Vault">MindAttic.Vault</a> (settings and credential store) and <a href="https://github.com/mindattic/MindAttic.Deploy">MindAttic.Deploy</a> (deploy engine).</p>
 
-    <p class="codex-footer">Generated 2026-08-25 by the shared MindAttic Codex engine (<code>codex-standard/build-readme.ps1</code>) from <code>README.md</code>. Edit the Markdown source, not this file.</p>
+    <p class="codex-footer">Generated 2026-10-03 by the shared MindAttic Codex engine (<code>codex-standard/build-readme.ps1</code>) from <code>README.md</code>. Edit the Markdown source, not this file.</p>
   </main>
 </div>
 <script>(function(){

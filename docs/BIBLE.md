@@ -35,9 +35,10 @@ commit/push repos, and back the workspace up.
 - NOT a phone/iPad web terminal. That role belongs to the sibling **MindAttic.Mobile** repo — a
   WebSocket + xterm.js bridge that streams a Windows terminal session to a mobile browser. This
   repo only manages launching agents and orchestrating the workspace.
-- NOT a deploy engine. Landing-page deploys are delegated to the sibling **MindAttic.Deploy** repo
-  (`MindAttic.Deploy.exe all` / the `/deploy` command); this repo owns no FTP pipeline or per-project
-  deploy state.
+- NOT a deploy engine. Deploys belong to the sibling **MindAttic.Deploy** repo
+  (`MindAttic.Deploy.exe all`); this repo owns no FTP pipeline or per-project deploy state. Its own
+  project page is its GitHub README (https://github.com/mindattic/MindAttic.Launcher) — the old
+  `mindattic.com/mindatticconsole.htm` landing page was retired (MindAttic.Deploy DEP-A6).
 - NOT cross-platform. It targets `net10.0-windows` / `win-x64` and depends on Windows Terminal (`wt`),
   `robocopy`, and `sqlcmd`.
 - NOT a general settings UI. It edits only its own roster/providers and the Windows Terminal
