@@ -250,11 +250,9 @@ Every project tab gets a `--tabColor` (a plain hex the tab strip renders) and op
 
 `Services/ProjectDiscovery.cs` scans the immediate subdirectories of the resolved workspace root for git repos (a `.git` directory or, for worktrees, a `.git` file) not already in `Projects` or `DiscoveryIgnore`, and surfaces them at startup via `DiscoverProjectsMenu`. For each candidate it prompts for the git URL (pre-filled from `origin` if detectable), a tab color from `ColorPalette.Colors` (a curated 16-entry palette) or a typed custom hex, and an optional description, then appends the project to the roster and writes its WT scheme. Press `S` to skip all remaining candidates this run, `N` to never ask about this one again (added to `DiscoveryIgnore`), or `Esc` to skip just this one.
 
-## Deploy delegation
+## Deploys
 
-`Services/DeployService.cs` locates the sibling MindAttic.Deploy repo's published artifact (`../MindAttic.Deploy/artifacts/MindAttic.Deploy.exe`, relative to this repo's parent directory) and composes the command line for its non-interactive `all` sub-command (which runs MindAttic.Deploy's batches and tallies failures). `WindowsTerminalLauncher.BuildDeployAllTab` wraps that command line in a `cmd /k` tab so the pane stays open to read the summary. Both are implemented and unit-tested (`DeployServiceTests`: exe resolution, null-safety, command-line composition), but no menu item or CLI sub-command in this repo currently constructs a `DeployService` or `BuildDeployAllTab` call.
-
-This repo itself has no web deploy: this GitHub README is the project page. This binary owns no FTP pipeline and no per-project deploy state ([MCO-LAW-5](docs/BIBLE.md#MCO-LAW-5)); deploying is, and will remain, MindAttic.Deploy's job.
+The Launcher has no deploy menu item or sub-command; run MindAttic.Deploy directly (`MindAttic.Deploy.exe all`, or its interactive menu). This repo itself has no web deploy: this GitHub README is the project page. This binary owns no FTP pipeline and no per-project deploy state ([MCO-LAW-5](docs/BIBLE.md#MCO-LAW-5)); deploying is, and will remain, MindAttic.Deploy's job.
 
 ## Limitations
 
@@ -295,7 +293,7 @@ Test coverage (`MindAttic.Launcher.Tests/`, NUnit 4) spans:
 - the dated backup-folder allocator and exclude lists, and SQL backup path, SQL and argument composition
 - Windows Terminal scheme-splice idempotency and launcher tab-building
 - project discovery and roster sorting, and tab-title alias and prefix rules
-- deploy command-line composition, title-pinner busy detection (including the background-shell footer), remote-control pipe broadcast filtering, and build-freshness day-floor and timezone comparison
+- title-pinner busy detection (including the background-shell footer), remote-control pipe broadcast filtering, and build-freshness day-floor and timezone comparison
 
 After editing anything under `docs/`, run `powershell -File tools/codex.ps1 doctor` (validates IDs, links, front-matter and cited tests; `codex.ps1 digest` regenerates `docs/BIBLE.digest.md`).
 

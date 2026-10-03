@@ -178,17 +178,4 @@ public sealed class WindowsTerminalLauncher
         WorkingDirectory = workingDirectory,
         Command = ["powershell"]
     };
-
-    /// <summary>
-    /// Builds a tab that runs every MindAttic.Deploy category back-to-back
-    /// via <c>cmd /k</c> so the pane stays open after the run for the user
-    /// to read the per-batch summaries. <paramref name="commandLine"/> comes
-    /// from <see cref="DeployService.BuildDeployAllCommandLine(string)"/>.
-    /// </summary>
-    public Tab BuildDeployAllTab(string workingDirectory, string commandLine) => new()
-    {
-        Title = "MindAttic.Deploy — all",
-        WorkingDirectory = workingDirectory,
-        Command = ["cmd", "/k", commandLine]
-    };
 }

@@ -104,8 +104,6 @@ call stateless/injectable services; the services own all external-process and fi
 - **ProjectRoster** — sort / find roster entries.
 - **BackupService** — robocopy snapshot to a collision-safe dated folder.
 - **SqlBackupService** — `sqlcmd` full (`BACKUP DATABASE`) per database.
-- **DeployService** — locate sibling `MindAttic.Deploy.exe`, compose its `all` command line
-  (tested, but not currently wired to any menu item or sub-command).
 - **ProviderModel** — read/rewrite the `--model`/`-m` token inside a provider's `RunCommand`.
 - **ProviderCredentials** / **KimiConfigSync** — push each provider's Vault-held API key to where its
   CLI reads it (env var for Gemini; idempotent `config.toml` splice for Kimi) right before launch.
@@ -157,22 +155,21 @@ scheme with that name already exists — never duplicating or clobbering the use
 (`Services/WindowsTerminalSchemes.cs`.)
 
 ### {#MCO-LAW-5} Orchestration only; no agent, no LLM here.
-This binary launches and hosts agents and delegates deploys to MindAttic.Deploy. No code path links
+This binary launches and hosts agents; deploys are run from MindAttic.Deploy itself. No code path links
 an LLM SDK, makes an LLM API call, or owns an FTP/deploy pipeline; spawning an agent CLI that itself
-talks to an LLM is orchestration, not an LLM call. (`Commands/HostAgentCommand.cs`, `Services/DeployService.cs`.)
+talks to an LLM is orchestration, not an LLM call. (`Commands/HostAgentCommand.cs`.)
 
 ## 6. Verified state {#MCO-§6}
 Evidence (2026-10-03, `net10.0-windows`):
 - **Build:** `dotnet build` succeeds (`TreatWarningsAsErrors=true`, `Nullable=enable`).
-- **Tests:** `dotnet test` → **156 passed, 0 failed, 0 skipped** (NUnit 4), ~330 ms.
+- **Tests:** `dotnet test` → **152 passed, 0 failed, 0 skipped** (NUnit 4), ~270 ms.
 - Coverage spans: settings/Vault round-trip + legacy seed + unknown-key preservation
   (`SettingsStoreTests`); provider list resolution + model-flag rewriting (`AgentProviderRegistryTests`); `git
   --porcelain` parsing incl. renames/untracked/both-modified + auto message
   (`GitServiceTests`); the dated-backup-folder allocator + exclude lists (`BackupServiceTests`);
   SQL backup path/SQL composition (`SqlBackupServiceTests`); WT scheme splice idempotency
   (`WindowsTerminalSchemesTests`); argv quoting (`CommandLineParserTests`); discovery
-  (`ProjectDiscoveryTests`); tab-title rules (`ProjectTests`); deploy command-line composition
-  (`DeployServiceTests`); title-pinner busy detection (`TitlePinnerTests`); remote-control
+  (`ProjectDiscoveryTests`); tab-title rules (`ProjectTests`); title-pinner busy detection (`TitlePinnerTests`); remote-control
   broadcast (`RemoteControlBroadcasterTests`); build freshness (`BuildFreshnessTests`); color
   palette (`ColorPaletteTests`); WT launcher (`WindowsTerminalLauncherTests`); roster
   (`ProjectRosterTests`); model-flag rewriting (`ProviderModelTests`); provider credential push

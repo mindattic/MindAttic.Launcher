@@ -1,11 +1,11 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Publishes mindattic.exe as a single file (framework-dependent, win-x64)
+    Publishes MindAttic.Launcher.exe as a single file (framework-dependent, win-x64)
     into the artifacts/ directory.
 
 .DESCRIPTION
-    Output: <repo>\artifacts\mindattic.exe
+    Output: <repo>\artifacts\MindAttic.Launcher.exe
 
     Run from the repo root:
         powershell -NoProfile -ExecutionPolicy Bypass -File scripts\publish.ps1

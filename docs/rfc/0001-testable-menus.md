@@ -18,7 +18,7 @@ where the `wt` tab spec is assembled inside the menu rather than in a pure seam.
 ## Options compared
 - **A. Extract a pure tab-spec builder** from each menu (project + provider + color → `wt` Tab /
   command line) and unit-test that, leaving prompt I/O thin. Low risk, matches the existing
-  injectable-seam pattern (`DeployService`, `RemoteControlBroadcaster`).
+  injectable-seam pattern (`RemoteControlBroadcaster`).
 - **B. Drive Spectre prompts via its test console harness.** Higher fidelity, but couples tests to
   prompt wording and ordering.
 - **C. Full end-to-end process tests** spawning `wt`/`git`. Highest fidelity, slowest, Windows- and

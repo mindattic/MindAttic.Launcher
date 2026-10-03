@@ -61,9 +61,9 @@ scheme with that name already exists — never duplicating or clobbering the use
 (`Services/WindowsTerminalSchemes.cs`.)
 
 ### {#MCO-LAW-5} Orchestration only; no agent, no LLM here.
-This binary launches and hosts agents and delegates deploys to MindAttic.Deploy. No code path links
+This binary launches and hosts agents; deploys are run from MindAttic.Deploy itself. No code path links
 an LLM SDK, makes an LLM API call, or owns an FTP/deploy pipeline; spawning an agent CLI that itself
-talks to an LLM is orchestration, not an LLM call. (`Commands/HostAgentCommand.cs`, `Services/DeployService.cs`.)
+talks to an LLM is orchestration, not an LLM call. (`Commands/HostAgentCommand.cs`.)
 
 ## Glossary (#MCO-§9)
 - **Workspace root** — `D:\Projects\MindAttic`, the parent dir holding every MindAttic repo.
@@ -79,7 +79,7 @@ talks to an LLM is orchestration, not an LLM call. (`Commands/HostAgentCommand.c
 - **Sibling repo** — another repo under the workspace root (e.g. MindAttic.Deploy).
 
 ## Status index (docs/USER_STORIES.md)
-- done: 21
+- done: 20
 - partial: 5
 - planned: 3
 

@@ -126,11 +126,7 @@ updated: 2026-10-03
 - **MCO-US-F2 ✅** As a Dev, on first run with an empty Vault, my legacy `settings.json` seeds Vault
   once. *(verified by `Load_seeds_from_legacy_file_when_vault_is_empty`.)*
 
-## Epic G — Deploy & freshness
-- **MCO-US-G1 ✅** As a Dev, `DeployService` locates the sibling MindAttic.Deploy exe
-  and composes its `all` command line (no menu item currently invokes it), returning null cleanly when the artifact is missing. *(verified
-  by `ResolveExe_returns_sibling_path_when_artifact_present`, `ResolveExe_returns_null_when_artifact_missing`,
-  `ResolveExe_returns_null_for_blank_root`, `BuildDeployAllCommandLine_delegates_to_cli_all_subcommand`.)*
+## Epic G — Freshness
 - **MCO-US-G2 ✅** As a Dev, the menu warns me when the running binary is older than the latest
   commit so I know to republish, flooring a same-day lag to zero and comparing across time-zone
   offsets. *(verified by `Evaluate_reports_whole_days_behind`,
