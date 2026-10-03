@@ -4,7 +4,7 @@ project: MindAttic.Launcher
 code: MCO
 layer: bible
 status: living
-updated: 2026-08-25
+updated: 2026-10-03
 ---
 
 # MindAttic.Launcher — Project Bible
@@ -36,16 +36,13 @@ commit/push repos, and back the workspace up.
   WebSocket + xterm.js bridge that streams a Windows terminal session to a mobile browser. This
   repo only manages launching agents and orchestrating the workspace.
 - NOT a deploy engine. Deploys belong to the sibling **MindAttic.Deploy** repo
-  (`MindAttic.Deploy.exe all`); this repo owns no FTP pipeline or per-project deploy state. Its own
-  project page is its GitHub README (https://github.com/mindattic/MindAttic.Launcher) — the old
-  `mindattic.com/mindatticconsole.htm` landing page was retired (MindAttic.Deploy DEP-A6).
+  (`MindAttic.Deploy.exe all`); this repo owns no FTP pipeline or per-project deploy state, and has
+  no web deploy of its own: its project page is its GitHub README
+  (https://github.com/mindattic/MindAttic.Launcher).
 - NOT cross-platform. It targets `net10.0-windows` / `win-x64` and depends on Windows Terminal (`wt`),
   `robocopy`, and `sqlcmd`.
 - NOT a general settings UI. It edits only its own roster/providers and the Windows Terminal
   `schemes` array (idempotent splice).
-- NOT hosting a workspace-wide "Overlord" agent session anymore. That feature (`OverlordMenu`, a
-  single agent rooted at the whole workspace with an optional LLM-refined opening order) never
-  worked reliably and was removed outright — see MCO-A5.
 
 ## 4. Architecture canon {#MCO-§4}
 A single-file, framework-dependent `win-x64` exe. Spectre.Console.Cli routes `args` to a default
@@ -86,7 +83,8 @@ call stateless/injectable services; the services own all external-process and fi
 - **AgentProvider** (`Models/AgentProvider.cs`) — a launchable agent: `Key`, `Name`, `RunCommand`,
   `Extra`.
 - **AppSettings** (`Models/AppSettings.cs`) — the persisted root: WT settings path, `AgentProviders`,
-  `Projects`, `DiscoveryIgnore`, `Extra`. No default-provider field — see MCO-A4.
+  `Projects`, `DiscoveryIgnore`, `Extra`. No default-provider field: the provider is chosen per
+  launch and never persisted.
 - Service-local records: `GitStatus`/`GitChange` (`Services/GitService.cs`), `DiscoveredRepo`
   (`Services/ProjectDiscovery.cs`), `PaletteColor` (`Services/ColorPalette.cs`),
   `DatabaseBackupResult`/`BackupTarget` (`Services/SqlBackupService.cs`).
@@ -94,8 +92,10 @@ call stateless/injectable services; the services own all external-process and fi
 ### 4.3 Key services — VERBS (`MindAttic.Launcher/Services/`)
 - **SettingsStore** — load/save `AppSettings` via Vault; one-time legacy-file seed.
 - **AgentProviderRegistry** — resolve the configured/default provider list (`All()`, `ByKey()`,
-  `Current()` = first-listed provider); per-launch provider choice is a menu-layer concern, not
-  state this service persists.
+  `Current()` = first-listed provider; default order Claude, Codex, Gemini, Kimi) and persist the
+  per-provider model (`SetModel`). The per-launch provider choice is made in `OpenProjectMenu` and
+  never persisted; callers with no launch-time choice (Status tab, `mindattic host` without
+  `--provider`) use `Current()`.
 - **GitService** — `git status --porcelain` snapshot, short summary, auto commit message.
 - **WindowsTerminalLauncher** — build + invoke `wt` tab command lines (title/color/scheme).
 - **WindowsTerminalSchemes** — idempotent splice of a `MindAttic-<Name>` scheme into WT settings.
@@ -104,7 +104,16 @@ call stateless/injectable services; the services own all external-process and fi
 - **ProjectRoster** — sort / find roster entries.
 - **BackupService** — robocopy snapshot to a collision-safe dated folder.
 - **SqlBackupService** — `sqlcmd` full (`BACKUP DATABASE`) per database.
-- **DeployService** — locate sibling `MindAttic.Deploy.exe`, compose its `all` command line.
+- **DeployService** — locate sibling `MindAttic.Deploy.exe`, compose its `all` command line
+  (tested, but not currently wired to any menu item or sub-command).
+- **ProviderModel** — read/rewrite the `--model`/`-m` token inside a provider's `RunCommand`.
+- **ProviderCredentials** / **KimiConfigSync** — push each provider's Vault-held API key to where its
+  CLI reads it (env var for Gemini; idempotent `config.toml` splice for Kimi) right before launch.
+- **ExecutableResolver** — resolve npm `.cmd`/`.ps1` CLI shims that `Process.Start` can't find.
+- **ProjectCompanionService** — ensure a project's companion service (e.g. Prose.Hub) is running
+  before an agent session starts.
+- **ClaudeStatusService** — read Claude Code usage data from `~/.claude/*` for the main-menu status
+  block (60 s cache).
 - **TitlePinner** — per-tab watchdog that pins a busy/idle tab title.
 - **HostInputPipeServer** / **RemoteControlBroadcaster** — per-tab named-pipe input + broadcast.
 - **BuildFreshness** / **ExePath** — detect a stale running binary; resolve self/release exe paths.
@@ -148,13 +157,14 @@ scheme with that name already exists — never duplicating or clobbering the use
 (`Services/WindowsTerminalSchemes.cs`.)
 
 ### {#MCO-LAW-5} Orchestration only; no agent, no LLM here.
-This binary launches and hosts agents and delegates deploys to MindAttic.Deploy. No code path calls
-an LLM or owns an FTP/deploy pipeline. (`Commands/HostAgentCommand.cs`, `Services/DeployService.cs`.)
+This binary launches and hosts agents and delegates deploys to MindAttic.Deploy. No code path links
+an LLM SDK, makes an LLM API call, or owns an FTP/deploy pipeline; spawning an agent CLI that itself
+talks to an LLM is orchestration, not an LLM call. (`Commands/HostAgentCommand.cs`, `Services/DeployService.cs`.)
 
 ## 6. Verified state {#MCO-§6}
-Evidence (2026-06-07, `net10.0-windows`):
+Evidence (2026-10-03, `net10.0-windows`):
 - **Build:** `dotnet build` succeeds (`TreatWarningsAsErrors=true`, `Nullable=enable`).
-- **Tests:** `dotnet test` → **118 passed, 0 failed, 0 skipped** (NUnit 4), ~263 ms.
+- **Tests:** `dotnet test` → **156 passed, 0 failed, 0 skipped** (NUnit 4), ~330 ms.
 - Coverage spans: settings/Vault round-trip + legacy seed + unknown-key preservation
   (`SettingsStoreTests`); provider list resolution + model-flag rewriting (`AgentProviderRegistryTests`); `git
   --porcelain` parsing incl. renames/untracked/both-modified + auto message
@@ -165,14 +175,17 @@ Evidence (2026-06-07, `net10.0-windows`):
   (`DeployServiceTests`); title-pinner busy detection (`TitlePinnerTests`); remote-control
   broadcast (`RemoteControlBroadcasterTests`); build freshness (`BuildFreshnessTests`); color
   palette (`ColorPaletteTests`); WT launcher (`WindowsTerminalLauncherTests`); roster
-  (`ProjectRosterTests`).
+  (`ProjectRosterTests`); model-flag rewriting (`ProviderModelTests`); provider credential push
+  (`ProviderCredentialsTests`, `KimiConfigSyncTests`); CLI shim resolution
+  (`ExecutableResolverTests`); companion-service startup (`ProjectCompanionServiceTests`).
 - See [USER_STORIES.md](USER_STORIES.md) for the per-capability status + verifying test names.
 
 ## 7. Active frontier {#MCO-§7}
-- No open RFCs at this time — see [`docs/rfc/`](rfc/) (template at `rfc/0001-example.md`).
+- Open RFC: [`rfc/0001-testable-menus.md`](rfc/0001-testable-menus.md) — make the interactive menu flows testable
+  (closes [MCO-US-A5](USER_STORIES.md)).
 - Backlog and partial/planned capabilities live in [USER_STORIES.md](USER_STORIES.md) under
   **Priority backlog**. The headline goal is a frictionless single-binary workspace orchestrator;
-  the menus exercised only interactively (Backup/Run/Open/Pull wiring) are the
+  the menus exercised only interactively (Backup/Open/Pull/Commit/Settings wiring) are the
   least test-covered surface and the next place to add coverage.
 
 ## 8. Quality bar {#MCO-§8}

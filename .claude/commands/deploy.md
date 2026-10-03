@@ -2,6 +2,6 @@
 
 **MindAttic.Launcher has no web deploy.** Its README on GitHub -- https://github.com/mindattic/MindAttic.Launcher -- is the project page. To update the project page, edit `README.md` and push to `main`.
 
-The README-driven landing page `mindattic.com/mindatticconsole.htm` was retired together with MindAttic.Deploy's catalog mode (amendment DEP-A6 in `MindAttic.Deploy/docs/AMENDMENTS.md`, 2026-10-03). `npm run deploy -- --only mindatticconsole` is now rejected, so do not run MindAttic.Deploy for this project.
+MindAttic.Deploy has no target for this project, so do not run MindAttic.Deploy for it.
 
 When invoked, tell the user the above and stop.

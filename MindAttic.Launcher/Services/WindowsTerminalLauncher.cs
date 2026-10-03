@@ -150,7 +150,7 @@ public sealed class WindowsTerminalLauncher
     {
         // A blank RunCommand as `cmd /c ""` opens a tab that flashes and dies with
         // no explanation. Keep the pane open (`/k`) with a message instead so the
-        // user can see why nothing ran — RunProjectMenu filters these out, but the
+        // user can see why nothing ran. ProjectActionMenu is the only caller, but the
         // method is public and shouldn't manufacture a silently-broken tab.
         IReadOnlyList<string> command = string.IsNullOrWhiteSpace(project.RunCommand)
             ? ["cmd", "/k", $"echo No RunCommand configured for {project.Name}."]

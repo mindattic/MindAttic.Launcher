@@ -4,14 +4,14 @@ project: MindAttic.Launcher
 code: MCO
 layer: rfc
 status: planned
-updated: 2026-06-07
+updated: 2026-10-03
 ---
 
 # RFC 0001 — Make the interactive menu flows testable
 
 ## Problem
-The pure services are well covered (118 green tests), but the interactive Spectre.Console menus
-(`OpenProjectMenu`, `BackupMenu`, `RunProjectMenu`, `SettingsMenu`, `PullMenu`) are
+The pure services are well covered (156 green tests), but the interactive Spectre.Console menus
+(`OpenProjectMenu`, `ProjectActionMenu`, `BackupMenu`, `CommitMenu`, `SettingsMenu`, `PullMenu`) are
 exercised only by hand. The largest gap is "Open Project Tab" ([MCO-US-A5](../USER_STORIES.md)),
 where the `wt` tab spec is assembled inside the menu rather than in a pure seam.
 

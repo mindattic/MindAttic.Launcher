@@ -16,16 +16,13 @@ commit/push repos, and back the workspace up.
   WebSocket + xterm.js bridge that streams a Windows terminal session to a mobile browser. This
   repo only manages launching agents and orchestrating the workspace.
 - NOT a deploy engine. Deploys belong to the sibling **MindAttic.Deploy** repo
-  (`MindAttic.Deploy.exe all`); this repo owns no FTP pipeline or per-project deploy state. Its own
-  project page is its GitHub README (https://github.com/mindattic/MindAttic.Launcher) — the old
-  `mindattic.com/mindatticconsole.htm` landing page was retired (MindAttic.Deploy DEP-A6).
+  (`MindAttic.Deploy.exe all`); this repo owns no FTP pipeline or per-project deploy state, and has
+  no web deploy of its own: its project page is its GitHub README
+  (https://github.com/mindattic/MindAttic.Launcher).
 - NOT cross-platform. It targets `net10.0-windows` / `win-x64` and depends on Windows Terminal (`wt`),
   `robocopy`, and `sqlcmd`.
 - NOT a general settings UI. It edits only its own roster/providers and the Windows Terminal
   `schemes` array (idempotent splice).
-- NOT hosting a workspace-wide "Overlord" agent session anymore. That feature (`OverlordMenu`, a
-  single agent rooted at the whole workspace with an optional LLM-refined opening order) never
-  worked reliably and was removed outright — see MCO-A5.
 
 ## The Laws (#MCO-§5)
 This project **inherits** the org-wide laws in
@@ -64,8 +61,9 @@ scheme with that name already exists — never duplicating or clobbering the use
 (`Services/WindowsTerminalSchemes.cs`.)
 
 ### {#MCO-LAW-5} Orchestration only; no agent, no LLM here.
-This binary launches and hosts agents and delegates deploys to MindAttic.Deploy. No code path calls
-an LLM or owns an FTP/deploy pipeline. (`Commands/HostAgentCommand.cs`, `Services/DeployService.cs`.)
+This binary launches and hosts agents and delegates deploys to MindAttic.Deploy. No code path links
+an LLM SDK, makes an LLM API call, or owns an FTP/deploy pipeline; spawning an agent CLI that itself
+talks to an LLM is orchestration, not an LLM call. (`Commands/HostAgentCommand.cs`, `Services/DeployService.cs`.)
 
 ## Glossary (#MCO-§9)
 - **Workspace root** — `D:\Projects\MindAttic`, the parent dir holding every MindAttic repo.
@@ -84,8 +82,4 @@ an LLM or owns an FTP/deploy pipeline. (`Commands/HostAgentCommand.cs`, `Service
 - done: 21
 - partial: 5
 - planned: 3
-- cut: 1
-
-## Latest amendment
-MCO-A1 — Codex documentation standard adopted (supersedes —)
 

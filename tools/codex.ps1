@@ -124,13 +124,12 @@ function Invoke-Digest {
         $cut     = ([regex]::Matches($st, $script:GlyphCut)).Count
     }
 
-    # latest amendment head (first "## " heading in AMENDMENTS.md)
-    $amendHead = ''
+    # pending decisions (every "## MCO-A<n>" entry still in AMENDMENTS.md; normally none)
+    $pending = New-Object System.Collections.Generic.List[string]
     if (Test-Path $AmendPath) {
-        $am = Read-Utf8Lines $AmendPath
-        $last = $null
-        foreach ($l in $am) { if ($l -match '^##\s+(.*)$') { $last = $Matches[1] } }
-        if ($last) { $amendHead = $last }
+        foreach ($l in (Read-Utf8Lines $AmendPath)) {
+            if ($l -match '^##\s+(MCO-A\d+.*)$') { $pending.Add($Matches[1]) }
+        }
     }
 
     $sb = New-Object System.Text.StringBuilder
@@ -151,13 +150,14 @@ function Invoke-Digest {
     [void]$sb.AppendLine("- done: $done")
     [void]$sb.AppendLine("- partial: $partial")
     [void]$sb.AppendLine("- planned: $planned")
-    [void]$sb.AppendLine("- cut: $cut")
-    [void]$sb.AppendLine('')
-    [void]$sb.AppendLine('## Latest amendment')
-    [void]$sb.AppendLine($amendHead)
+    if ($pending.Count -gt 0) {
+        [void]$sb.AppendLine('')
+        [void]$sb.AppendLine('## Pending decisions (docs/AMENDMENTS.md)')
+        foreach ($p in $pending) { [void]$sb.AppendLine("- $p") }
+    }
 
     Set-Content -LiteralPath $DigestPath -Value $sb.ToString() -Encoding UTF8
-    Write-Host "digest: wrote $($DigestPath.Substring($RepoRoot.Length).TrimStart('\','/')) (done=$done partial=$partial planned=$planned cut=$cut)"
+    Write-Host "digest: wrote $($DigestPath.Substring($RepoRoot.Length).TrimStart('\','/')) (done=$done partial=$partial planned=$planned pending=$($pending.Count))"
 }
 
 # ================================ DOCTOR ========================================

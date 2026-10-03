@@ -4,11 +4,11 @@ project: MindAttic.Launcher
 code: MCO
 layer: stories
 status: living
-updated: 2026-08-25
+updated: 2026-10-03
 ---
 
 # MindAttic.Launcher — User Stories
-> ✅ done (shipped & tested) · 🟡 partial · ⬜ planned · 🗑️ cut. Every ✅ cites the test.
+> ✅ done (shipped & tested) · 🟡 partial · ⬜ planned. Every ✅ cites the test.
 > Personas: **Dev** (the developer running the workspace).
 
 ## Epic A — Launch agents in tabs
@@ -127,8 +127,8 @@ updated: 2026-08-25
   once. *(verified by `Load_seeds_from_legacy_file_when_vault_is_empty`.)*
 
 ## Epic G — Deploy & freshness
-- **MCO-US-G1 ✅** As a Dev, the in-app "Deploy All" path locates the sibling MindAttic.Deploy exe
-  and composes its `all` command line, returning null cleanly when the artifact is missing. *(verified
+- **MCO-US-G1 ✅** As a Dev, `DeployService` locates the sibling MindAttic.Deploy exe
+  and composes its `all` command line (no menu item currently invokes it), returning null cleanly when the artifact is missing. *(verified
   by `ResolveExe_returns_sibling_path_when_artifact_present`, `ResolveExe_returns_null_when_artifact_missing`,
   `ResolveExe_returns_null_for_blank_root`, `BuildDeployAllCommandLine_delegates_to_cli_all_subcommand`.)*
 - **MCO-US-G2 ✅** As a Dev, the menu warns me when the running binary is older than the latest
@@ -141,10 +141,6 @@ updated: 2026-08-25
 Dependency-ordered toward the headline goal (a frictionless single-binary workspace orchestrator):
 1. **MCO-US-A5** (🟡→✅) — make the menu-driven "Open Project Tab" flow testable (extract a pure tab
    spec from `OpenProjectMenu`) and verify it, closing the largest untested surface.
-2. ⬜ Integration smoke test for the interactive menus (Backup / Run / Provider / Pull)
+2. ⬜ Integration smoke test for the interactive menus (Backup / Commit / Pull / Settings)
    that today are exercised only by hand.
 3. ⬜ End-to-end `mindattic commit` exit-code assertions over a temp git repo.
-
-### Audit log
-No stories have been changed from an original spec yet; this is the first Codex pass. Future changed
-stories preserve their original ask verbatim here, marked "(original spec — audit log)".

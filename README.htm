@@ -293,7 +293,7 @@ MindAttic.Launcher.exe commit --project MindAttic.Vault --message "Fix readme"</
 </tbody></table>
 <p>The header also shows the staleness notice and the Claude usage block; neither is a menu item.</p>
 <h3 id="open-project-tab">Open Project Tab</h3>
-<p><code>OpenProjectMenu</code> lists every roster project sorted by name. Picking one prompts "Open <code>&lt;Project&gt;</code> with which agent?" over every configured provider (Claude, Codex, Gemini, Kimi by default, in that order). This choice is never persisted (see <a href="docs/AMENDMENTS.md">MCO-A4</a>). It then opens <code>ProjectActionMenu</code> for that project and provider:</p>
+<p><code>OpenProjectMenu</code> lists every roster project sorted by name. Picking one prompts "Open <code>&lt;Project&gt;</code> with which agent?" over every configured provider (Claude, Codex, Gemini, Kimi by default, in that order). This choice is never persisted (see <a href="docs/BIBLE.md#MCO-§2">MCO-§2</a>). It then opens <code>ProjectActionMenu</code> for that project and provider:</p>
 <table><thead><tr>
 <th>Item</th>
 <th>Tag</th>
@@ -317,7 +317,7 @@ MindAttic.Launcher.exe commit --project MindAttic.Vault --message "Fix readme"</
 </tbody></table>
 <p><code>ProjectSetupMenu</code> edits four free-text fields, each a blank-to-clear prompt persisted via <code>SettingsStore.Update</code>: Alias (<code>TabAlias</code>), Description, Color Scheme (<code>ColorScheme</code>) and Tab Color (<code>TabColor</code>). There is no Provider row: provider choice is picked fresh every time, not project config.</p>
 <h3 id="settings-menu">Settings menu</h3>
-<p><code>SettingsMenu</code> edits exactly one thing per provider: the model each agent CLI runs with. For each configured provider it shows <code>&lt;Name&gt; model</code> and the model parsed out of its <code>RunCommand</code> (or "(CLI default)"). Selecting one opens a picker over <code>AgentProviderRegistry.KnownModels[key]</code> (currently populated only for Claude: Fable 5, Opus 4.8, 4.7 and 4.6, Sonnet 5, Sonnet 4.6, Haiku 4.5) plus "Enter model id…" (free text) and "Use CLI default" (clears the flag). <code>ProviderModel.Set</code> rewrites the <code>--model</code>/<code>-m</code> token in place inside <code>RunCommand</code> (or appends or removes it), and <code>AgentProviderRegistry.SetModel</code> persists the change, materializing the code-level defaults into settings on first edit so there is a row to change. There is no "Default Agent" row and no per-project provider override; both were removed in <a href="docs/AMENDMENTS.md">MCO-A4</a>.</p>
+<p><code>SettingsMenu</code> edits exactly one thing per provider: the model each agent CLI runs with. For each configured provider it shows <code>&lt;Name&gt; model</code> and the model parsed out of its <code>RunCommand</code> (or "(CLI default)"). Selecting one opens a picker over <code>AgentProviderRegistry.KnownModels[key]</code> (currently populated only for Claude: Fable 5, Opus 4.8, 4.7 and 4.6, Sonnet 5, Sonnet 4.6, Haiku 4.5) plus "Enter model id…" (free text) and "Use CLI default" (clears the flag). <code>ProviderModel.Set</code> rewrites the <code>--model</code>/<code>-m</code> token in place inside <code>RunCommand</code> (or appends or removes it), and <code>AgentProviderRegistry.SetModel</code> persists the change, materializing the code-level defaults into settings on first edit so there is a row to change. There is no "Default Agent" row and no per-project provider override; the provider is a per-launch choice (<a href="docs/BIBLE.md#MCO-§2">MCO-§2</a>).</p>
 <h2 id="settings-and-persistence">Settings and persistence</h2>
 <p>Settings are a single <code>AppSettings</code> object, loaded and saved through <code>SettingsStore</code> (<code>MindAttic.Launcher/Services/SettingsStore.cs</code>) via MindAttic.Vault, at:</p>
 <pre><code class="language-text">%APPDATA%\MindAttic\MindAttic.Launcher\settings.json</code></pre>
@@ -417,14 +417,14 @@ MindAttic.Launcher.exe commit --project MindAttic.Vault --message "Fix readme"</
 <h3 id="project-discovery">Project discovery</h3>
 <p><code>Services/ProjectDiscovery.cs</code> scans the immediate subdirectories of the resolved workspace root for git repos (a <code>.git</code> directory or, for worktrees, a <code>.git</code> file) not already in <code>Projects</code> or <code>DiscoveryIgnore</code>, and surfaces them at startup via <code>DiscoverProjectsMenu</code>. For each candidate it prompts for the git URL (pre-filled from <code>origin</code> if detectable), a tab color from <code>ColorPalette.Colors</code> (a curated 16-entry palette) or a typed custom hex, and an optional description, then appends the project to the roster and writes its WT scheme. Press <code>S</code> to skip all remaining candidates this run, <code>N</code> to never ask about this one again (added to <code>DiscoveryIgnore</code>), or <code>Esc</code> to skip just this one.</p>
 <h2 id="deploy-delegation">Deploy delegation</h2>
-<p><code>Services/DeployService.cs</code> locates the sibling MindAttic.Deploy repo's published artifact (<code>../MindAttic.Deploy/artifacts/MindAttic.Deploy.exe</code>, relative to this repo's parent directory) and composes the command line for its non-interactive <code>all</code> sub-command (which iterates catalog, site and app batches and tallies failures). <code>WindowsTerminalLauncher.BuildDeployAllTab</code> wraps that command line in a <code>cmd /k</code> tab so the pane stays open to read the summary. Both are implemented and unit-tested (<code>DeployServiceTests</code>: exe resolution, null-safety, command-line composition), but no menu item or CLI sub-command in this repo currently constructs a <code>DeployService</code> or <code>BuildDeployAllTab</code> call.</p>
-<p>This repo itself has no web deploy: this GitHub README is the project page, and the old <code>mindattic.com/mindatticconsole.htm</code> landing page (formerly published via <code>npm run deploy -- --only mindatticconsole</code>) was retired (MindAttic.Deploy DEP-A6). This binary owns no FTP pipeline and no per-project deploy state (<a href="docs/BIBLE.md#MCO-LAW-5">MCO-LAW-5</a>); deploying is, and will remain, MindAttic.Deploy's job.</p>
+<p><code>Services/DeployService.cs</code> locates the sibling MindAttic.Deploy repo's published artifact (<code>../MindAttic.Deploy/artifacts/MindAttic.Deploy.exe</code>, relative to this repo's parent directory) and composes the command line for its non-interactive <code>all</code> sub-command (which runs MindAttic.Deploy's batches and tallies failures). <code>WindowsTerminalLauncher.BuildDeployAllTab</code> wraps that command line in a <code>cmd /k</code> tab so the pane stays open to read the summary. Both are implemented and unit-tested (<code>DeployServiceTests</code>: exe resolution, null-safety, command-line composition), but no menu item or CLI sub-command in this repo currently constructs a <code>DeployService</code> or <code>BuildDeployAllTab</code> call.</p>
+<p>This repo itself has no web deploy: this GitHub README is the project page. This binary owns no FTP pipeline and no per-project deploy state (<a href="docs/BIBLE.md#MCO-LAW-5">MCO-LAW-5</a>); deploying is, and will remain, MindAttic.Deploy's job.</p>
 <h2 id="limitations">Limitations</h2>
 <p>MindAttic.Launcher is the orchestrator, not the thing being orchestrated. It is not:</p>
 <ul>
 <li>An agent. It execs a provider CLI with inherited stdio (<code>host</code>); no code path here links an LLM SDK or makes an LLM API call.</li>
 <li>A phone or tablet web terminal. That was MindAttic.Mobile (a WebSocket and xterm.js bridge), now removed from the workspace. Remote driving of a tab is Claude Code's own <code>/remote-control</code>.</li>
-<li>A deploy engine. Landing-page and per-project deploys are MindAttic.Deploy's job (<code>MindAttic.Deploy.exe all</code>, or the <code>/deploy</code> slash command in this repo, which shells out to it).</li>
+<li>A deploy engine. Deploys are MindAttic.Deploy's job (<code>MindAttic.Deploy.exe all</code>); this repo's <code>/deploy</code> slash command only explains that it has no web deploy.</li>
 <li>A general settings UI. It edits only its own roster and provider settings and the Windows Terminal <code>schemes</code> array.</li>
 <li>Cross-platform. It targets <code>net10.0-windows</code> / <code>win-x64</code> and depends on Windows Terminal (<code>wt</code>), <code>robocopy</code> and <code>sqlcmd</code> being on <code>PATH</code>.</li>
 <li>A credential store. API keys are resolved through MindAttic.Vault's shared keyring (<code>MindAttic.Vault.Credentials.LlmCredentialStore</code>); this repo never hard-codes a secret.</li>
@@ -466,10 +466,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\publish.ps1
 MindAttic.Launcher.Tests/            NUnit 4 test project (roughly one *Tests.cs per service/model)
 docs/
   BIBLE.md                           L0: architecture, Laws, verified state, glossary
-  AMENDMENTS.md                      L1: append-only change log (wins over the bible)
+  AMENDMENTS.md                      L1: pending decisions not yet folded into the bible (normally empty)
   USER_STORIES.md                    L2: test-cited stories
   BIBLE.digest.md                    GENERATED, never hand-edit
-  rfc/                               design notes awaiting graduation
+  rfc/                               open design notes (deleted once decided and folded in)
 scripts/
   publish.ps1                        dotnet publish -&gt; artifacts\MindAttic.Launcher.exe
   ensure-fresh.ps1                   conditional republish (staleness heuristic)
@@ -526,7 +526,7 @@ NuGet.config, global.json            package source + SDK roll-forward</code></p
 <h2 id="documentation">Documentation</h2>
 <ul>
 <li><a href="docs/BIBLE.md">docs/BIBLE.md</a> (L0): architecture canon, invariants and the Laws.</li>
-<li><a href="docs/AMENDMENTS.md">docs/AMENDMENTS.md</a> (L1): what has changed since; amendments win over the bible.</li>
+<li><a href="docs/AMENDMENTS.md">docs/AMENDMENTS.md</a> (L1): pending decisions not yet folded into the bible (normally empty).</li>
 <li><a href="docs/USER<em>STORIES.md">docs/USER</em>STORIES.md</a> (L2): per-capability status, each done story citing the test that verifies it.</li>
 <li><a href="docs/BIBLE.digest.md">docs/BIBLE.digest.md</a>: generated digest of the bible.</li>
 <li><a href="AGENTS.md">AGENTS.md</a> and <a href="CLAUDE.md">CLAUDE.md</a>: agent instructions and the documentation-layering rules.</li>
