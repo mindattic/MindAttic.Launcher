@@ -13,7 +13,7 @@ namespace MindAttic.Launcher.Menus;
 /// matching <c>MindAttic-&lt;Name&gt;</c> Windows Terminal color scheme written
 /// automatically.
 /// </summary>
-public sealed class DiscoverProjectsMenu(SettingsStore store, GitService git, WindowsTerminalSchemes schemes)
+public sealed class DiscoverProjectsMenu(SettingsStore store, GitService git, WindowsTerminalSchemes schemes, IReadOnlySet<string>? starred = null)
 {
     // Tag on the "Custom hex…" row, distinguishing it from the PaletteColor rows.
     private static readonly object CustomHexTag = new();
@@ -28,6 +28,10 @@ public sealed class DiscoverProjectsMenu(SettingsStore store, GitService git, Wi
         if (!Directory.Exists(root)) return;
 
         var candidates = ProjectDiscovery.FindUnregistered(store.Load(), root);
+        if (starred is not null)
+            candidates = candidates
+                .Where(r => GitHubRepoRef.Parse(git.RemoteUrl(r.Path)) is { } full && starred.Contains(full))
+                .ToList();
         if (candidates.Count == 0) return;
 
         try

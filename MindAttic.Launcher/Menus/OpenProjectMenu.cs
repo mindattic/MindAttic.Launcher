@@ -5,7 +5,7 @@ using Spectre.Console;
 
 namespace MindAttic.Launcher.Menus;
 
-public sealed class OpenProjectMenu(SettingsStore store, AgentProviderRegistry providers, WindowsTerminalLauncher wt)
+public sealed class OpenProjectMenu(SettingsStore store, AgentProviderRegistry providers, WindowsTerminalLauncher wt, IReadOnlySet<string>? starred = null)
 {
     public void Run()
     {
@@ -13,7 +13,7 @@ public sealed class OpenProjectMenu(SettingsStore store, AgentProviderRegistry p
         while (true)
         {
             var settings = store.Load();
-            var sortedProjects = ProjectRoster.Sorted(settings);
+            var sortedProjects = ProjectRoster.Sorted(settings, starred);
 
             var items = sortedProjects.Select(p => new MenuItem
             {

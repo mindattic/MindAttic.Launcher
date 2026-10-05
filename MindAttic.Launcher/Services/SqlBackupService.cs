@@ -45,7 +45,7 @@ public sealed class SqlBackupService
     /// instance). Two projects naming the same db on the same instance collapse
     /// to one backup.
     /// </summary>
-    public static IReadOnlyList<BackupTarget> CollectTargets(AppSettings settings)
+    public static IReadOnlyList<BackupTarget> CollectTargets(AppSettings settings, IReadOnlySet<string>? starredFullNames = null)
     {
         // Dedup case-insensitively on (server, database): SQL Server identifiers
         // and Windows file paths are both case-insensitive, so "MyDb" and "mydb"
@@ -54,7 +54,7 @@ public sealed class SqlBackupService
         // ends in a db-like suffix from colliding with the next pair.
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var targets = new List<BackupTarget>();
-        foreach (var p in ProjectRoster.Sorted(settings))
+        foreach (var p in ProjectRoster.Sorted(settings, starredFullNames))
             foreach (var raw in p.Databases ?? [])
             {
                 if (string.IsNullOrWhiteSpace(raw)) continue;

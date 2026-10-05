@@ -12,6 +12,7 @@ public sealed class SettingsMenu(AgentProviderRegistry providers)
 {
     // Tag wrapper so a model row's Tag type doesn't collide with a raw AgentProvider.
     private sealed record ModelTarget(AgentProvider Provider);
+    private static readonly object GitHubTokenTag = new();
 
     public void Run()
     {
@@ -33,6 +34,16 @@ public sealed class SettingsMenu(AgentProviderRegistry providers)
                 });
             }
 
+            var hasToken = !string.IsNullOrWhiteSpace(GitHubCredentials.GetToken());
+            items.Add(new MenuItem
+            {
+                Name = "GitHub token",
+                Description = hasToken
+                    ? "configured — used to keep the roster synced to your starred repos"
+                    : "(not set) — used to keep the roster synced to your starred repos",
+                Tag = GitHubTokenTag
+            });
+
             Screen.Header("Settings");
             var result = Menu.PromptWithKeys("Configure CLI development:", items, customKeys: null, initialIndex: resumeIndex);
             resumeIndex = result.Index;
@@ -41,8 +52,37 @@ public sealed class SettingsMenu(AgentProviderRegistry providers)
 
             if (sel.Tag is ModelTarget target)
                 EditModel(target.Provider);
+            else if (ReferenceEquals(sel.Tag, GitHubTokenTag))
+                EditGitHubToken();
         }
     }
+
+    private static void EditGitHubToken()
+    {
+        var current = GitHubCredentials.GetToken();
+
+        Screen.Header("Settings", "GitHub token");
+        AnsiConsole.MarkupLine($"  Current: [cyan1]{(string.IsNullOrWhiteSpace(current) ? "(not set)" : Mask(current))}[/]");
+        AnsiConsole.MarkupLine("  [grey50]A personal access token that can read your starred repos (private + public).[/]");
+        AnsiConsole.MarkupLine("  [grey50]Every launch re-checks GitHub, so starring or unstarring a repo there moves it into or out of the roster here.[/]");
+        AnsiConsole.WriteLine();
+
+        var input = AnsiConsole.Prompt(
+            new TextPrompt<string>("  [cyan1]Token[/] [grey50](blank to leave unchanged)[/]:").AllowEmpty());
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            Screen.Notice("[grey50]Unchanged.[/]");
+            Screen.PressAnyKey();
+            return;
+        }
+
+        GitHubCredentials.SetToken(input.Trim());
+        Screen.Notice("[green]GitHub token saved.[/]");
+        Thread.Sleep(800);
+    }
+
+    private static string Mask(string token) =>
+        token.Length <= 8 ? "••••" : $"{token[..4]}…{token[^4..]}";
 
     private void EditModel(AgentProvider provider)
     {
