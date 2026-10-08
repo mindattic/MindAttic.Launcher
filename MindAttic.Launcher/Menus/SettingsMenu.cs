@@ -39,8 +39,8 @@ public sealed class SettingsMenu(AgentProviderRegistry providers)
             {
                 Name = "GitHub token",
                 Description = hasToken
-                    ? "configured — used to keep the roster synced to your starred repos"
-                    : "(not set) — used to keep the roster synced to your starred repos",
+                    ? $"configured — used to keep the roster synced to your '{TopicRepoSync.Topic}'-tagged repos"
+                    : $"(not set) — used to keep the roster synced to your '{TopicRepoSync.Topic}'-tagged repos",
                 Tag = GitHubTokenTag
             });
 
@@ -63,8 +63,8 @@ public sealed class SettingsMenu(AgentProviderRegistry providers)
 
         Screen.Header("Settings", "GitHub token");
         AnsiConsole.MarkupLine($"  Current: [cyan1]{(string.IsNullOrWhiteSpace(current) ? "(not set)" : Mask(current))}[/]");
-        AnsiConsole.MarkupLine("  [grey50]A personal access token that can read your starred repos (private + public).[/]");
-        AnsiConsole.MarkupLine("  [grey50]Every launch re-checks GitHub, so starring or unstarring a repo there moves it into or out of the roster here.[/]");
+        AnsiConsole.MarkupLine("  [grey50]A personal access token that can read your repos and their topics (private + public).[/]");
+        AnsiConsole.MarkupLine($"  [grey50]Every launch re-checks GitHub, so adding or removing the '{TopicRepoSync.Topic}' topic on a repo there moves it into or out of the roster here.[/]");
         AnsiConsole.WriteLine();
 
         var input = AnsiConsole.Prompt(

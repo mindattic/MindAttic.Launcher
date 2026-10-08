@@ -4,7 +4,7 @@ using Spectre.Console;
 
 namespace MindAttic.Launcher.Menus;
 
-public sealed class BackupMenu(BackupService backup, SettingsStore store, SqlBackupService sql, IReadOnlySet<string>? starred = null)
+public sealed class BackupMenu(BackupService backup, SettingsStore store, SqlBackupService sql, IReadOnlySet<string>? tagged = null)
 {
     public BackupMenu() : this(new BackupService(), new SettingsStore(), new SqlBackupService()) { }
 
@@ -32,7 +32,7 @@ public sealed class BackupMenu(BackupService backup, SettingsStore store, SqlBac
         IReadOnlyList<BackupTarget> dbTargets;
         try
         {
-            dbTargets = SqlBackupService.CollectTargets(store.Load(), starred);
+            dbTargets = SqlBackupService.CollectTargets(store.Load(), tagged);
         }
         catch (Exception ex)
         {

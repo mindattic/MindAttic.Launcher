@@ -53,32 +53,32 @@ public sealed class ProjectRosterTests
     }
 
     [Test]
-    public void Sorted_with_null_starred_set_is_unfiltered()
+    public void Sorted_with_null_tagged_set_is_unfiltered()
     {
         var settings = new AppSettings
         {
             Projects = { new Project { Name = "MindAttic.Launcher", Path = "", RepoUrl = "https://github.com/mindattic/MindAttic.Launcher" } }
         };
 
-        Assert.That(ProjectRoster.Sorted(settings, starredFullNames: null), Has.Count.EqualTo(1));
+        Assert.That(ProjectRoster.Sorted(settings, taggedFullNames: null), Has.Count.EqualTo(1));
     }
 
     [Test]
-    public void Sorted_keeps_only_projects_whose_repo_is_starred()
+    public void Sorted_keeps_only_projects_whose_repo_is_tagged()
     {
         var settings = new AppSettings
         {
             Projects =
             {
-                new Project { Name = "Starred",   Path = "", RepoUrl = "https://github.com/mindattic/Starred.git" },
-                new Project { Name = "Unstarred", Path = "", RepoUrl = "https://github.com/mindattic/Unstarred.git" },
+                new Project { Name = "Tagged",   Path = "", RepoUrl = "https://github.com/mindattic/Tagged.git" },
+                new Project { Name = "Untagged", Path = "", RepoUrl = "https://github.com/mindattic/Untagged.git" },
             }
         };
-        var starred = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "mindattic/starred" };
+        var tagged = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "mindattic/tagged" };
 
-        var sorted = ProjectRoster.Sorted(settings, starred);
+        var sorted = ProjectRoster.Sorted(settings, tagged);
 
-        Assert.That(sorted.Select(p => p.Name), Is.EqualTo(new[] { "Starred" }));
+        Assert.That(sorted.Select(p => p.Name), Is.EqualTo(new[] { "Tagged" }));
     }
 
     [Test]
@@ -88,8 +88,8 @@ public sealed class ProjectRosterTests
         {
             Projects = { new Project { Name = "NoRemote", Path = "", RepoUrl = null } }
         };
-        var starred = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "someone/else" };
+        var tagged = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "someone/else" };
 
-        Assert.That(ProjectRoster.Sorted(settings, starred), Is.Empty);
+        Assert.That(ProjectRoster.Sorted(settings, tagged), Is.Empty);
     }
 }

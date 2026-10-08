@@ -5,14 +5,14 @@ using Spectre.Console;
 
 namespace MindAttic.Launcher.Menus;
 
-public sealed class PullMenu(SettingsStore store, GitService git, IReadOnlySet<string>? starred = null)
+public sealed class PullMenu(SettingsStore store, GitService git, IReadOnlySet<string>? tagged = null)
 {
     public void Run()
     {
         var resumeIndex = 0;
         while (true)
         {
-            var sortedProjects = ProjectRoster.Sorted(store.Load(), starred);
+            var sortedProjects = ProjectRoster.Sorted(store.Load(), tagged);
             var statuses = git.FetchShortStatuses(sortedProjects);
 
             var items = new List<MenuItem>

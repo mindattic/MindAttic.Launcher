@@ -2,11 +2,11 @@ namespace MindAttic.Launcher.Services;
 
 /// <summary>
 /// Fills in <see cref="Models.Project.RepoUrl"/> for projects registered before
-/// the GitHub-starred-repo filter existed. Without a RepoUrl, <see cref="GitHubRepoRef.Parse"/>
-/// has nothing to match against <see cref="StarredRepoSync"/>'s set, so
+/// the GitHub-topic filter existed. Without a RepoUrl, <see cref="GitHubRepoRef.Parse"/>
+/// has nothing to match against <see cref="TopicRepoSync"/>'s set, so
 /// <see cref="ProjectRoster.Sorted(Models.AppSettings, IReadOnlySet{string}?)"/> excludes the
-/// project from every menu once the starred filter is active — even when it genuinely
-/// is starred on GitHub. Resolves each blank RepoUrl from the project's local
+/// project from every menu once the topic filter is active — even when it genuinely
+/// carries the topic on GitHub. Resolves each blank RepoUrl from the project's local
 /// <c>origin</c> remote (same lookup <see cref="Menus.DiscoverProjectsMenu"/> uses for new
 /// repos) and persists it once, so the next launch's filter can see it.
 /// </summary>

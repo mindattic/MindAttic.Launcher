@@ -2,8 +2,8 @@ namespace MindAttic.Launcher.Services;
 
 /// <summary>
 /// Parses a git remote URL into a lower-cased GitHub <c>owner/repo</c> full
-/// name, the same shape GitHub's API reports for a starred repo. Pure/static
-/// so the starred-repo match logic is testable without a network call.
+/// name, the same shape GitHub's API reports for a repo. Pure/static so the
+/// topic-match logic is testable without a network call.
 /// </summary>
 public static class GitHubRepoRef
 {

@@ -10,23 +10,23 @@ public static class ProjectRoster
     // Coalesce so a hand-edited/tool-written file can't NRE every menu that
     // lists projects.
     public static IReadOnlyList<Project> Sorted(AppSettings settings) =>
-        Sorted(settings, starredFullNames: null);
+        Sorted(settings, taggedFullNames: null);
 
     /// <summary>
     /// Same as <see cref="Sorted(AppSettings)"/>, but when
-    /// <paramref name="starredFullNames"/> is non-null (see
-    /// <see cref="StarredRepoSync"/>), keeps only projects whose
+    /// <paramref name="taggedFullNames"/> is non-null (see
+    /// <see cref="TopicRepoSync"/>), keeps only projects whose
     /// <see cref="Project.RepoUrl"/> resolves to one of those GitHub
-    /// <c>owner/repo</c> full names — a repo starred elsewhere, surfaced here;
-    /// unstarred, it quietly stops appearing without losing its settings.json
+    /// <c>owner/repo</c> full names — a repo tagged elsewhere, surfaced here;
+    /// untagged, it quietly stops appearing without losing its settings.json
     /// entry. A project with no parseable GitHub remote can't be verified as
-    /// starred, so it's excluded too when a filter is active.
+    /// tagged, so it's excluded too when a filter is active.
     /// </summary>
-    public static IReadOnlyList<Project> Sorted(AppSettings settings, IReadOnlySet<string>? starredFullNames)
+    public static IReadOnlyList<Project> Sorted(AppSettings settings, IReadOnlySet<string>? taggedFullNames)
     {
         IEnumerable<Project> projects = settings.Projects ?? [];
-        if (starredFullNames is not null)
-            projects = projects.Where(p => GitHubRepoRef.Parse(p.RepoUrl) is { } full && starredFullNames.Contains(full));
+        if (taggedFullNames is not null)
+            projects = projects.Where(p => GitHubRepoRef.Parse(p.RepoUrl) is { } full && taggedFullNames.Contains(full));
 
         return projects
             .OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase)

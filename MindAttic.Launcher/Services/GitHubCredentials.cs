@@ -3,8 +3,8 @@ using MindAttic.Vault.Credentials;
 namespace MindAttic.Launcher.Services;
 
 /// <summary>
-/// The GitHub personal access token used to read the signed-in user's starred
-/// repos, resolved through Vault's <see cref="TokenStore"/> (HOUSE-LAW-3)
+/// The GitHub personal access token used to read the signed-in user's repos
+/// and their topics, resolved through Vault's <see cref="TokenStore"/> (HOUSE-LAW-3)
 /// rather than hard-coded or read straight from an environment variable.
 /// Stored at <c>%APPDATA%\MindAttic\GitHub\tokens.json</c>.
 /// </summary>

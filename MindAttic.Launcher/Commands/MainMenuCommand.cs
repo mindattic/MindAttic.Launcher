@@ -21,25 +21,25 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
         var wt = new WindowsTerminalLauncher();
         var git = new GitService();
 
-        // A project registered before the starred-repo filter existed has a
-        // null RepoUrl, so GitHubRepoRef.Parse can't verify it against GitHub's
-        // starred set — it would silently vanish from every menu below even
-        // when it IS starred. Backfill from each repo's local origin remote
+        // A project registered before the topic filter existed has a null
+        // RepoUrl, so GitHubRepoRef.Parse can't verify it against GitHub's
+        // tagged set — it would silently vanish from every menu below even
+        // when it IS tagged. Backfill from each repo's local origin remote
         // once, so the filter has something to match against.
         RepoUrlBackfill.Run(store, git.RemoteUrl);
 
-        // Rescanned every launch (not cached in settings): starring/unstarring
-        // on GitHub is the lever for "what's in the roster right now" — a repo
-        // surfaces the next time this starts, and falls off just as quietly.
-        // Null (no token configured yet, or the fetch failed) means "don't
-        // filter" — the roster degrades to showing everything rather than
-        // going blank.
-        var starred = StarredRepoSync.FetchOrNull();
+        // Rescanned every launch (not cached in settings): tagging/untagging
+        // the work-in-progress topic on GitHub is the lever for "what's in the
+        // roster right now" — a repo surfaces the next time this starts, and
+        // falls off just as quietly. Null (no token configured yet, or the
+        // fetch failed) means "don't filter" — the roster degrades to showing
+        // everything rather than going blank.
+        var tagged = TopicRepoSync.FetchOrNull();
 
-        var commit   = new CommitMenu(store, git, starred);
-        var pull     = new PullMenu(store, git, starred);
-        var open     = new OpenProjectMenu(store, providers, wt, starred);
-        var backup   = new BackupMenu(new BackupService(), store, new SqlBackupService(), starred);
+        var commit   = new CommitMenu(store, git, tagged);
+        var pull     = new PullMenu(store, git, tagged);
+        var open     = new OpenProjectMenu(store, providers, wt, tagged);
+        var backup   = new BackupMenu(new BackupService(), store, new SqlBackupService(), tagged);
         var settingsMenu = new SettingsMenu(providers);
 
         // Checked once at launch: running git every menu redraw would be wasteful,
@@ -50,9 +50,9 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
         // Offer any git repos found under the workspace that aren't in the roster
         // yet, so a freshly-created repo is added (with its color scheme) instead
         // of staying invisible to every menu until someone edits settings by hand.
-        // Starred-filtered too: an unstarred new repo shouldn't interrupt startup
-        // with an add-to-roster prompt until it's actually starred.
-        new DiscoverProjectsMenu(store, git, new WindowsTerminalSchemes(), starred).Run();
+        // Topic-filtered too: an untagged new repo shouldn't interrupt startup
+        // with an add-to-roster prompt until it's actually tagged.
+        new DiscoverProjectsMenu(store, git, new WindowsTerminalSchemes(), tagged).Run();
 
         var items = new List<MenuItem>
         {

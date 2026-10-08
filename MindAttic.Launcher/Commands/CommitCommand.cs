@@ -32,17 +32,17 @@ public sealed class CommitCommand : Command<CommitCommand.Settings>
 
         // Same backfill as the interactive menu (MainMenuCommand): a project
         // registered before RepoUrl was captured can't be matched against the
-        // starred set and would silently drop out of "commit everything".
+        // tagged set and would silently drop out of "commit everything".
         RepoUrlBackfill.Run(store, git.RemoteUrl);
 
         var app = store.Load();
 
-        // A specific --project always resolves by name, star status aside — an
-        // explicit target that silently no-ops because it fell off the starred
-        // list would violate MCO-LAW-1 (fail loudly, not quietly). The "commit
-        // everything" default is where starring decides the roster.
+        // A specific --project always resolves by name, topic status aside —
+        // an explicit target that silently no-ops because it fell off the
+        // tagged list would violate MCO-LAW-1 (fail loudly, not quietly). The
+        // "commit everything" default is where the topic decides the roster.
         var targets = string.IsNullOrWhiteSpace(settings.Project)
-            ? ProjectRoster.Sorted(app, StarredRepoSync.FetchOrNull())
+            ? ProjectRoster.Sorted(app, TopicRepoSync.FetchOrNull())
             : new[] { ProjectRoster.FindByName(app, settings.Project!) ?? throw new InvalidOperationException($"Unknown project: {settings.Project}") };
 
         var ok = true;
