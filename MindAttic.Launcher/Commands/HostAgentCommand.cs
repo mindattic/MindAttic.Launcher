@@ -125,6 +125,10 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
             WorkingDirectory = Directory.Exists(workingDir) ? workingDir : Environment.CurrentDirectory
         };
         for (var i = 1; i < parts.Length; i++) psi.ArgumentList.Add(parts[i]);
+        // wt.exe can carry a stale NO_COLOR=1 from a since-unset registry value
+        // (it only re-reads the environment on its own fresh launch), which
+        // would otherwise flow down and strip every hosted agent's colors.
+        psi.EnvironmentVariables.Remove("NO_COLOR");
         // A seed prompt is the agent's first positional arg — `claude <flags>
         // "<order>"` / `codex <flags> "<order>"`. Both start interactive with
         // the prompt loaded; the Status tab uses this to pre-fill /status.

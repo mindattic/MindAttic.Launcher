@@ -53,7 +53,7 @@ public sealed class GitHubTopicRepos(HttpClient? http = null)
             foreach (var repo in doc.RootElement.EnumerateArray())
             {
                 count++;
-                if (HasTopic(repo, topic) &&
+                if (!IsArchived(repo) && HasTopic(repo, topic) &&
                     repo.TryGetProperty("full_name", out var fullName) && fullName.GetString() is { } name)
                     result.Add(name.ToLowerInvariant());
             }
@@ -63,6 +63,15 @@ public sealed class GitHubTopicRepos(HttpClient? http = null)
 
         return result;
     }
+
+    /// <summary>
+    /// GitHub keeps a repo's topics intact after archiving it, so an archived
+    /// repo can still carry <see cref="TopicRepoSync.Topic"/> from before it
+    /// was shelved. Archived is axiomatically not work-in-progress, so it's
+    /// excluded here regardless of topic.
+    /// </summary>
+    private static bool IsArchived(JsonElement repo) =>
+        repo.TryGetProperty("archived", out var archived) && archived.ValueKind == JsonValueKind.True;
 
     private static bool HasTopic(JsonElement repo, string topic)
     {

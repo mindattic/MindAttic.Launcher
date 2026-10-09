@@ -6,7 +6,7 @@ public sealed class AgentProviderRegistry(SettingsStore store)
 {
     public static IReadOnlyList<AgentProvider> Defaults { get; } =
     [
-        new AgentProvider { Key = "Claude", Name = "Claude Code",  RunCommand = "claude --dangerously-skip-permissions --model claude-sonnet-5" },
+        new AgentProvider { Key = "Claude", Name = "Claude Code",  RunCommand = "claude --dangerously-skip-permissions --model claude-sonnet-5-5" },
         new AgentProvider { Key = "Codex",  Name = "OpenAI Codex", RunCommand = "codex --dangerously-bypass-approvals-and-sandbox" },
         new AgentProvider { Key = "Gemini", Name = "Google Antigravity", RunCommand = "agy --dangerously-skip-permissions" },
         new AgentProvider { Key = "Kimi",   Name = "Kimi Code",    RunCommand = "kimi --yolo" }
@@ -22,7 +22,8 @@ public sealed class AgentProviderRegistry(SettingsStore store)
                 ("claude-opus-4-8",   "Opus 4.8   · 1M ctx · reasoning + coding"),
                 ("claude-opus-4-7",   "Opus 4.7   · 1M ctx"),
                 ("claude-opus-4-6",   "Opus 4.6   · 1M ctx"),
-                ("claude-sonnet-5",   "Sonnet 5   · 1M ctx · balanced"),
+                ("claude-sonnet-5-5", "Sonnet 5.5 · 1M ctx · balanced"),
+                ("claude-sonnet-5",   "Sonnet 5   · 1M ctx"),
                 ("claude-sonnet-4-6", "Sonnet 4.6 · 1M ctx"),
                 ("claude-haiku-4-5",  "Haiku 4.5  · 200K ctx · fast"),
             }

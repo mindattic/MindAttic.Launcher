@@ -14,10 +14,14 @@ public sealed class GitHubTopicReposTests
             Task.FromResult(respond(request));
     }
 
-    private static HttpResponseMessage JsonPage(params (string FullName, string[] Topics)[] repos)
+    private static HttpResponseMessage JsonPage(params (string FullName, string[] Topics)[] repos) =>
+        JsonPage(repos.Select(r => (r.FullName, r.Topics, Archived: false)).ToArray());
+
+    private static HttpResponseMessage JsonPage(params (string FullName, string[] Topics, bool Archived)[] repos)
     {
         var items = string.Join(",", repos.Select(r =>
-            $"{{\"full_name\":\"{r.FullName}\",\"topics\":[{string.Join(",", r.Topics.Select(t => $"\"{t}\""))}]}}"));
+            $"{{\"full_name\":\"{r.FullName}\",\"archived\":{(r.Archived ? "true" : "false")}," +
+            $"\"topics\":[{string.Join(",", r.Topics.Select(t => $"\"{t}\""))}]}}"));
         return new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent($"[{items}]", Encoding.UTF8, "application/json")
@@ -37,6 +41,20 @@ public sealed class GitHubTopicReposTests
         var result = await client.FetchAsync("test-token", "work-in-progress");
 
         Assert.That(result, Is.EquivalentTo(new[] { "mindattic/launcher", "someone/other-repo" }));
+    }
+
+    [Test]
+    public async Task FetchAsync_excludes_archived_repos_even_if_still_tagged()
+    {
+        using var handler = new FakeHandler(_ => JsonPage(
+            ("mindattic/Active", new[] { "work-in-progress" }, Archived: false),
+            ("mindattic/Shelved", new[] { "work-in-progress" }, Archived: true)));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.github.com/") };
+        var client = new GitHubTopicRepos(http);
+
+        var result = await client.FetchAsync("test-token", "work-in-progress");
+
+        Assert.That(result, Is.EquivalentTo(new[] { "mindattic/active" }));
     }
 
     [Test]

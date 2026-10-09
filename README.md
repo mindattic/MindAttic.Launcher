@@ -201,7 +201,7 @@ On first run, if that Vault file does not yet exist, `SettingsStore` looks for a
 
 | Key | Name | Default RunCommand |
 |---|---|---|
-| `Claude` | Claude Code | `claude --dangerously-skip-permissions --model claude-sonnet-5` |
+| `Claude` | Claude Code | `claude --dangerously-skip-permissions --model claude-sonnet-5-5` |
 | `Codex` | OpenAI Codex | `codex --dangerously-bypass-approvals-and-sandbox` |
 | `Gemini` | Google Antigravity | `agy --dangerously-skip-permissions` |
 | `Kimi` | Kimi Code | `kimi --yolo` |
