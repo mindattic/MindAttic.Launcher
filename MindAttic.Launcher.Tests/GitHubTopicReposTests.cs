@@ -46,15 +46,98 @@ public sealed class GitHubTopicReposTests
     [Test]
     public async Task FetchAsync_excludes_archived_repos_even_if_still_tagged()
     {
-        using var handler = new FakeHandler(_ => JsonPage(
-            ("mindattic/Active", new[] { "work-in-progress" }, Archived: false),
-            ("mindattic/Shelved", new[] { "work-in-progress" }, Archived: true)));
+        using var handler = new FakeHandler(req => req.Method == HttpMethod.Put
+            ? new HttpResponseMessage(HttpStatusCode.OK)
+            : JsonPage(
+                ("mindattic/Active", new[] { "work-in-progress" }, Archived: false),
+                ("mindattic/Shelved", new[] { "work-in-progress" }, Archived: true)));
         using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.github.com/") };
         var client = new GitHubTopicRepos(http);
 
         var result = await client.FetchAsync("test-token", "work-in-progress");
 
         Assert.That(result, Is.EquivalentTo(new[] { "mindattic/active" }));
+    }
+
+    [Test]
+    public async Task FetchAsync_strips_the_stale_topic_from_an_archived_repo_on_github()
+    {
+        HttpRequestMessage? putRequest = null;
+        string? putBody = null;
+        using var handler = new FakeHandler(req =>
+        {
+            if (req.Method == HttpMethod.Put)
+            {
+                putRequest = req;
+                putBody = req.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+                return new HttpResponseMessage(HttpStatusCode.OK);
+            }
+
+            return JsonPage(
+                ("mindattic/Active", new[] { "work-in-progress" }, Archived: false),
+                ("mindattic/Shelved", new[] { "work-in-progress", "dotnet" }, Archived: true));
+        });
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.github.com/") };
+        var client = new GitHubTopicRepos(http);
+
+        await client.FetchAsync("test-token", "work-in-progress");
+
+        Assert.That(putRequest, Is.Not.Null);
+        Assert.That(putRequest!.RequestUri!.ToString(), Is.EqualTo("https://api.github.com/repos/mindattic/Shelved/topics"));
+        Assert.That(putBody, Does.Contain("dotnet"));
+        Assert.That(putBody, Does.Not.Contain("work-in-progress"));
+        Assert.That(client.Healed, Is.EquivalentTo(new[] { "mindattic/shelved" }));
+    }
+
+    [Test]
+    public async Task FetchAsync_does_not_strip_the_topic_from_an_archived_repo_that_lacks_it()
+    {
+        var putCalled = false;
+        using var handler = new FakeHandler(req =>
+        {
+            if (req.Method == HttpMethod.Put)
+            {
+                putCalled = true;
+                return new HttpResponseMessage(HttpStatusCode.OK);
+            }
+
+            return JsonPage(("mindattic/Shelved", new[] { "dotnet" }, Archived: true));
+        });
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.github.com/") };
+        var client = new GitHubTopicRepos(http);
+
+        await client.FetchAsync("test-token", "work-in-progress");
+
+        Assert.That(putCalled, Is.False);
+        Assert.That(client.Healed, Is.Empty);
+    }
+
+    [Test]
+    public async Task FetchAsync_stops_stripping_after_github_refuses_and_flags_it()
+    {
+        var putCount = 0;
+        using var handler = new FakeHandler(req =>
+        {
+            if (req.Method == HttpMethod.Put)
+            {
+                putCount++;
+                return new HttpResponseMessage(HttpStatusCode.Forbidden);
+            }
+
+            return JsonPage(
+                ("mindattic/Active", new[] { "work-in-progress" }, Archived: false),
+                ("mindattic/ShelvedA", new[] { "work-in-progress" }, Archived: true),
+                ("mindattic/ShelvedB", new[] { "work-in-progress" }, Archived: true));
+        });
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.github.com/") };
+        var client = new GitHubTopicRepos(http);
+
+        var result = await client.FetchAsync("read-only-token", "work-in-progress");
+
+        Assert.That(result, Is.EquivalentTo(new[] { "mindattic/active" }));
+        Assert.That(putCount, Is.EqualTo(1));
+        Assert.That(client.HealDenied, Is.True);
+        Assert.That(client.Healed, Is.Empty);
     }
 
     [Test]

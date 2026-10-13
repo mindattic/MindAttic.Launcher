@@ -144,6 +144,7 @@ Launching the exe with no arguments runs `MainMenuCommand`, which loads settings
 |---|---|---|
 | Commit and sync | `commit` | Opens `CommitMenu`: commit and push one project or all, prompting for an optional message (blank means auto-generated). |
 | Pull | `pull` | Opens `PullMenu`: `git pull --ff-only` one project or all. |
+| Workflow | `workflow` | Opens `WorkflowMenu`, the Launcher's view of [MindAttic.Workflow](https://github.com/mindattic/MindAttic.Workflow): open tickets across every repo, each repo's uncommitted, unpushed and local-only work with its GitHub state, and the ticket-log checks. Read-only; deleting folders stays in the `workflow repos prune` CLI. |
 | Open Project Tab | `open` | Opens `OpenProjectMenu`: pick a project, then which agent CLI to launch it with, then `ProjectActionMenu`. |
 | Backup | `backup` | Runs `BackupMenu` directly: confirms source, target and database list, then runs the file and SQL backup. |
 | Settings | `settings` | Opens `SettingsMenu`: the model each agent CLI runs with (only). |
@@ -249,6 +250,12 @@ Every project tab gets a `--tabColor` (a plain hex the tab strip renders) and op
 ### Project discovery
 
 `Services/ProjectDiscovery.cs` scans the immediate subdirectories of the resolved workspace root for git repos (a `.git` directory or, for worktrees, a `.git` file) not already in `Projects` or `DiscoveryIgnore`, and surfaces them at startup via `DiscoverProjectsMenu`. For each candidate it prompts for the git URL (pre-filled from `origin` if detectable), a tab color from `ColorPalette.Colors` (a curated 16-entry palette) or a typed custom hex, and an optional description, then appends the project to the roster and writes its WT scheme. Press `S` to skip all remaining candidates this run, `N` to never ask about this one again (added to `DiscoveryIgnore`), or `Esc` to skip just this one.
+
+### Roster topic filter
+
+The roster and the Discover Projects walkthrough only show repos tagged with the GitHub topic `work-in-progress`. Tagging or untagging a repo on GitHub is how you move it into or out of the roster; untagging hides the project without deleting its settings entry. On every launch `Services/TopicRepoSync.cs` calls `GitHubTopicRepos` (`GET /user/repos`, paginated) with the GitHub token stored in Vault (set it in the Settings menu) and matches the result against each project's `RepoUrl`. If no token is set, or the fetch fails, the roster is shown unfiltered and a one-line notice explains why, so it never empties out silently.
+
+Archived repos are never in the roster, even if they still carry the topic (GitHub keeps topics after a repo is archived). When the launcher finds one, it removes the stale topic on GitHub and prints a note. That cleanup needs a token that can edit topics (the classic `repo` scope, or `Administration: write` on a fine-grained token). With a read-only token, the launcher stops after the first refusal, prints a note saying the token can't edit topics, and still hides the repo.
 
 ## Deploys
 

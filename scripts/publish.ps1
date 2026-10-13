@@ -43,7 +43,7 @@ if ($Clean) {
 }
 
 Write-Host "Publishing $proj"
-Write-Host "  → $outDir\$exeName"
+Write-Host "  -> $outDir\$exeName"
 
 dotnet publish $proj `
     --configuration Release `

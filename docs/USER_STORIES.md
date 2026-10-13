@@ -4,7 +4,7 @@ project: MindAttic.Launcher
 code: MCO
 layer: stories
 status: living
-updated: 2026-10-03
+updated: 2026-10-12
 ---
 
 # MindAttic.Launcher — User Stories
@@ -117,6 +117,24 @@ updated: 2026-10-03
   `Insert_is_idempotent_when_scheme_already_present`, `Insert_handles_an_empty_schemes_array`,
   `Insert_ignores_a_same_named_profile_outside_the_schemes_array`,
   `Insert_returns_false_when_no_schemes_array` + `ColorPaletteTests`.)*
+- **MCO-US-E4 ✅** As a Dev, the roster shows only repos I've tagged `work-in-progress` on GitHub,
+  degrading to the full roster (with a notice) when no token is set or the fetch fails, so tagging on
+  GitHub is my one lever for what appears. *(verified by
+  `FetchAsync_returns_lowercased_full_names_of_repos_carrying_the_topic`,
+  `FetchAsync_paginates_until_a_short_page`, `FetchAsync_throws_on_a_non_success_response`,
+  `Sorted_with_null_tagged_set_is_unfiltered`, `Sorted_keeps_only_projects_whose_repo_is_tagged`,
+  `Sorted_excludes_a_project_with_no_parseable_github_remote_once_a_filter_is_active`.)*
+- **MCO-US-E5 ✅** As a Dev, an archived repo never appears in the roster even if it still carries the
+  topic, and the launcher strips that stale tag on GitHub, or tells me once that my token can't,
+  without repeating a refused request. *(verified by
+  `FetchAsync_excludes_archived_repos_even_if_still_tagged`,
+  `FetchAsync_strips_the_stale_topic_from_an_archived_repo_on_github`,
+  `FetchAsync_does_not_strip_the_topic_from_an_archived_repo_that_lacks_it`,
+  `FetchAsync_stops_stripping_after_github_refuses_and_flags_it`.)*
+
+- **MCO-US-E6 🟡** As a Dev, a Workflow menu item shows open tickets across the workspace, each
+  repo's local-only work and GitHub state, and the ticket-log checks, through the MindAttic.Workflow
+  library. The library calls are tested there; the menu itself has no test yet.
 
 ## Epic F — Settings persistence
 - **MCO-US-F1 ✅** As a Dev, my settings round-trip through Vault and unknown top-level / per-project
@@ -140,3 +158,17 @@ Dependency-ordered toward the headline goal (a frictionless single-binary worksp
 2. ⬜ Integration smoke test for the interactive menus (Backup / Commit / Pull / Settings)
    that today are exercised only by hand.
 3. ⬜ End-to-end `mindattic commit` exit-code assertions over a temp git repo.
+
+## Tickets
+> Permanent log of every change and fix — this repo's ticket system. Rows are append-only: never
+> delete or reword one; only move its Status (open → closed / wont-do) and fill in Ref. Status is
+> a word, not a glyph, so tickets don't count toward the story index. Keep this section last.
+
+| ID | Date | Type | Status | Summary | Ref |
+|---|---|---|---|---|---|
+| MCO-T1 | 2026-10-12 | docs | closed | Start the permanent ticket log in USER_STORIES.md | — |
+| MCO-T2 | 2026-10-12 | fix | closed | Archived repos still tagged work-in-progress: strip the stale topic on GitHub, and tell the user once (instead of retrying silently) when the token can't edit topics | MCO-US-E5, `FetchAsync_stops_stripping_after_github_refuses_and_flags_it` |
+| MCO-T3 | 2026-10-12 | docs | closed | Document the work-in-progress roster topic filter in README and as stories | MCO-US-E4, MCO-US-E5 |
+| MCO-T4 | 2026-10-12 | chore | closed | Add the /bughunt command; ASCII arrow in publish.ps1 output so the console doesn't garble it | — |
+| MCO-T5 | 2026-10-12 | feature | closed | Workflow menu item: open tickets, repo status and ticket-log checks via the MindAttic.Workflow library | MCO-US-E6 |
+| MCO-T6 | 2026-10-13 | feature | closed | Add 'General Prompt' to Open Project Tab: opens a CLI rooted at the workspace root with every project in context | OpenProjectMenu.OpenGeneralPrompt |

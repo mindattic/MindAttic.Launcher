@@ -79,7 +79,7 @@ talks to an LLM is orchestration, not an LLM call. (`Commands/HostAgentCommand.c
 - **Sibling repo** — another repo under the workspace root (e.g. MindAttic.Deploy).
 
 ## Status index (docs/USER_STORIES.md)
-- done: 20
-- partial: 5
+- done: 22
+- partial: 6
 - planned: 3
 

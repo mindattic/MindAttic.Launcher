@@ -6,7 +6,7 @@
 <title>MindAttic.Launcher</title>
 <meta name="description" content="One Windows console for a whole workspace of repos: open any project in a colored Windows Terminal tab running Claude, Codex, Gemini or Kimi, commit and push everything at once, and back up files plus SQL databases.">
 <meta name="generator" content="MindAttic Codex build-readme.ps1">
-<meta name="generated" content="2026-10-03">
+<meta name="generated" content="2026-10-12">
 <style>:root{
   --bg:#0d1117;--bg2:#161b22;--bg3:#21262d;
   --border:#30363d;
@@ -251,6 +251,11 @@ MindAttic.Launcher.exe commit --project MindAttic.Vault --message "Fix readme"</
 <td>Opens <code>PullMenu</code>: <code>git pull --ff-only</code> one project or all.</td>
 </tr>
 <tr>
+<td>Workflow</td>
+<td><code>workflow</code></td>
+<td>Opens <code>WorkflowMenu</code>, the Launcher's view of <a href="https://github.com/mindattic/MindAttic.Workflow">MindAttic.Workflow</a>: open tickets across every repo, each repo's uncommitted, unpushed and local-only work with its GitHub state, and the ticket-log checks. Read-only; deleting folders stays in the <code>workflow repos prune</code> CLI.</td>
+</tr>
+<tr>
 <td>Open Project Tab</td>
 <td><code>open</code></td>
 <td>Opens <code>OpenProjectMenu</code>: pick a project, then which agent CLI to launch it with, then <code>ProjectActionMenu</code>.</td>
@@ -416,6 +421,9 @@ MindAttic.Launcher.exe commit --project MindAttic.Vault --message "Fix readme"</
 <p>Every project tab gets a <code>--tabColor</code> (a plain hex the tab strip renders) and optionally a matching <code>MindAttic-&lt;Name&gt;</code> scheme in Windows Terminal's own <code>settings.json</code>: all ANSI colors shared, only <code>background</code> differs, derived by scaling the tab color to about 16% brightness (<code>ColorPalette.DarkBackground</code>). <code>Services/WindowsTerminalSchemes.cs</code> writes this scheme with a targeted text splice (locate the <code>schemes</code> array, insert the block after its <code>[</code>) rather than a JSON parse and reserialize, so the user's hand-maintained WT settings file is not reflowed. The splice is idempotent: re-running it with a scheme name that already exists returns the file unchanged (<a href="docs/BIBLE.md#MCO-LAW-4">MCO-LAW-4</a>).</p>
 <h3 id="project-discovery">Project discovery</h3>
 <p><code>Services/ProjectDiscovery.cs</code> scans the immediate subdirectories of the resolved workspace root for git repos (a <code>.git</code> directory or, for worktrees, a <code>.git</code> file) not already in <code>Projects</code> or <code>DiscoveryIgnore</code>, and surfaces them at startup via <code>DiscoverProjectsMenu</code>. For each candidate it prompts for the git URL (pre-filled from <code>origin</code> if detectable), a tab color from <code>ColorPalette.Colors</code> (a curated 16-entry palette) or a typed custom hex, and an optional description, then appends the project to the roster and writes its WT scheme. Press <code>S</code> to skip all remaining candidates this run, <code>N</code> to never ask about this one again (added to <code>DiscoveryIgnore</code>), or <code>Esc</code> to skip just this one.</p>
+<h3 id="roster-topic-filter">Roster topic filter</h3>
+<p>The roster and the Discover Projects walkthrough only show repos tagged with the GitHub topic <code>work-in-progress</code>. Tagging or untagging a repo on GitHub is how you move it into or out of the roster; untagging hides the project without deleting its settings entry. On every launch <code>Services/TopicRepoSync.cs</code> calls <code>GitHubTopicRepos</code> (<code>GET /user/repos</code>, paginated) with the GitHub token stored in Vault (set it in the Settings menu) and matches the result against each project's <code>RepoUrl</code>. If no token is set, or the fetch fails, the roster is shown unfiltered and a one-line notice explains why, so it never empties out silently.</p>
+<p>Archived repos are never in the roster, even if they still carry the topic (GitHub keeps topics after a repo is archived). When the launcher finds one, it removes the stale topic on GitHub and prints a note. That cleanup needs a token that can edit topics (the classic <code>repo</code> scope, or <code>Administration: write</code> on a fine-grained token). With a read-only token, the launcher stops after the first refusal, prints a note saying the token can't edit topics, and still hides the repo.</p>
 <h2 id="deploys">Deploys</h2>
 <p>The Launcher has no deploy menu item or sub-command; run MindAttic.Deploy directly (<code>MindAttic.Deploy.exe all</code>, or its interactive menu). This repo itself has no web deploy: this GitHub README is the project page. This binary owns no FTP pipeline and no per-project deploy state (<a href="docs/BIBLE.md#MCO-LAW-5">MCO-LAW-5</a>); deploying is, and will remain, MindAttic.Deploy's job.</p>
 <h2 id="limitations">Limitations</h2>
@@ -535,7 +543,7 @@ NuGet.config, global.json            package source + SDK roll-forward</code></p
 <hr>
 <p>Part of <a href="https://mindattic.com">MindAttic</a> — see more projects at <a href="https://github.com/mindattic">github.com/mindattic</a>. Related: <a href="https://github.com/mindattic/MindAttic.Vault">MindAttic.Vault</a> (settings and credential store) and <a href="https://github.com/mindattic/MindAttic.Deploy">MindAttic.Deploy</a> (deploy engine).</p>
 
-    <p class="codex-footer">Generated 2026-10-03 by the shared MindAttic Codex engine (<code>codex-standard/build-readme.ps1</code>) from <code>README.md</code>. Edit the Markdown source, not this file.</p>
+    <p class="codex-footer">Generated 2026-10-12 by the shared MindAttic Codex engine (<code>codex-standard/build-readme.ps1</code>) from <code>README.md</code>. Edit the Markdown source, not this file.</p>
   </main>
 </div>
 <script>(function(){

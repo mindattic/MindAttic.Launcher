@@ -29,7 +29,7 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
         RepoUrlBackfill.Run(store, git.RemoteUrl);
 
         // Rescanned every launch (not cached in settings): tagging/untagging
-        // the work-in-progress topic on GitHub is the lever for "what's in the
+        // the wip topic on GitHub is the lever for "what's in the
         // roster right now" — a repo surfaces the next time this starts, and
         // falls off just as quietly. Null (no token configured yet, or the
         // fetch failed) means "don't filter" — the roster degrades to showing
@@ -41,6 +41,7 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
         var open     = new OpenProjectMenu(store, providers, wt, tagged);
         var backup   = new BackupMenu(new BackupService(), store, new SqlBackupService(), tagged);
         var settingsMenu = new SettingsMenu(providers);
+        var workflow = new WorkflowMenu(Directory.Exists(ExePath.WorkspaceRoot) ? ExePath.WorkspaceRoot : MindAtticRoot());
 
         // Checked once at launch: running git every menu redraw would be wasteful,
         // and the build can't change underneath a running process anyway.
@@ -58,6 +59,7 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
         {
             new() { Name = "Commit and sync",               Description = "commit and push changes per project or across all", Tag = "commit" },
             new() { Name = "Pull",                          Description = "git pull --ff-only per project or across all", Tag = "pull" },
+            new() { Name = "Workflow",                      Description = "open tickets, repo status and ticket-log checks across the workspace", Tag = "workflow" },
             new() { Name = "Open Project Tab",              Description = "select a project, then pick which agent CLI to open it with", Tag = "open" },
             new() { Name = "Backup",                        Description = "back up MindAttic to R:\\Backup\\MindAttic", Tag = "backup" },
             new() { Name = "Settings",                      Description = "CLI development: the model each agent CLI runs with", Tag = "settings" },
@@ -94,6 +96,7 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
             {
                 case "commit":   commit.Run(); break;
                 case "pull":     pull.Run(); break;
+                case "workflow": workflow.Run(); break;
                 case "open":     open.Run(); break;
                 case "backup":   backup.Run(); break;
                 case "settings": settingsMenu.Run(); break;
