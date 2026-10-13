@@ -58,13 +58,22 @@ public sealed class ClaudeStatusService
                     : $"latest: {cacheDate}";
         }
 
-        if (usage.Count == 0)
-            return "  [grey50]Claude usage: no data yet[/]";
-
-        var parts = usage
+        // Entries like "<synthetic>" carry no real token usage — drop anything
+        // that rounds to zero so the line doesn't pad itself out with noise.
+        var shown = usage
+            .Where(kv => kv.Value > 0)
             .OrderByDescending(kv => kv.Value)
             .Take(3)
-            .Select(kv => $"{ShortModelName(kv.Key)}: [cyan1]{FormatTokens(kv.Value)}[/]");
+            .Select(kv => (Name: ShortModelName(kv.Key), Tokens: FormatTokens(kv.Value)))
+            .ToList();
+
+        if (shown.Count == 0)
+            return "  [grey50]Claude usage: no data yet[/]";
+
+        // Pad every count to the widest one shown so they share a left edge
+        // instead of drifting with each model's digit count.
+        var width = shown.Max(s => s.Tokens.Length);
+        var parts = shown.Select(s => $"{s.Name}: [cyan1]{s.Tokens.PadRight(width)}[/]");
 
         return $"  [grey50]{label}[/]  " + string.Join("  [grey50]·[/]  ", parts);
     }

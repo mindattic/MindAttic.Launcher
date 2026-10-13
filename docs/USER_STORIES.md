@@ -175,3 +175,4 @@ Dependency-ordered toward the headline goal (a frictionless single-binary worksp
 | MCO-T7 | 2026-10-13 | feature | closed | Menu redrawn as a Spectre live region (no flicker): clock, scrollbar, ellipsis cut-offs, spacer before < Back, Open Project Tab first | Ui/Menu.cs; WF-T9 spikes |
 | MCO-T8 | 2026-10-13 | chore | closed | Deploy to C:\Apps\MindAttic.Launcher like other apps: one deploy.ps1 (publish/launch/restart), generated deploy.bat + repo.path beside the exe; scripts/ removed | ExePathTests |
 | MCO-T9 | 2026-10-13 | feature | closed | Agent tabs git pull --ff-only before launch (Pull menu removed); Exit->Quit with spacer; Status item removed; menu redraws on resize; UTF-8 writer fix; token line hidden | GitServicePullTests |
+| MCO-T10 | 2026-10-13 | fix | closed | Token usage line drops zero-token models like <synthetic> and pads counts to one width (line is currently hidden) | ClaudeStatusService |
