@@ -21,14 +21,10 @@ public sealed class SettingsStore
 
     private static string ResolveLegacySettingsPath()
     {
-        var dir = Path.GetDirectoryName(Environment.ProcessPath ?? string.Empty);
-        while (!string.IsNullOrEmpty(dir))
-        {
-            if (File.Exists(Path.Combine(dir, "scripts", "publish.ps1")))
-                return Path.Combine(dir, "settings.json");
-            dir = Path.GetDirectoryName(dir);
-        }
-        return @"D:\Projects\MindAttic\settings.json";
+        var root = ExePath.RepoRoot;
+        return root is null
+            ? @"D:\Projects\MindAttic\settings.json"
+            : Path.Combine(root, "settings.json");
     }
 
     private static readonly JsonSerializerOptions LegacyReadOptions = new()

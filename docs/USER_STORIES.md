@@ -172,3 +172,5 @@ Dependency-ordered toward the headline goal (a frictionless single-binary worksp
 | MCO-T4 | 2026-10-12 | chore | closed | Add the /bughunt command; ASCII arrow in publish.ps1 output so the console doesn't garble it | — |
 | MCO-T5 | 2026-10-12 | feature | closed | Workflow menu item: open tickets, repo status and ticket-log checks via the MindAttic.Workflow library | MCO-US-E6 |
 | MCO-T6 | 2026-10-13 | feature | closed | Add 'General Prompt' to Open Project Tab: opens a CLI rooted at the workspace root with every project in context | OpenProjectMenu.OpenGeneralPrompt |
+| MCO-T7 | 2026-10-13 | feature | closed | Menu redrawn as a Spectre live region (no flicker): clock, scrollbar, ellipsis cut-offs, spacer before < Back, Open Project Tab first | Ui/Menu.cs; WF-T9 spikes |
+| MCO-T8 | 2026-10-13 | chore | closed | Deploy to C:\Apps\MindAttic.Launcher like other apps: one deploy.ps1 (publish/launch/restart), generated deploy.bat + repo.path beside the exe; scripts/ removed | ExePathTests |

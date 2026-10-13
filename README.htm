@@ -6,7 +6,7 @@
 <title>MindAttic.Launcher</title>
 <meta name="description" content="One Windows console for a whole workspace of repos: open any project in a colored Windows Terminal tab running Claude, Codex, Gemini or Kimi, commit and push everything at once, and back up files plus SQL databases.">
 <meta name="generator" content="MindAttic Codex build-readme.ps1">
-<meta name="generated" content="2026-10-12">
+<meta name="generated" content="2026-10-13">
 <style>:root{
   --bg:#0d1117;--bg2:#161b22;--bg3:#21262d;
   --border:#30363d;
@@ -151,8 +151,8 @@ pre:hover .cpbtn{opacity:1}
 <p>Prerequisites: Windows, the .NET 10 SDK, Windows Terminal (<code>wt</code>) on <code>PATH</code>, at least one agent CLI (<code>claude</code>, <code>codex</code>, <code>agy</code> or <code>kimi</code>), and for backups <code>robocopy</code> and <code>sqlcmd</code>.</p>
 <pre><code class="language-powershell">git clone https://github.com/mindattic/MindAttic.Launcher.git
 cd MindAttic.Launcher
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\publish.ps1
-.\artifacts\MindAttic.Launcher.exe</code></pre>
+powershell -NoProfile -ExecutionPolicy Bypass -File deploy.ps1 -Launch</code></pre>
+<p><code>deploy.ps1</code> publishes to <code>C:\Apps\MindAttic.Launcher\</code> like every other MindAttic app and writes a <code>deploy.bat</code> next to the exe. Point your desktop shortcut at <code>C:\Apps\MindAttic.Launcher\deploy.bat</code>: it republishes only when source changed, then starts the Launcher.</p>
 <p>You should see the menu above. On first run the launcher offers every git repo directly under the workspace root for the roster; pick a color for each, then choose Open Project Tab.</p>
 <h2 id="how-it-works">How it works</h2>
 <p><code>Program.cs</code> wires a <code>Spectre.Console.Cli</code> <code>CommandApp&lt;MainMenuCommand&gt;</code> with the named sub-commands <code>host</code> and <code>commit</code> plus <code>version</code>/<code>--version</code>. Running the exe with no arguments drives the interactive menu; every named sub-command is a scriptable front door onto the same services. There is no separate code path for "menu mode" versus "CLI mode" (HOUSE-LAW-6, "one engine, many front doors").</p>
@@ -288,7 +288,7 @@ MindAttic.Launcher.exe commit --project MindAttic.Vault --message "Fix readme"</
 <tr>
 <td>Restart</td>
 <td><code>restart</code></td>
-<td>Launches <code>scripts\restart.ps1</code> in a fresh tab (waits for this process's PID to exit, force-republishes, then re-execs) and exits this instance. Needed because Windows locks the running exe image so it cannot republish itself in place.</td>
+<td>Launches <code>deploy.ps1 -WaitPid &lt;this pid&gt;</code> in a fresh tab (waits for this process to exit, force-republishes, then re-execs) and exits this instance. Needed because Windows locks the running exe image so it cannot republish itself in place.</td>
 </tr>
 <tr>
 <td>Exit</td>
@@ -444,10 +444,12 @@ dotnet build
 # Test: NUnit 4, run from the repo root
 dotnet test
 
-# Publish a single-file, framework-dependent win-x64 exe to artifacts\
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\publish.ps1
-#   -Clean   : wipe bin/obj first for a full, timestamp-independent rebuild</code></pre>
-<p><code>scripts\ensure-fresh.ps1</code> republishes <code>artifacts\MindAttic.Launcher.exe</code> only when it is missing or a source file is newer than it (a fast no-op otherwise); <code>-Force</code> skips that heuristic. It is called on every launch (by whatever wrapper invokes the exe) and by the in-app Restart flow. <code>scripts\restart.ps1</code> is what Restart launches in a fresh tab: it waits for the old process's PID to exit (releasing the Windows lock on the running exe image), force-republishes, then hands the tab to the fresh binary, refusing to fall back to a stale exe on a failed rebuild.</p>
+# Deploy a single-file, framework-dependent win-x64 exe to C:\Apps\MindAttic.Launcher\
+powershell -NoProfile -ExecutionPolicy Bypass -File deploy.ps1
+#   -Force        : clean bin/obj rebuild even if nothing looks changed
+#   -Launch ...   : then run the deployed exe here, passing the remaining args
+#   -WaitPid &lt;n&gt;  : the in-app Restart (wait for that menu to exit, force, launch)</code></pre>
+<p><code>deploy.ps1</code> is the one script for publishing, launching and restarting. Without <code>-Force</code> it republishes only when the deployed exe, <code>deploy.bat</code> or <code>repo.path</code> is missing or a source file is newer than the exe, so the per-launch call is a fast no-op. It never closes running copies (every agent tab is a live <code>MindAttic.Launcher.exe host</code> process): a locked exe is renamed to <code>*.stale-*</code> and the fresh one published beside it; leftovers are deleted once unlocked. Each publish also writes <code>deploy.bat</code> (what the desktop shortcut runs) and <code>repo.path</code> (the source path, which the deployed exe reads to find the repo, workspace root and git). Restart refuses to fall back to a stale exe when the rebuild fails.</p>
 <p>Test coverage (<code>MindAttic.Launcher.Tests/</code>, NUnit 4) spans:</p>
 <ul>
 <li>settings and Vault round-trip, legacy-seed migration and unknown-key preservation</li>
@@ -477,14 +479,10 @@ docs/
   USER_STORIES.md                    L2: test-cited stories
   BIBLE.digest.md                    GENERATED, never hand-edit
   rfc/                               open design notes (deleted once decided and folded in)
-scripts/
-  publish.ps1                        dotnet publish -&gt; artifacts\MindAttic.Launcher.exe
-  ensure-fresh.ps1                   conditional republish (staleness heuristic)
-  restart.ps1                        used by the in-app Restart flow (waits out the exe lock)
+deploy.ps1                           publish to C:\Apps\MindAttic.Launcher\ (+ deploy.bat, repo.path); -Launch, -WaitPid
 tools/
   codex.ps1                          docs doctor/digest tooling
   build-readme.ps1                   thin wrapper -&gt; workspace-shared README-&gt;HTML engine
-artifacts/                           publish output (gitignored)
 Directory.Build.props                shared MSBuild settings (Nullable, TreatWarningsAsErrors, ...)
 MindAttic.Launcher.slnx              solution file
 NuGet.config, global.json            package source + SDK roll-forward</code></pre>
@@ -543,7 +541,7 @@ NuGet.config, global.json            package source + SDK roll-forward</code></p
 <hr>
 <p>Part of <a href="https://mindattic.com">MindAttic</a> — see more projects at <a href="https://github.com/mindattic">github.com/mindattic</a>. Related: <a href="https://github.com/mindattic/MindAttic.Vault">MindAttic.Vault</a> (settings and credential store) and <a href="https://github.com/mindattic/MindAttic.Deploy">MindAttic.Deploy</a> (deploy engine).</p>
 
-    <p class="codex-footer">Generated 2026-10-12 by the shared MindAttic Codex engine (<code>codex-standard/build-readme.ps1</code>) from <code>README.md</code>. Edit the Markdown source, not this file.</p>
+    <p class="codex-footer">Generated 2026-10-13 by the shared MindAttic Codex engine (<code>codex-standard/build-readme.ps1</code>) from <code>README.md</code>. Edit the Markdown source, not this file.</p>
   </main>
 </div>
 <script>(function(){

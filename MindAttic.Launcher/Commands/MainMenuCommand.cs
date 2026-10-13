@@ -14,6 +14,17 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
 
     public override Task<int> ExecuteAsync(CommandContext context, Settings settings)
     {
+        // The console starts on the OEM code page, where the menu's rounded box
+        // corners, scrollbar thumb (┃) and ellipsis (…) print as '?'. Switch the
+        // menu to UTF-8 (not `host`: agent tabs keep whatever the agent expects),
+        // and tell Spectre, which sized up Unicode support when it was created.
+        try
+        {
+            System.Console.OutputEncoding = System.Text.Encoding.UTF8;
+            AnsiConsole.Profile.Capabilities.Unicode = true;
+        }
+        catch (IOException) { /* redirected output: no console code page to set */ }
+
         var store = new SettingsStore();
         _ = store.Load(); // surface legacy-seed migration on launch
 
@@ -57,10 +68,11 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
 
         var items = new List<MenuItem>
         {
+            // First row = the highlighted default on launch (resumeIndex starts at 0).
+            new() { Name = "Open Project Tab",              Description = "select a project, then pick which agent CLI to open it with", Tag = "open" },
             new() { Name = "Commit and sync",               Description = "commit and push changes per project or across all", Tag = "commit" },
             new() { Name = "Pull",                          Description = "git pull --ff-only per project or across all", Tag = "pull" },
             new() { Name = "Workflow",                      Description = "open tickets, repo status and ticket-log checks across the workspace", Tag = "workflow" },
-            new() { Name = "Open Project Tab",              Description = "select a project, then pick which agent CLI to open it with", Tag = "open" },
             new() { Name = "Backup",                        Description = "back up MindAttic to R:\\Backup\\MindAttic", Tag = "backup" },
             new() { Name = "Settings",                      Description = "CLI development: the model each agent CLI runs with", Tag = "settings" },
             new() { Name = "Status",                        Description = "open a Claude tab at the workspace root with /status pre-filled", Tag = "status" },
@@ -164,14 +176,13 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
 
     private static void RestartInNewTab(WindowsTerminalLauncher wt)
     {
-        // We CAN'T republish here: this menu runs from artifacts\MindAttic.Launcher.exe,
-        // and Windows locks a running exe image — dotnet publish can't overwrite it, so
-        // an in-process EnsureFresh() silently fails and we'd respawn the stale binary.
-        // Instead launch scripts\restart.ps1 in a fresh tab; it waits for THIS process
-        // to exit (releasing the lock), republishes, then runs the fresh exe. We return
-        // 0 right after, so this tab closes and the lock drops.
+        // We don't republish in-process: this menu usually runs from the deployed exe
+        // in C:\Apps\MindAttic.Launcher, which Windows locks while it runs. Instead
+        // run deploy.ps1 -WaitPid in a fresh tab; it waits for THIS process to exit,
+        // force-rebuilds, then runs the fresh exe (and refuses to launch a stale one
+        // if the build fails). We return 0 right after, so this tab closes.
         var root = ExePath.RepoRoot;
-        var restartScript = root is null ? null : Path.Combine(root, "scripts", "restart.ps1");
+        var restartScript = root is null ? null : Path.Combine(root, "deploy.ps1");
 
         if (restartScript is null || !File.Exists(restartScript))
         {

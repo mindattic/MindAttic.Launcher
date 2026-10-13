@@ -5,30 +5,37 @@ namespace MindAttic.Launcher.Services;
 /// <summary>
 /// Resolves paths to the running and canonical MindAttic.Launcher executables.
 /// <see cref="Self"/> is whatever exe is currently executing (e.g. the Debug
-/// bin during dev). <see cref="Release"/> is the published single-file exe at
-/// <c>artifacts\MindAttic.Launcher.exe</c> — what the launcher .bat invokes
-/// and what "Restart" respawns. <see cref="EnsureFresh"/> shells out to
-/// <c>scripts\ensure-fresh.ps1</c> to republish when source has changed.
+/// bin during dev). <see cref="Release"/> is the deployed single-file exe in
+/// <see cref="DeployDir"/>, which the desktop shortcut's deploy.bat runs and
+/// which agent tabs and "Restart" launch. <see cref="EnsureFresh"/> shells out to
+/// the repo's <c>deploy.ps1</c> to republish when source has changed.
 /// </summary>
 public static class ExePath
 {
+    /// <summary>Where the Launcher is deployed, alongside every other MindAttic app.</summary>
+    public const string DeployDir = @"C:\Apps\MindAttic.Launcher";
+
+    /// <summary>
+    /// File deploy.ps1 writes next to the deployed exe, holding the source repo's
+    /// path. The deployed exe has no repo above it to walk up to, so this is how it
+    /// finds deploy.ps1, scripts\, the workspace root and git.
+    /// </summary>
+    public const string RepoPathFile = "repo.path";
+
     public static string Self => Environment.ProcessPath ?? "MindAttic.Launcher";
 
     public static string Release
     {
         get
         {
-            var root = FindRepoRoot();
-            return root is null
-                ? Self
-                : Path.Combine(root, "artifacts", "MindAttic.Launcher.exe");
+            var deployed = Path.Combine(DeployDir, "MindAttic.Launcher.exe");
+            return File.Exists(deployed) ? deployed : Self;
         }
     }
 
     /// <summary>
-    /// The MindAttic.Launcher repo root (the directory containing
-    /// <c>scripts\publish.ps1</c>), walking up from the running exe. Null when
-    /// the exe lives outside the repo (e.g. an installed copy). Used by
+    /// The MindAttic.Launcher repo root (the directory holding <c>deploy.ps1</c>
+    /// and the solution). Null when it can't be found. Used by
     /// <see cref="BuildFreshness"/> to compare the build against the latest commit.
     /// </summary>
     public static string? RepoRoot => FindRepoRoot();
@@ -36,7 +43,7 @@ public static class ExePath
     /// <summary>
     /// The directory under which every MindAttic project repo lives (e.g.
     /// <c>D:\Projects\MindAttic</c>) — the parent of <see cref="RepoRoot"/>.
-    /// Falls back to the historical path when running outside a checkout.
+    /// Falls back to the historical path when the repo can't be found.
     /// </summary>
     public static string WorkspaceRoot
     {
@@ -52,7 +59,7 @@ public static class ExePath
     {
         var root = FindRepoRoot();
         if (root is null) return;
-        var script = Path.Combine(root, "scripts", "ensure-fresh.ps1");
+        var script = Path.Combine(root, "deploy.ps1");
         if (!File.Exists(script)) return;
 
         var psi = new ProcessStartInfo("powershell")
@@ -96,15 +103,38 @@ public static class ExePath
         }
     }
 
-    private static string? FindRepoRoot()
+    private static string? FindRepoRoot() =>
+        ResolveRepoRoot(Path.GetDirectoryName(Environment.ProcessPath ?? string.Empty));
+
+    /// <summary>
+    /// Finds the repo for an exe in <paramref name="exeDir"/>: walk up from it (a
+    /// dev build under bin\), else read the <see cref="RepoPathFile"/> a deploy
+    /// wrote next to the exe. Either way the result must actually be the repo.
+    /// </summary>
+    public static string? ResolveRepoRoot(string? exeDir)
     {
-        var dir = Path.GetDirectoryName(Environment.ProcessPath ?? string.Empty);
-        while (!string.IsNullOrEmpty(dir))
+        if (string.IsNullOrEmpty(exeDir)) return null;
+
+        for (var dir = exeDir; !string.IsNullOrEmpty(dir); dir = Path.GetDirectoryName(dir))
         {
-            if (File.Exists(Path.Combine(dir, "scripts", "publish.ps1")))
-                return dir;
-            dir = Path.GetDirectoryName(dir);
+            if (IsRepo(dir)) return dir;
         }
-        return null;
+
+        try
+        {
+            var marker = Path.Combine(exeDir, RepoPathFile);
+            if (!File.Exists(marker)) return null;
+            var recorded = File.ReadAllText(marker).Trim();
+            return IsRepo(recorded) ? recorded : null;
+        }
+        catch
+        {
+            return null; // unreadable marker: behave as if there's no repo
+        }
     }
+
+    private static bool IsRepo(string dir) =>
+        !string.IsNullOrWhiteSpace(dir)
+        && File.Exists(Path.Combine(dir, "deploy.ps1"))
+        && File.Exists(Path.Combine(dir, "MindAttic.Launcher.slnx"));
 }
