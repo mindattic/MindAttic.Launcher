@@ -105,10 +105,14 @@ public sealed class SettingsMenu(AgentProviderRegistry providers)
         items.Add(new() { Name = "Use CLI default", Description = "remove --model so the CLI picks", Tag = "clear" });
 
         Screen.Header("Settings", provider.Name, "Model");
-        AnsiConsole.MarkupLine(
-            $"  Current model: [cyan1]{Markup.Escape(string.IsNullOrWhiteSpace(current) ? "(CLI default)" : current!)}[/]");
-        AnsiConsole.MarkupLine($"  [grey50]Command:[/] [grey50]{Markup.Escape(provider.RunCommand)}[/]");
-        AnsiConsole.WriteLine();
+        // Through Screen so a window resize repaints them above the list.
+        Screen.Add(() =>
+        {
+            AnsiConsole.MarkupLine(
+                $"  Current model: [cyan1]{Markup.Escape(string.IsNullOrWhiteSpace(current) ? "(CLI default)" : current!)}[/]");
+            AnsiConsole.MarkupLine($"  [grey50]Command:[/] [grey50]{Markup.Escape(provider.RunCommand)}[/]");
+            AnsiConsole.WriteLine();
+        });
 
         var sel = Menu.Prompt($"Set the model for {Markup.Escape(provider.Name)}:", items);
         if (sel is null) return;

@@ -16,11 +16,15 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
     {
         // The console starts on the OEM code page, where the menu's rounded box
         // corners, scrollbar thumb (┃) and ellipsis (…) print as '?'. Switch the
-        // menu to UTF-8 (not `host`: agent tabs keep whatever the agent expects),
-        // and tell Spectre, which sized up Unicode support when it was created.
+        // menu to UTF-8 (not `host`: agent tabs keep whatever the agent expects).
+        // Spectre's console already exists by now, writing through the OLD
+        // encoder: left as-is it would send code-page bytes to a UTF-8 console and
+        // every non-ASCII character would show as a replacement glyph. Recreate it
+        // so it writes UTF-8 and detects Unicode support afresh.
         try
         {
             System.Console.OutputEncoding = System.Text.Encoding.UTF8;
+            AnsiConsole.Console = AnsiConsole.Create(new AnsiConsoleSettings());
             AnsiConsole.Profile.Capabilities.Unicode = true;
         }
         catch (IOException) { /* redirected output: no console code page to set */ }
@@ -48,7 +52,6 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
         var tagged = TopicRepoSync.FetchOrNull();
 
         var commit   = new CommitMenu(store, git, tagged);
-        var pull     = new PullMenu(store, git, tagged);
         var open     = new OpenProjectMenu(store, providers, wt, tagged);
         var backup   = new BackupMenu(new BackupService(), store, new SqlBackupService(), tagged);
         var settingsMenu = new SettingsMenu(providers);
@@ -57,7 +60,9 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
         // Checked once at launch: running git every menu redraw would be wasteful,
         // and the build can't change underneath a running process anyway.
         var staleness = BuildFreshness.Check();
-        var status = new ClaudeStatusService();
+        // Token-spend line hidden for now: it gave no actionable insight. Restore
+        // these two lines (here and the Screen.Add below) to bring it back.
+        // var status = new ClaudeStatusService();
 
         // Offer any git repos found under the workspace that aren't in the roster
         // yet, so a freshly-created repo is added (with its color scheme) instead
@@ -71,23 +76,22 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
             // First row = the highlighted default on launch (resumeIndex starts at 0).
             new() { Name = "Open Project Tab",              Description = "select a project, then pick which agent CLI to open it with", Tag = "open" },
             new() { Name = "Commit and sync",               Description = "commit and push changes per project or across all", Tag = "commit" },
-            new() { Name = "Pull",                          Description = "git pull --ff-only per project or across all", Tag = "pull" },
             new() { Name = "Workflow",                      Description = "open tickets, repo status and ticket-log checks across the workspace", Tag = "workflow" },
             new() { Name = "Backup",                        Description = "back up MindAttic to R:\\Backup\\MindAttic", Tag = "backup" },
             new() { Name = "Settings",                      Description = "CLI development: the model each agent CLI runs with", Tag = "settings" },
-            new() { Name = "Status",                        Description = "open a Claude tab at the workspace root with /status pre-filled", Tag = "status" },
             new() { Name = "Open Command Prompt (Admin)",   Description = "open cmd as Administrator at the workspace root", Tag = "cmd" },
             new() { Name = "Open PowerShell (Admin)",       Description = "open PowerShell as Administrator at the workspace root", Tag = "ps" },
             new() { Name = "Restart",                       Description = "reload this console in a new tab; other tabs are untouched", Tag = "restart" },
-            new() { Name = "Exit",                          Description = "close this menu (other tabs are untouched)", Tag = "exit" }
+            new() { Name = "Quit",                          Description = "close this menu (other tabs are untouched)", Tag = "exit", SpacerBefore = true }
         };
 
         var resumeIndex = 0;
         while (true)
         {
             Screen.Header();
-            RenderStaleness(staleness);
-            status.Render();
+            // Via Screen.Add so a window resize repaints them above the menu.
+            Screen.Add(() => RenderStaleness(staleness));
+            // Screen.Add(status.Render);
 
             // Cancel after 60 s so the menu redraw loop wakes up and reprints
             // fresh status even when the user is idle.
@@ -107,24 +111,10 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
             switch (result.Selected.Tag)
             {
                 case "commit":   commit.Run(); break;
-                case "pull":     pull.Run(); break;
                 case "workflow": workflow.Run(); break;
                 case "open":     open.Run(); break;
                 case "backup":   backup.Run(); break;
                 case "settings": settingsMenu.Run(); break;
-                case "status":
-                {
-                    var statusRoot = ExePath.WorkspaceRoot;
-                    if (!Directory.Exists(statusRoot)) statusRoot = MindAtticRoot();
-                    var provider = providers.Current();
-                    Screen.Working("Opening status tab…  Please wait.");
-                    ExePath.EnsureFresh();
-                    wt.Open(wt.BuildAgentTabAtPath(
-                        $"Status [{provider.Key}]", statusRoot, provider, ExePath.Release,
-                        prompt: "/status"));
-                    Thread.Sleep(800);
-                    break;
-                }
                 case "cmd":
                 case "ps":
                 {

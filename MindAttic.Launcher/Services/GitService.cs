@@ -174,6 +174,16 @@ public sealed class GitService
             : "updated");
     }
 
+    /// <summary>
+    /// True when a failed <see cref="Pull"/> only means the branch has no remote to
+    /// pull from (a local-only repo) — nothing to fetch, so not worth a warning.
+    /// </summary>
+    public static bool IsNoUpstream(string? pullMessage) =>
+        pullMessage is not null
+        && (pullMessage.Contains("no tracking information", StringComparison.OrdinalIgnoreCase)
+            || pullMessage.Contains("No remote repository specified", StringComparison.OrdinalIgnoreCase)
+            || pullMessage.Contains("does not appear to be a git repository", StringComparison.OrdinalIgnoreCase));
+
     public (bool ok, string message, string commitMessage) Commit(string repoPath, string? userMessage = null)
     {
         var status = Status(repoPath);

@@ -47,7 +47,7 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
         var registry = new AgentProviderRegistry(store);
 
         // Two ways to root the agent. --path wins: it hosts a session at an
-        // arbitrary directory with no roster entry (e.g. the Status tab, rooted
+        // arbitrary directory with no roster entry (e.g. a General tab, rooted
         // at the whole MindAttic workspace). Otherwise --name looks a registered
         // project up the usual way.
         Project? project = null;
@@ -106,6 +106,8 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
             return 2;
         }
 
+        PullBeforeLaunch(workingDir, title);
+
         using var pinner = new TitlePinner(title);
         // Per-tab pipe lets the launcher's "Remote Control" menu type
         // /remote-control into every running Claude/Codex tab at once via
@@ -156,5 +158,37 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
             System.Console.Error.WriteLine($"Failed to launch {provider.Key}: {ex.Message}");
             return 3;
         }
+    }
+
+    /// <summary>
+    /// Every agent tab starts on the newest code: <c>git pull --ff-only</c> in the
+    /// tab's directory before the agent launches (this replaced the menu's Pull
+    /// item). A failed pull — local changes in the way, diverged history, offline —
+    /// is shown in the tab and the agent still starts on the local code; it never
+    /// blocks the launch. Non-repos and repos with no remote are skipped quietly.
+    /// </summary>
+    private static void PullBeforeLaunch(string workingDir, string title)
+    {
+        var dotGit = System.IO.Path.Combine(workingDir, ".git");
+        if (!Directory.Exists(dotGit) && !File.Exists(dotGit)) return;
+
+        System.Console.WriteLine($"Pulling the latest {title}...");
+        var (ok, message) = new GitService().Pull(workingDir);
+        if (ok)
+        {
+            System.Console.WriteLine($"  {message}.");
+            return;
+        }
+        if (GitService.IsNoUpstream(message)) return;
+
+        var prior = System.Console.ForegroundColor;
+        System.Console.ForegroundColor = ConsoleColor.Yellow;
+        System.Console.WriteLine("  Pull failed; starting on the local code:");
+        foreach (var line in (message ?? "").Split('\n'))
+        {
+            if (!string.IsNullOrWhiteSpace(line))
+                System.Console.WriteLine($"    {line.TrimEnd()}");
+        }
+        System.Console.ForegroundColor = prior;
     }
 }

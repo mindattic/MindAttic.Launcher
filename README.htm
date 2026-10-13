@@ -115,16 +115,16 @@ pre:hover .cpbtn{opacity:1}
 <p><img src="https://img.shields.io/badge/C%23-.NET%2010-512BD4" alt="C#"> <img src="https://img.shields.io/badge/platform-Windows%20x64-0078D6" alt="Platform"> <img src="https://img.shields.io/badge/UI-Spectre.Console-informational" alt="UI"> <img src="https://img.shields.io/badge/tests-NUnit%204-green" alt="Tests"> <img src="https://img.shields.io/badge/status-active-brightgreen" alt="Status"></p>
 <pre><code class="language-text"> MindAttic.Launcher                       (interactive menu, items from MainMenuCommand.cs)
 
-   Commit and sync               commit and push changes per project or across all
-   Pull                          git pull --ff-only per project or across all
  &gt; Open Project Tab              select a project, then pick which agent CLI to open it with
+   Commit and sync               commit and push changes per project or across all
+   Workflow                      open tickets, repo status and ticket-log checks across the workspace
    Backup                        back up MindAttic to R:\Backup\MindAttic
    Settings                      CLI development: the model each agent CLI runs with
-   Status                        open a Claude tab at the workspace root with /status pre-filled
    Open Command Prompt (Admin)   open cmd as Administrator at the workspace root
    Open PowerShell (Admin)       open PowerShell as Administrator at the workspace root
    Restart                       reload this console in a new tab; other tabs are untouched
-   Exit                          close this menu (other tabs are untouched)</code></pre>
+
+   Quit                          close this menu (other tabs are untouched)</code></pre>
 <p>A single <code>MindAttic.Launcher.exe</code> (<code>net10.0-windows</code>, published <code>win-x64</code>) built on <a href="https://spectreconsole.net/">Spectre.Console</a>: one interactive menu plus scriptable <code>host</code>, <code>commit</code> and <code>version</code> sub-commands. It is a console app, so the menu above is a text rendering of its items rather than a screenshot.</p>
 <h2 id="why">Why</h2>
 <ul>
@@ -144,7 +144,7 @@ pre:hover .cpbtn{opacity:1}
 <li>Per-provider model picker that rewrites the <code>--model</code> flag inside the provider's run command.</li>
 <li>Lossless settings: unknown keys written by other MindAttic tools survive every save (<a href="https://github.com/mindattic/MindAttic.Vault">MindAttic.Vault</a> backs the store).</li>
 <li>Self-refreshing exe: the in-app Restart waits out the Windows file lock, republishes and relaunches; a header notice warns when the running build is behind the latest commit.</li>
-<li>A live Claude usage and rate-limit block above every menu redraw (read from <code>~/.claude/*</code>, cached 60 seconds).</li>
+<li>A Claude usage and rate-limit block (<code>ClaudeStatusService</code>, read from <code>~/.claude/*</code>), currently hidden: commented out in <code>MainMenuCommand</code> because it gave no actionable insight.</li>
 </ul>
 <p>It is not an agent: it execs a provider CLI with inherited stdio and never calls an LLM SDK or makes an LLM API call directly.</p>
 <h2 id="quick-start">Quick start</h2>
@@ -207,12 +207,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File deploy.ps1 -Launch</code></p
 <p>Options:</p>
 <ul>
 <li><code>--name &lt;NAME&gt;</code>: project name from settings (optional if <code>--path</code> is given).</li>
-<li><code>--path &lt;PATH&gt;</code>: root the agent at an arbitrary directory instead of a registered project. Takes precedence over <code>--name</code>; this is how the Status menu item roots a session at the workspace root.</li>
+<li><code>--path &lt;PATH&gt;</code>: root the agent at an arbitrary directory instead of a registered project. Takes precedence over <code>--name</code>; this is how Open Project Tab's General option roots a session at the workspace root.</li>
 <li><code>--title &lt;TITLE&gt;</code>: tab title (defaults to <code>--name</code>, or the directory's leaf name).</li>
 <li><code>--provider &lt;PROVIDER&gt;</code>: provider key (<code>Claude</code>, <code>Codex</code>, <code>Gemini</code> or <code>Kimi</code> by default). Omit it to resolve to the first-listed provider.</li>
 <li><code>--prompt &lt;PROMPT&gt;</code>: seeds the agent's first turn (pre-fills input; does not auto-submit).</li>
 </ul>
-<p>Behavior: splits the resolved provider's <code>RunCommand</code> into argv (<code>CommandLineParser.Split</code>), pushes any Vault-stored credential for that provider (see <a href="#agent-providers-and-host-tabs">Agent providers and host tabs</a>), starts <code>TitlePinner</code> (busy/idle tab-title watchdog) and <code>HostInputPipeServer</code> (per-tab named pipe for input injection), then starts the provider exe with inherited stdio and waits for exit.</p>
+<p>Behavior: if the tab's directory is a git repo, runs <code>git pull --ff-only</code> first so every agent starts on the newest code (a failed pull is shown in the tab and the agent still starts on the local code; repos with no remote are skipped quietly). Then splits the resolved provider's <code>RunCommand</code> into argv (<code>CommandLineParser.Split</code>), pushes any Vault-stored credential for that provider (see <a href="#agent-providers-and-host-tabs">Agent providers and host tabs</a>), starts <code>TitlePinner</code> (busy/idle tab-title watchdog) and <code>HostInputPipeServer</code> (per-tab named pipe for input injection), then starts the provider exe with inherited stdio and waits for exit.</p>
 <p>Exit codes:</p>
 <ul>
 <li><code>0</code>: the provider ran and exited (its own exit code is passed through).</li>
@@ -233,7 +233,7 @@ MindAttic.Launcher.exe commit --project MindAttic.Vault --message "Fix readme"</
 </ul>
 <p>For each target it reads git status, skips clean repos, auto-generates a message from added, modified, deleted and renamed files (capped to 200 characters, falling back to counts) when none is given, then runs <code>git add -A</code>, <code>git commit -m &lt;msg&gt;</code> and <code>git push --quiet</code>. Exit <code>1</code> means at least one project had a missing path, an invalid git status, or a failed add, commit or push.</p>
 <h2 id="interactive-menu">Interactive menu</h2>
-<p>Launching the exe with no arguments runs <code>MainMenuCommand</code>, which loads settings (performing a one-time legacy-file seed if needed, see <a href="#settings-and-persistence">Settings and persistence</a>), then, before the first menu paint, runs the startup Discover Projects walkthrough (<code>DiscoverProjectsMenu</code>, not itself a menu item), offering to add any git repo found directly under the workspace root that is not yet in the roster or on the "never ask again" list. It also runs a one-time build-staleness check (<code>BuildFreshness.Check()</code>, which warns when the running exe is behind the latest commit in this repo) and renders a live Claude usage and rate-limit block (<code>ClaudeStatusService</code>, cached 60 seconds, read from <code>~/.claude/*</code>) above every menu redraw.</p>
+<p>Launching the exe with no arguments runs <code>MainMenuCommand</code>, which loads settings (performing a one-time legacy-file seed if needed, see <a href="#settings-and-persistence">Settings and persistence</a>), then, before the first menu paint, runs the startup Discover Projects walkthrough (<code>DiscoverProjectsMenu</code>, not itself a menu item), offering to add any git repo found directly under the workspace root that is not yet in the roster or on the "never ask again" list. It also runs a one-time build-staleness check (<code>BuildFreshness.Check()</code>, which warns when the running exe is behind the latest commit in this repo). (The Claude usage and rate-limit block from <code>ClaudeStatusService</code> is currently commented out.)</p>
 <h3 id="top-level-menu">Top level menu</h3>
 <table><thead><tr>
 <th>Item</th>
@@ -244,11 +244,6 @@ MindAttic.Launcher.exe commit --project MindAttic.Vault --message "Fix readme"</
 <td>Commit and sync</td>
 <td><code>commit</code></td>
 <td>Opens <code>CommitMenu</code>: commit and push one project or all, prompting for an optional message (blank means auto-generated).</td>
-</tr>
-<tr>
-<td>Pull</td>
-<td><code>pull</code></td>
-<td>Opens <code>PullMenu</code>: <code>git pull --ff-only</code> one project or all.</td>
 </tr>
 <tr>
 <td>Workflow</td>
@@ -271,11 +266,6 @@ MindAttic.Launcher.exe commit --project MindAttic.Vault --message "Fix readme"</
 <td>Opens <code>SettingsMenu</code>: the model each agent CLI runs with (only).</td>
 </tr>
 <tr>
-<td>Status</td>
-<td><code>status</code></td>
-<td>Opens a host tab at the resolved workspace root using the first-listed provider, pre-filled with <code>/status</code>.</td>
-</tr>
-<tr>
 <td>Open Command Prompt (Admin)</td>
 <td><code>cmd</code></td>
 <td>Opens an elevated <code>cmd</code> tab at the workspace root via UAC (<code>wt … -- cmd</code>, <code>Verb=runas</code>).</td>
@@ -291,12 +281,12 @@ MindAttic.Launcher.exe commit --project MindAttic.Vault --message "Fix readme"</
 <td>Launches <code>deploy.ps1 -WaitPid &lt;this pid&gt;</code> in a fresh tab (waits for this process to exit, force-republishes, then re-execs) and exits this instance. Needed because Windows locks the running exe image so it cannot republish itself in place.</td>
 </tr>
 <tr>
-<td>Exit</td>
+<td>Quit</td>
 <td><code>exit</code></td>
 <td>Closes the menu; other tabs are untouched.</td>
 </tr>
 </tbody></table>
-<p>The header also shows the staleness notice and the Claude usage block; neither is a menu item.</p>
+<p>The header also shows the staleness notice when the build is behind; it is not a menu item.</p>
 <h3 id="open-project-tab">Open Project Tab</h3>
 <p><code>OpenProjectMenu</code> lists every roster project sorted by name. Picking one prompts "Open <code>&lt;Project&gt;</code> with which agent?" over every configured provider (Claude, Codex, Gemini, Kimi by default, in that order). This choice is never persisted (see <a href="docs/BIBLE.md#MCO-§2">MCO-§2</a>). It then opens <code>ProjectActionMenu</code> for that project and provider:</p>
 <table><thead><tr>
@@ -505,7 +495,7 @@ NuGet.config, global.json            package source + SDK roll-forward</code></p
 </tr>
 <tr>
 <td>Host tab</td>
-<td>A <code>wt</code> tab running <code>MindAttic.Launcher.exe host</code>, which execs a provider with inherited stdio, rooted at a repo (or a <code>--path</code> directory, for example the Status tab).</td>
+<td>A <code>wt</code> tab running <code>MindAttic.Launcher.exe host</code>, which execs a provider with inherited stdio, rooted at a repo (or a <code>--path</code> directory, for example a General tab at the workspace root).</td>
 </tr>
 <tr>
 <td>Pinner</td>

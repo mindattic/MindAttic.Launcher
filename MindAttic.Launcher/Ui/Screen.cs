@@ -8,16 +8,52 @@ namespace MindAttic.Launcher.Ui;
 /// </summary>
 public static class Screen
 {
+    // Everything drawn above the current menu since the last Header(), kept as
+    // draw callbacks so Redraw() can repaint it at a new window size.
+    private static readonly List<Action> HeaderParts = [];
+
     public static void Header(params string[] breadcrumbs)
     {
+        HeaderParts.Clear();
         AnsiConsole.Clear();
-        var trail = string.Join(" > ", new[] { "MindAttic Launcher" }.Concat(breadcrumbs));
-        AnsiConsole.Write(new Rule($"[cyan1]{Markup.Escape(trail)}[/]")
+        Add(() =>
         {
-            Style = Theme.AccentStyle,
-            Justification = Justify.Left
+            var trail = string.Join(" > ", new[] { "MindAttic Launcher" }.Concat(breadcrumbs));
+            AnsiConsole.Write(new Rule($"[cyan1]{Markup.Escape(trail)}[/]")
+            {
+                Style = Theme.AccentStyle,
+                Justification = Justify.Left
+            });
+            AnsiConsole.WriteLine();
         });
-        AnsiConsole.WriteLine();
+    }
+
+    /// <summary>
+    /// Draws <paramref name="draw"/> under the header now, and again whenever the
+    /// screen is redrawn after a window resize. Use it for lines a menu shows above
+    /// its list (status, notices) so a resize doesn't drop them.
+    /// </summary>
+    public static void Add(Action draw)
+    {
+        HeaderParts.Add(draw);
+        draw();
+    }
+
+    /// <summary>
+    /// Like <see cref="Add"/> for something already on screen (e.g. an answered
+    /// text prompt): remembered for <see cref="Redraw"/> but not drawn again now.
+    /// </summary>
+    public static void Keep(Action draw) => HeaderParts.Add(draw);
+
+    /// <summary>
+    /// Clears the screen and repaints the header parts at the current window size.
+    /// A resize reflows text already on screen, which a live region can't recover
+    /// from in place, so the menu calls this and then redraws itself below.
+    /// </summary>
+    public static void Redraw()
+    {
+        AnsiConsole.Clear();
+        foreach (var draw in HeaderParts) draw();
     }
 
     public static void Footer(string extra = "")
@@ -37,11 +73,11 @@ public static class Screen
         AnsiConsole.MarkupLine($"  [grey50]{Markup.Escape(message)}[/]");
     }
 
-    public static void Notice(string markup)
+    public static void Notice(string markup) => Add(() =>
     {
         AnsiConsole.WriteLine();
         AnsiConsole.MarkupLine($"  {markup}");
-    }
+    });
 
     public static void PressAnyKey()
     {

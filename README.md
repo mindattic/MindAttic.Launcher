@@ -7,16 +7,16 @@ One Windows console for a whole workspace of repos: open any project in a colore
 ```text
  MindAttic.Launcher                       (interactive menu, items from MainMenuCommand.cs)
 
-   Commit and sync               commit and push changes per project or across all
-   Pull                          git pull --ff-only per project or across all
  > Open Project Tab              select a project, then pick which agent CLI to open it with
+   Commit and sync               commit and push changes per project or across all
+   Workflow                      open tickets, repo status and ticket-log checks across the workspace
    Backup                        back up MindAttic to R:\Backup\MindAttic
    Settings                      CLI development: the model each agent CLI runs with
-   Status                        open a Claude tab at the workspace root with /status pre-filled
    Open Command Prompt (Admin)   open cmd as Administrator at the workspace root
    Open PowerShell (Admin)       open PowerShell as Administrator at the workspace root
    Restart                       reload this console in a new tab; other tabs are untouched
-   Exit                          close this menu (other tabs are untouched)
+
+   Quit                          close this menu (other tabs are untouched)
 ```
 
 A single `MindAttic.Launcher.exe` (`net10.0-windows`, published `win-x64`) built on [Spectre.Console](https://spectreconsole.net/): one interactive menu plus scriptable `host`, `commit` and `version` sub-commands. It is a console app, so the menu above is a text rendering of its items rather than a screenshot.
@@ -39,7 +39,7 @@ A single `MindAttic.Launcher.exe` (`net10.0-windows`, published `win-x64`) built
 - Per-provider model picker that rewrites the `--model` flag inside the provider's run command.
 - Lossless settings: unknown keys written by other MindAttic tools survive every save ([MindAttic.Vault](https://github.com/mindattic/MindAttic.Vault) backs the store).
 - Self-refreshing exe: the in-app Restart waits out the Windows file lock, republishes and relaunches; a header notice warns when the running build is behind the latest commit.
-- A live Claude usage and rate-limit block above every menu redraw (read from `~/.claude/*`, cached 60 seconds).
+- A Claude usage and rate-limit block (`ClaudeStatusService`, read from `~/.claude/*`), currently hidden: commented out in `MainMenuCommand` because it gave no actionable insight.
 
 It is not an agent: it execs a provider CLI with inherited stdio and never calls an LLM SDK or makes an LLM API call directly.
 
@@ -103,12 +103,12 @@ MindAttic.Launcher.exe host --name MindAttic.Vault --provider Claude
 Options:
 
 - `--name <NAME>`: project name from settings (optional if `--path` is given).
-- `--path <PATH>`: root the agent at an arbitrary directory instead of a registered project. Takes precedence over `--name`; this is how the Status menu item roots a session at the workspace root.
+- `--path <PATH>`: root the agent at an arbitrary directory instead of a registered project. Takes precedence over `--name`; this is how Open Project Tab's General option roots a session at the workspace root.
 - `--title <TITLE>`: tab title (defaults to `--name`, or the directory's leaf name).
 - `--provider <PROVIDER>`: provider key (`Claude`, `Codex`, `Gemini` or `Kimi` by default). Omit it to resolve to the first-listed provider.
 - `--prompt <PROMPT>`: seeds the agent's first turn (pre-fills input; does not auto-submit).
 
-Behavior: splits the resolved provider's `RunCommand` into argv (`CommandLineParser.Split`), pushes any Vault-stored credential for that provider (see [Agent providers and host tabs](#agent-providers-and-host-tabs)), starts `TitlePinner` (busy/idle tab-title watchdog) and `HostInputPipeServer` (per-tab named pipe for input injection), then starts the provider exe with inherited stdio and waits for exit.
+Behavior: if the tab's directory is a git repo, runs `git pull --ff-only` first so every agent starts on the newest code (a failed pull is shown in the tab and the agent still starts on the local code; repos with no remote are skipped quietly). Then splits the resolved provider's `RunCommand` into argv (`CommandLineParser.Split`), pushes any Vault-stored credential for that provider (see [Agent providers and host tabs](#agent-providers-and-host-tabs)), starts `TitlePinner` (busy/idle tab-title watchdog) and `HostInputPipeServer` (per-tab named pipe for input injection), then starts the provider exe with inherited stdio and waits for exit.
 
 Exit codes:
 
@@ -137,25 +137,23 @@ For each target it reads git status, skips clean repos, auto-generates a message
 
 ## Interactive menu
 
-Launching the exe with no arguments runs `MainMenuCommand`, which loads settings (performing a one-time legacy-file seed if needed, see [Settings and persistence](#settings-and-persistence)), then, before the first menu paint, runs the startup Discover Projects walkthrough (`DiscoverProjectsMenu`, not itself a menu item), offering to add any git repo found directly under the workspace root that is not yet in the roster or on the "never ask again" list. It also runs a one-time build-staleness check (`BuildFreshness.Check()`, which warns when the running exe is behind the latest commit in this repo) and renders a live Claude usage and rate-limit block (`ClaudeStatusService`, cached 60 seconds, read from `~/.claude/*`) above every menu redraw.
+Launching the exe with no arguments runs `MainMenuCommand`, which loads settings (performing a one-time legacy-file seed if needed, see [Settings and persistence](#settings-and-persistence)), then, before the first menu paint, runs the startup Discover Projects walkthrough (`DiscoverProjectsMenu`, not itself a menu item), offering to add any git repo found directly under the workspace root that is not yet in the roster or on the "never ask again" list. It also runs a one-time build-staleness check (`BuildFreshness.Check()`, which warns when the running exe is behind the latest commit in this repo). (The Claude usage and rate-limit block from `ClaudeStatusService` is currently commented out.)
 
 ### Top level menu
 
 | Item | Tag | Description |
 |---|---|---|
 | Commit and sync | `commit` | Opens `CommitMenu`: commit and push one project or all, prompting for an optional message (blank means auto-generated). |
-| Pull | `pull` | Opens `PullMenu`: `git pull --ff-only` one project or all. |
 | Workflow | `workflow` | Opens `WorkflowMenu`, the Launcher's view of [MindAttic.Workflow](https://github.com/mindattic/MindAttic.Workflow): open tickets across every repo, each repo's uncommitted, unpushed and local-only work with its GitHub state, and the ticket-log checks. Read-only; deleting folders stays in the `workflow repos prune` CLI. |
 | Open Project Tab | `open` | Opens `OpenProjectMenu`: pick a project, then which agent CLI to launch it with, then `ProjectActionMenu`. |
 | Backup | `backup` | Runs `BackupMenu` directly: confirms source, target and database list, then runs the file and SQL backup. |
 | Settings | `settings` | Opens `SettingsMenu`: the model each agent CLI runs with (only). |
-| Status | `status` | Opens a host tab at the resolved workspace root using the first-listed provider, pre-filled with `/status`. |
 | Open Command Prompt (Admin) | `cmd` | Opens an elevated `cmd` tab at the workspace root via UAC (`wt … -- cmd`, `Verb=runas`). |
 | Open PowerShell (Admin) | `ps` | Same, but `powershell`. |
 | Restart | `restart` | Launches `deploy.ps1 -WaitPid <this pid>` in a fresh tab (waits for this process to exit, force-republishes, then re-execs) and exits this instance. Needed because Windows locks the running exe image so it cannot republish itself in place. |
-| Exit | `exit` | Closes the menu; other tabs are untouched. |
+| Quit | `exit` | Closes the menu; other tabs are untouched. |
 
-The header also shows the staleness notice and the Claude usage block; neither is a menu item.
+The header also shows the staleness notice when the build is behind; it is not a menu item.
 
 ### Open Project Tab
 
@@ -341,7 +339,7 @@ NuGet.config, global.json            package source + SDK roll-forward
 | Workspace root | `D:\Projects\MindAttic`, the parent directory holding every MindAttic repo. |
 | Roster | The `Projects` list in settings; the set of managed repos. |
 | Provider | A launchable agent CLI (`AgentProvider.RunCommand`), for example Claude, Codex, Gemini, Kimi. |
-| Host tab | A `wt` tab running `MindAttic.Launcher.exe host`, which execs a provider with inherited stdio, rooted at a repo (or a `--path` directory, for example the Status tab). |
+| Host tab | A `wt` tab running `MindAttic.Launcher.exe host`, which execs a provider with inherited stdio, rooted at a repo (or a `--path` directory, for example a General tab at the workspace root). |
 | Pinner | `TitlePinner`, the per-tab background loop that keeps a busy or idle glyph in the tab title. |
 | Discovery | The startup scan for git repos under the workspace root that are not yet in the roster. |
 | Vault | MindAttic.Vault, the shared `%APPDATA%\MindAttic\…` settings and secret store this repo persists through. |

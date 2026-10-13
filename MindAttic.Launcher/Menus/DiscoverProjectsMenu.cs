@@ -56,11 +56,17 @@ public sealed class DiscoverProjectsMenu(SettingsStore store, GitService git, Wi
         var settings = store.Load();
 
         Screen.Header("Discover Projects");
-        AnsiConsole.MarkupLine($"  [green]New repo found:[/] [cyan1]{Markup.Escape(repo.Name)}[/] [grey50]at {Markup.Escape(repo.Path)}[/]");
-        AnsiConsole.MarkupLine($"  [grey50]({total} unregistered repo(s) under the workspace.)[/]");
-        AnsiConsole.WriteLine();
+        // Through Screen so a window resize during the color pick repaints them.
+        Screen.Add(() =>
+        {
+            AnsiConsole.MarkupLine($"  [green]New repo found:[/] [cyan1]{Markup.Escape(repo.Name)}[/] [grey50]at {Markup.Escape(repo.Path)}[/]");
+            AnsiConsole.MarkupLine($"  [grey50]({total} unregistered repo(s) under the workspace.)[/]");
+            AnsiConsole.WriteLine();
+        });
 
         var url = AnsiConsole.Prompt(BuildUrlPrompt(git.RemoteUrl(repo.Path)));
+        // The answered prompt is already on screen; remember it for a repaint.
+        Screen.Keep(() => AnsiConsole.MarkupLine($"  [cyan1]Git URL[/]: {Markup.Escape(url)}"));
 
         var colorResult = PickColor(settings);
         if (colorResult.Back) return Outcome.Skipped;

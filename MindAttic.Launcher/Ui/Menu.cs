@@ -50,7 +50,8 @@ public static class Menu
             {
                 Name = "< Back",
                 Description = "return to previous menu",
-                Tag = MenuSentinel.Back
+                Tag = MenuSentinel.Back,
+                SpacerBefore = true
             });
         }
 
@@ -73,53 +74,80 @@ public static class Menu
         try
         {
             System.Console.CursorVisible = false;
-            AnsiConsole.Live(Build(title, rows, index, extraHint, regionTop))
-                .AutoClear(false)
-                .Overflow(VerticalOverflow.Ellipsis)
-                .Start(ctx =>
-                {
-                    // Live only paints on Refresh/UpdateTarget; without this the
-                    // menu stays invisible until the first key press.
-                    ctx.Refresh();
-                    var shownSecond = DateTime.Now.Second;
-                    while (result is null)
+            // One pass per window size: a resize ends the live region, the screen
+            // is repainted from scratch at the new size, and the loop starts a
+            // fresh region below the repainted header.
+            while (result is null)
+            {
+                var size = WindowSize();
+                var resized = false;
+                AnsiConsole.Live(Build(title, rows, index, extraHint, regionTop))
+                    .AutoClear(false)
+                    .Overflow(VerticalOverflow.Ellipsis)
+                    .Start(ctx =>
                     {
-                        // Tick the clock: repaint once a second even while idle.
-                        if (DateTime.Now.Second != shownSecond)
+                        // Live only paints on Refresh/UpdateTarget; without this the
+                        // menu stays invisible until the first key press.
+                        ctx.Refresh();
+                        var shownSecond = DateTime.Now.Second;
+                        while (result is null)
                         {
-                            shownSecond = DateTime.Now.Second;
-                            ctx.UpdateTarget(Build(title, rows, index, extraHint, regionTop));
+                            // The terminal reflows existing text on resize, so the
+                            // region's in-place redraw lands in the wrong rows. Wait for
+                            // the size to settle (dragging fires many sizes), then bail
+                            // out and repaint everything.
+                            if (WindowSize() != size)
+                            {
+                                do
+                                {
+                                    size = WindowSize();
+                                    Thread.Sleep(150);
+                                } while (WindowSize() != size);
+                                resized = true;
+                                break;
+                            }
+
+                            // Tick the clock: repaint once a second even while idle.
+                            if (DateTime.Now.Second != shownSecond)
+                            {
+                                shownSecond = DateTime.Now.Second;
+                                ctx.UpdateTarget(Build(title, rows, index, extraHint, regionTop));
+                            }
+
+                            // Poll for a keypress so a refreshToken cancellation (e.g. the
+                            // 60-second main-menu redraw timer) can interrupt the wait.
+                            bool available;
+                            try { available = System.Console.KeyAvailable; }
+                            catch (InvalidOperationException) { result = new MenuResult { Back = true }; break; }
+
+                            if (!available)
+                            {
+                                if (refreshToken.IsCancellationRequested)
+                                    result = new MenuResult { Timeout = true, Index = index };
+                                else
+                                    Thread.Sleep(50);
+                                continue;
+                            }
+
+                            ConsoleKeyInfo keyInfo;
+                            try { keyInfo = System.Console.ReadKey(intercept: true); }
+                            catch (InvalidOperationException) { result = new MenuResult { Back = true }; break; }
+
+                            var moved = Navigate(keyInfo.Key, rows.Count, VisibleRows(regionTop), ref index);
+                            if (moved)
+                            {
+                                ctx.UpdateTarget(Build(title, rows, index, extraHint, regionTop));
+                                continue;
+                            }
+
+                            result = Resolve(keyInfo.Key, rows, index, allowBack, customKeys);
                         }
+                    });
 
-                        // Poll for a keypress so a refreshToken cancellation (e.g. the
-                        // 60-second main-menu redraw timer) can interrupt the wait.
-                        bool available;
-                        try { available = System.Console.KeyAvailable; }
-                        catch (InvalidOperationException) { result = new MenuResult { Back = true }; break; }
-
-                        if (!available)
-                        {
-                            if (refreshToken.IsCancellationRequested)
-                                result = new MenuResult { Timeout = true, Index = index };
-                            else
-                                Thread.Sleep(50);
-                            continue;
-                        }
-
-                        ConsoleKeyInfo keyInfo;
-                        try { keyInfo = System.Console.ReadKey(intercept: true); }
-                        catch (InvalidOperationException) { result = new MenuResult { Back = true }; break; }
-
-                        var moved = Navigate(keyInfo.Key, rows.Count, VisibleRows(regionTop), ref index);
-                        if (moved)
-                        {
-                            ctx.UpdateTarget(Build(title, rows, index, extraHint, regionTop));
-                            continue;
-                        }
-
-                        result = Resolve(keyInfo.Key, rows, index, allowBack, customKeys);
-                    }
-                });
+                if (!resized) break;
+                Screen.Redraw();
+                try { regionTop = System.Console.CursorTop - System.Console.WindowTop; } catch { /* redirected stdout */ }
+            }
         }
         finally
         {
@@ -127,6 +155,12 @@ public static class Menu
         }
 
         return result ?? new MenuResult { Back = true };
+    }
+
+    private static (int Width, int Height) WindowSize()
+    {
+        try { return (System.Console.WindowWidth, System.Console.WindowHeight); }
+        catch { return (0, 0); } // redirected: never "changes"
     }
 
     /// <summary>Moves the highlight for navigation keys; returns false for any other key.</summary>
@@ -186,12 +220,13 @@ public static class Menu
         // it's the width the live region actually renders at.
         var width = AnsiConsole.Profile.Width;
 
-        // "< Back" sits apart from the items, below a blank spacer line.
-        var hasBack = rows.Count > 1 && ReferenceEquals(rows[^1].Tag, MenuSentinel.Back);
+        // Rows like "< Back" and "Quit" sit apart from the items, below a blank
+        // spacer line (never above the very first row).
+        var spacers = rows.Skip(1).Count(r => r.SpacerBefore);
 
         // Recomputed every frame so a resized window gets the right page size.
-        // The spacer line costs a row, so reserve it whenever the list has Back.
-        var visible = Math.Max(MinVisibleRows, VisibleRows(regionTop) - (hasBack ? 1 : 0));
+        // Each spacer line costs a row, so reserve them up front.
+        var visible = Math.Max(MinVisibleRows, VisibleRows(regionTop) - spacers);
         var first = Math.Clamp(highlighted - visible / 2, 0, Math.Max(0, rows.Count - visible));
         var last = Math.Min(rows.Count, first + visible);
         var scrolls = rows.Count > visible;
@@ -208,11 +243,11 @@ public static class Menu
         var descWidth = Math.Max(0, contentWidth - 2 - nameWidth - 2); // "> " name "  " desc
 
         // Thumb spans the drawn lines (spacer included) so it reaches the bottom edge.
-        var thumb = Thumb(rows.Count, visible, first, visible + (hasBack ? 1 : 0));
+        var thumb = Thumb(rows.Count, visible, first, visible + spacers);
         var lines = new List<IRenderable>();
         for (var i = first; i < last; i++)
         {
-            if (hasBack && i == rows.Count - 1 && i > first)
+            if (rows[i].SpacerBefore && i > first)
                 lines.Add(new Markup(new string(' ', contentWidth + 1) + ScrollCell(lines.Count, thumb, scrolls)));
 
             // Name + Description come from user-controlled settings (project names,

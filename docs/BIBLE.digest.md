@@ -70,7 +70,7 @@ talks to an LLM is orchestration, not an LLM call. (`Commands/HostAgentCommand.c
 - **Roster** — the `Projects` list in settings; the set of managed repos.
 - **Provider** — a launchable agent CLI (`AgentProvider.RunCommand`, e.g. `claude`, `codex`).
 - **Host / host tab** — a `wt` tab running `mindattic host`, which execs a provider with inherited
-  stdio rooted at a repo (or `--path` directory, e.g. the Status tab).
+  stdio rooted at a repo (or `--path` directory, e.g. a General tab at the workspace root).
 - **Pinner** — `TitlePinner`, the per-tab loop that keeps a busy/idle glyph in the tab title.
 - **Discovery** — startup scan for git repos under the root not yet in the roster.
 - **Vault** — MindAttic.Vault, the `%APPDATA%\MindAttic\...` settings/secret store.

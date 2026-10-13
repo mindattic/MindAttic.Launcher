@@ -155,7 +155,7 @@ updated: 2026-10-12
 Dependency-ordered toward the headline goal (a frictionless single-binary workspace orchestrator):
 1. **MCO-US-A5** (🟡→✅) — make the menu-driven "Open Project Tab" flow testable (extract a pure tab
    spec from `OpenProjectMenu`) and verify it, closing the largest untested surface.
-2. ⬜ Integration smoke test for the interactive menus (Backup / Commit / Pull / Settings)
+2. ⬜ Integration smoke test for the interactive menus (Backup / Commit / Settings)
    that today are exercised only by hand.
 3. ⬜ End-to-end `mindattic commit` exit-code assertions over a temp git repo.
 
@@ -174,3 +174,4 @@ Dependency-ordered toward the headline goal (a frictionless single-binary worksp
 | MCO-T6 | 2026-10-13 | feature | closed | Add 'General Prompt' to Open Project Tab: opens a CLI rooted at the workspace root with every project in context | OpenProjectMenu.OpenGeneralPrompt |
 | MCO-T7 | 2026-10-13 | feature | closed | Menu redrawn as a Spectre live region (no flicker): clock, scrollbar, ellipsis cut-offs, spacer before < Back, Open Project Tab first | Ui/Menu.cs; WF-T9 spikes |
 | MCO-T8 | 2026-10-13 | chore | closed | Deploy to C:\Apps\MindAttic.Launcher like other apps: one deploy.ps1 (publish/launch/restart), generated deploy.bat + repo.path beside the exe; scripts/ removed | ExePathTests |
+| MCO-T9 | 2026-10-13 | feature | closed | Agent tabs git pull --ff-only before launch (Pull menu removed); Exit->Quit with spacer; Status item removed; menu redraws on resize; UTF-8 writer fix; token line hidden | GitServicePullTests |
