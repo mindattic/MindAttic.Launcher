@@ -9,10 +9,6 @@ public sealed class OpenProjectMenu(SettingsStore store, AgentProviderRegistry p
 {
     private const string GeneralPromptTag = "general";
 
-    // Marks the blank divider row between "General Prompt" and the project
-    // roster — never cast to Project, Enter on it is a no-op.
-    private static readonly object SeparatorTag = new();
-
     public void Run()
     {
         var resumeIndex = 0;
@@ -24,13 +20,13 @@ public sealed class OpenProjectMenu(SettingsStore store, AgentProviderRegistry p
             var items = new List<MenuItem>
             {
                 new() { Name = "General Prompt", Description = "open a CLI at the MindAttic workspace root (every project in context)", Tag = GeneralPromptTag },
-                new() { Name = "", Description = "", Tag = SeparatorTag },
             };
-            items.AddRange(sortedProjects.Select(p => new MenuItem
+            items.AddRange(sortedProjects.Select((p, i) => new MenuItem
             {
                 Name = p.Name,
                 Description = p.Description ?? "",
-                Tag = p
+                Tag = p,
+                SpacerBefore = i == 0
             }));
 
             Screen.Header("Open Project Tab");
@@ -47,8 +43,6 @@ public sealed class OpenProjectMenu(SettingsStore store, AgentProviderRegistry p
 
             if (result.Selected is { } sel)
             {
-                if (ReferenceEquals(sel.Tag, SeparatorTag)) continue;
-
                 if (sel.Tag is string tag && tag == GeneralPromptTag)
                 {
                     OpenGeneralPrompt();
