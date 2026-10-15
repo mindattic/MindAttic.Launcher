@@ -4,7 +4,7 @@ project: MindAttic.Launcher
 code: MCO
 layer: stories
 status: living
-updated: 2026-10-12
+updated: 2026-10-14
 ---
 
 # MindAttic.Launcher — User Stories
@@ -100,6 +100,50 @@ updated: 2026-10-12
   `SqlBackupServiceTests`.)*
 - **MCO-US-D4 ✅** As a Dev, the robocopy exclude lists match the original PowerShell launcher so the
   snapshot omits the same noise (bin/obj/etc.). *(verified by `Exclude_lists_match_original_PS_launcher`.)*
+- **MCO-US-D5 ✅** As a Dev, each project's SQLite databases get a real `.dump` backup (schema + data as
+  portable SQL text), namespaced by project so a same-named db file doesn't collide, and sqlite3 is
+  never invoked against a path that doesn't actually exist. *(verified by
+  `ResolveBackupFilePath_places_sql_under_databases_sqlite_subfolder`,
+  `ResolveBackupFilePath_namespaces_by_project_so_same_named_db_does_not_collide`,
+  `BackupOne_fails_without_invoking_sqlite3_when_the_database_file_is_missing` + the wider
+  `SqliteBackupServiceTests`.)*
+- **MCO-US-D6 ✅** As a Dev, `%APPDATA%\MindAttic` (Vault settings and credentials) is zipped into
+  the same dated folder as the file/SQL/SQLite backups, degrading to a reported no-op rather than
+  a failure when nothing has ever seeded Vault settings on this machine. *(verified by
+  `Zip_reports_ok_without_writing_a_file_when_the_source_folder_is_missing`,
+  `Zip_creates_a_real_zip_from_the_source_directory`, `ResolveZipPath_places_AppData_zip_directly_under_the_target_folder`.)*
+- **MCO-US-D7 ✅** As a Dev, `backup --keep <N>` prunes dated folders beyond the newest N, pruning a
+  date's `_a`..`_z` collision siblings together with it rather than individually. *(verified by
+  `ResolveStaleFolders_keeps_newest_N_dates`,
+  `ResolveStaleFolders_prunes_collision_siblings_together_with_their_date`,
+  `ResolveStaleFolders_prunes_nothing_when_under_the_limit`,
+  `ResolveStaleFolders_treats_keep_zero_or_negative_as_keep_nothing`.)*
+- **MCO-US-D8 ✅** As a Dev, `restore --from <folder>` restores AppData, every SQL Server `.bak` and
+  every SQLite dump found there — including the "database already exists" case, which is dropped to
+  `SINGLE_USER` and force-replaced rather than left as a conflict. *(verified by
+  `BuildRestoreSql_moves_a_single_data_and_log_file_to_the_mdf_ldf_names`,
+  `BuildRestoreSql_numbers_a_second_data_and_log_file_as_ndf_and_suffixed_ldf`,
+  `RestoreOne_moves_existing_database_to_single_user_before_restoring`,
+  `RestoreOne_skips_single_user_when_the_database_does_not_exist`,
+  `RestoreOne_reports_failure_without_throwing_when_restore_exits_nonzero` + the wider
+  `SqlRestoreServiceTests`/`SqliteRestoreServiceTests`/`AppDataBackupServiceTests` (`Restore_*`).)*
+- **MCO-US-D9 ✅** As a Dev, the nightly backup Scheduled Task's status (registered, enabled, last
+  run, next run) is visible and toggleable from inside Launcher instead of only in Task Scheduler's
+  own UI, and every task this app creates lives under `\MindAttic\Launcher\`, per
+  `MindAttic.HouseRules.md#HOUSE-LAW-11`. *(verified by
+  `ParseQueryCsv_reads_enabled_state_last_run_and_next_run`,
+  `ParseQueryCsv_reports_disabled_when_status_is_Disabled`,
+  `BuildQueryArguments_targets_the_folder_qualified_task_name`.)*
+- **MCO-US-D10 ✅** As a Dev, `bootstrap` installs `sqlcmd` and SQL Server LocalDB via winget, trying
+  each fallback id in order, without reinstalling something already on PATH. *(verified by
+  `EnsureHard_skips_install_when_the_command_already_exists`,
+  `EnsureHard_installs_via_the_first_winget_id_that_succeeds`,
+  `EnsureHard_falls_through_to_the_next_winget_id_when_the_first_fails`.)*
+- **MCO-US-D11 ✅** As a Dev, `bootstrap` clones every `wip`-tagged repo not already present under
+  the workspace root, reusing the same GitHub-topic discovery the roster filter already uses rather
+  than a hand-maintained repo list. *(verified by
+  `CloneAll_skips_a_repo_already_present_without_invoking_git`,
+  `DeriveRepoName_takes_the_leaf_after_the_last_slash`, `DeriveCloneUrl_builds_an_https_github_url`.)*
 
 ## Epic E — Roster & discovery
 - **MCO-US-E1 ✅** As a Dev, new git repos under the workspace root are surfaced for adding, while
@@ -176,3 +220,17 @@ Dependency-ordered toward the headline goal (a frictionless single-binary worksp
 | MCO-T8 | 2026-10-13 | chore | closed | Deploy to C:\Apps\MindAttic.Launcher like other apps: one deploy.ps1 (publish/launch/restart), generated deploy.bat + repo.path beside the exe; scripts/ removed | ExePathTests |
 | MCO-T9 | 2026-10-13 | feature | closed | Agent tabs git pull --ff-only before launch (Pull menu removed); Exit->Quit with spacer; Status item removed; menu redraws on resize; UTF-8 writer fix; token line hidden | GitServicePullTests |
 | MCO-T10 | 2026-10-13 | fix | closed | Token usage line drops zero-token models like <synthetic> and pads counts to one width (line is currently hidden) | ClaudeStatusService |
+| MCO-T11 | 2026-10-14 | chore | open | NUnit tests for ClaudeStatusService (Services/ClaudeStatusService.cs): JSONL usage parsing dedupes by message.id, sums input/output/cache_creation/cache_read tokens per model, skips non-assistant lines, lines with no model and malformed JSON, only reads files written today; falls back to stats-cache.json last dailyModelTokens entry with labels today (cached) vs latest: date; rate-limit line color/icon thresholds at 75 and 90 percent and bar fill clamped to 20; FormatTokens boundaries (999, 1000, 9999, 10000, 1M) and ShortModelName mapping including claude- prefix stripping; needs a seam for the hard-coded ~/.claude dir so tests use a temp folder | — |
+| MCO-T12 | 2026-10-14 | chore | open | NUnit tests for TopicRepoSync.FetchOrNull (Services/TopicRepoSync.cs): returns null without calling GitHub when the TokenStore has no or whitespace github token, returns the client's set when the fetch succeeds, degrades to null (full roster) on HttpRequestException, InvalidOperationException and TaskCanceledException, lets other exceptions propagate; use a temp TokenStore and a GitHubTopicRepos backed by a fake HttpMessageHandler as GitHubTopicReposTests does | — |
+| MCO-T13 | 2026-10-14 | chore | open | NUnit tests for GitService process methods (Services/GitService.cs) against temp git repos with a local bare remote: Commit returns the status error for a non-repo, nothing to commit for a clean tree, uses the trimmed user message or AutoMessage otherwise, reports git push failed when the remote rejects, and synced on success; Pull fast-forwards and reports a no-upstream failure that IsNoUpstream recognizes; RemoteUrl returns origin or null; Clone reports cloned vs the git error text; FetchShortStatuses maps each project to its short status | — |
+| MCO-T14 | 2026-10-14 | chore | open | NUnit tests for HostAgentCommand (Commands/HostAgentCommand.cs) argument resolution: --path wins over --name, unknown --name returns 1, neither returns 64, unknown --provider returns 4 instead of falling back, empty RunCommand returns 2, title falls back from --title to --name to the folder name of --path (trailing separator trimmed), NO_COLOR is stripped and --prompt appended as the last arg; PullBeforeLaunch skips non-repos and stays quiet on no-upstream; extract the pure resolution/ProcessStartInfo building into testable helpers first | — |
+| MCO-T15 | 2026-10-14 | chore | open | NUnit tests for the backup and restore CLI subcommands (Commands/BackupCommand.cs, Commands/RestoreCommand.cs): backup returns 1 when the target folder can't be resolved, exit code is 0 only when files, AppData, every SQL and every SQLite result succeed, --keep N prunes only the stale dated folders from ResolveStaleFolders and keeps going when a delete fails, FormatBytes unit boundaries; restore returns 2 for a missing or blank --from, skips AppData when AppData.zip is absent, finds .bak files recursively under Databases and restores into --server or the default instance, matches SQLite dumps to roster projects case-insensitively and skips unmatched ones; inject the services so tests don't hit robocopy/sqlcmd | — |
+| MCO-T16 | 2026-10-14 | chore | open | NUnit tests for BootstrapCommand (Commands/BootstrapCommand.cs): missing GitHub token or a null TopicRepoSync result marks the run failed without cloning, --skip-optional skips the optional-tool prompts, already-installed optional tools are skipped, any failed hard prerequisite or clone yields exit 1, FindNewestBackupFolder picks the lexically newest dated folder and returns null when the backup base is missing or unreachable, and an explicit --from is passed through to RestoreCommand; needs seams for PrerequisiteService, WorkspaceCloneService and the console prompts | — |
+| MCO-T17 | 2026-10-14 | chore | open | NUnit tests for CommitCommand (Commands/CommitCommand.cs): an unknown --project throws instead of silently no-oping (MCO-LAW-1), a project whose path is missing or whose status is invalid sets exit 1 but the loop continues to the rest, clean repos are reported as nothing to commit and don't fail the run, a failed commit/push returns 1, the default target set is ProjectRoster.Sorted filtered by the wip topic set while --project ignores the topic filter | — |
+| MCO-T18 | 2026-10-14 | chore | open | NUnit tests for the Ui/Menu.cs pure helpers (make Navigate, Resolve, Thumb, Truncate, Fit internal with InternalsVisibleTo): Up/K wraps from 0 to the last row, Down/J wraps to 0, Home/End, PageUp/PageDown clamp to the ends, other keys return false; Enter on the Back sentinel row yields Back, Escape yields Back only when allowBack, custom keys are ignored on the Back row; Thumb fills the track when everything fits and scales length/offset otherwise; Truncate handles max 0, 1 and exact length with an ellipsis; Fit drops markup and escapes when too wide | — |
+| MCO-T19 | 2026-10-14 | chore | open | NUnit tests for HostInputPipeServer (Services/HostInputPipeServer.cs) directly via its test ctor: PipeName lowercases the provider key and appends the pid, empty payloads are not forwarded to the sink, multiple sequential client connections are each delivered, UTF-8 non-ASCII text survives, and Dispose returns promptly (under ~1s) even while waiting for a connection; today it is only exercised as a fixture inside RemoteControlBroadcasterTests | — |
+| MCO-T20 | 2026-10-14 | chore | open | NUnit tests for the logic-bearing menu helpers (extract to internal static and test): SettingsMenu.Mask (8 chars or fewer fully masked, otherwise first4 and last4), WorkflowMenu.GitHubCell (git error, no GitHub remote, unknown index, not found, archived, wip vs untagged), DiscoverProjectsMenu.UsedColors (first project to claim a hex wins, case-insensitive, blank TabColor ignored), BackupMenu FormatBytes/Format and ScheduledBackupMenu.Describe boundaries | — |
+| MCO-T21 | 2026-10-14 | fix | open | Nightly backup saves no SQL databases: Bob found its 13 by listing every user database on (localdb)\MSSQLLocalDB, but Launcher only backs up roster-listed databases (none are listed) against localhost, and Bob's task is already unregistered; add LocalDB auto-discovery (or default) before the 00:00 run, and commit the uncommitted backup/restore/bootstrap work | — |
+| MCO-T22 | 2026-10-14 | fix | open | Finish absorbing Bob into bootstrap: no LocalDB create/start, no --server (restore defaults to localhost), GitHub token needed before AppData is restored, clones only wip repos and never pulls existing ones, no AI CLI installs, no PATH refresh after winget, Claude desktop/Antigravity detected by the wrong command; comments name a bootstrap.ps1 that is setup.ps1 | — |
+| MCO-T23 | 2026-10-14 | chore | open | Retire Bob cleanly: nothing prunes R:\Backup\Bob any more, MindAttic.HouseRules.md:73 still points at Bob's task script, workspace-repos.json and the agent command catalogs still list Bob files; Bob's superseded banner is uncommitted on an archived repo | — |
+| MCO-T24 | 2026-10-15 | chore | closed | Remove duplicate command copies (/bughunt, /deploy, /quickload, /quicksave) now centralized at the user level (~/.claude/commands) | WF-T14 |
