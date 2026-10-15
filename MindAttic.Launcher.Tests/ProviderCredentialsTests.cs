@@ -48,14 +48,61 @@ public sealed class ProviderCredentialsTests
     }
 
     [Test]
-    public void Apply_never_forwards_a_key_for_a_provider_with_no_injection_mapping()
+    public void Apply_sets_the_env_var_for_Claude_when_not_logged_into_claude_ai()
     {
-        // Codex isn't in the env-var map and isn't Kimi — a Vault entry for it
-        // (however it got there) must never be pushed anywhere.
-        var store = new FakeCredentialStore(new() { ["codex"] = "sk-should-be-ignored" });
+        var store = new FakeCredentialStore(new() { ["claude"] = "sk-ant-test-key" });
+        var psi = new ProcessStartInfo("claude");
+        var missingCredentialsPath = Path.Combine(Path.GetTempPath(), "MindAttic.Launcher.Tests", Guid.NewGuid().ToString("N"), ".credentials.json");
+
+        ProviderCredentials.Apply(psi, "Claude", store, claudeCredentialsPath: missingCredentialsPath);
+
+        Assert.That(psi.Environment["ANTHROPIC_API_KEY"], Is.EqualTo("sk-ant-test-key"));
+    }
+
+    [Test]
+    public void Apply_never_sets_ANTHROPIC_API_KEY_when_logged_into_claude_ai()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "MindAttic.Launcher.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        var credentialsPath = Path.Combine(dir, ".credentials.json");
+        try
+        {
+            File.WriteAllText(credentialsPath, """{ "claudeAiOauth": { "accessToken": "fake-session-token" } }""");
+
+            var store = new FakeCredentialStore(new() { ["claude"] = "sk-ant-should-be-ignored" });
+            var psi = new ProcessStartInfo("claude");
+            psi.Environment.Remove("ANTHROPIC_API_KEY");
+
+            ProviderCredentials.Apply(psi, "Claude", store, claudeCredentialsPath: credentialsPath);
+
+            Assert.That(psi.Environment.ContainsKey("ANTHROPIC_API_KEY"), Is.False);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Test]
+    public void Apply_sets_the_env_var_for_Codex()
+    {
+        var store = new FakeCredentialStore(new() { ["codex"] = "sk-openai-test-key" });
         var psi = new ProcessStartInfo("codex");
 
         ProviderCredentials.Apply(psi, "Codex", store);
+
+        Assert.That(psi.Environment["OPENAI_API_KEY"], Is.EqualTo("sk-openai-test-key"));
+    }
+
+    [Test]
+    public void Apply_never_forwards_a_key_for_a_provider_with_no_injection_mapping()
+    {
+        // A provider key with no env-var mapping and not Kimi — a Vault entry
+        // for it (however it got there) must never be pushed anywhere.
+        var store = new FakeCredentialStore(new() { ["grok"] = "sk-should-be-ignored" });
+        var psi = new ProcessStartInfo("grok");
+
+        ProviderCredentials.Apply(psi, "Grok", store);
 
         Assert.That(psi.Environment.Values, Does.Not.Contain("sk-should-be-ignored"));
     }

@@ -20,7 +20,7 @@ commit/push repos, and back the workspace up.
   no web deploy of its own: its project page is its GitHub README
   (https://github.com/mindattic/MindAttic.Launcher).
 - NOT cross-platform. It targets `net10.0-windows` / `win-x64` and depends on Windows Terminal (`wt`),
-  `robocopy`, and `sqlcmd`.
+  `robocopy`, `sqlcmd`, and (for SQLite backups) `sqlite3`.
 - NOT a general settings UI. It edits only its own roster/providers and the Windows Terminal
   `schemes` array (idempotent splice).
 
@@ -51,9 +51,13 @@ a future schema adds, survive a Save instead of being silently dropped. (`Models
 `Models/Project.cs`, `Models/AgentProvider.cs`.)
 
 ### {#MCO-LAW-3} A backup means a real database backup, not a file copy.
-robocopy snapshotting a live `.mdf` is not a backup, so backup runs `sqlcmd BACKUP DATABASE`
-(schema + data, checksummed, copy-only) per configured database alongside the file snapshot.
-(`Services/SqlBackupService.cs`, `Services/BackupService.cs`.)
+robocopy snapshotting a live `.mdf` or `.db` is not a backup, so backup also runs `sqlcmd BACKUP
+DATABASE` (schema + data, checksummed, copy-only) per configured SQL Server database and
+`sqlite3 .dump` per configured SQLite database, alongside the file snapshot and an
+`%APPDATA%\MindAttic` zip (Vault settings/credentials — otherwise a restore would come back with
+every repo and database but none of Vault's own state). `restore` and `bootstrap` consume exactly
+this layout back; there is no second, divergent backup format.
+(`Services/SqlBackupService.cs`, `Services/SqliteBackupService.cs`, `Services/BackupService.cs`.)
 
 ### {#MCO-LAW-4} Windows Terminal edits are idempotent splices.
 Writing a `MindAttic-<Name>` scheme into WT `settings.json` returns the contents unchanged if a
@@ -79,7 +83,7 @@ talks to an LLM is orchestration, not an LLM call. (`Commands/HostAgentCommand.c
 - **Sibling repo** — another repo under the workspace root (e.g. MindAttic.Deploy).
 
 ## Status index (docs/USER_STORIES.md)
-- done: 22
+- done: 29
 - partial: 6
 - planned: 3
 

@@ -27,7 +27,7 @@ A single `MindAttic.Launcher.exe` (`net10.0-windows`, published `win-x64`) built
 - Switch agents freely: Claude, Codex, Gemini and Kimi are one menu apart, and the choice is never saved, so every session starts from a fresh pick.
 - See at a glance which tabs are busy: each tab title carries a busy or idle marker that the launcher keeps pinned even when the agent CLI rewrites it.
 - Commit and push every dirty repo in one pass, with a commit message written for you when you do not give one.
-- Get a backup you can actually restore: a `robocopy` snapshot of the workspace plus genuine, checksummed `BACKUP DATABASE` dumps of every configured SQL Server database, in one dated folder.
+- Get a backup you can actually restore: a `robocopy` snapshot of the workspace plus genuine, checksummed `BACKUP DATABASE` dumps of every configured SQL Server database and `sqlite3 .dump` text of every configured SQLite database, in one dated folder.
 - New repos announce themselves: anything cloned under the workspace root is offered for the roster at startup, with a matching terminal color scheme.
 
 ## Features
@@ -45,7 +45,7 @@ It is not an agent: it execs a provider CLI with inherited stdio and never calls
 
 ## Quick start
 
-Prerequisites: Windows, the .NET 10 SDK, Windows Terminal (`wt`) on `PATH`, at least one agent CLI (`claude`, `codex`, `agy` or `kimi`), and for backups `robocopy` and `sqlcmd`.
+Prerequisites: Windows, the .NET 10 SDK, Windows Terminal (`wt`) on `PATH`, at least one agent CLI (`claude`, `codex`, `agy` or `kimi`), and for backups `robocopy`, `sqlcmd` and (if any project has a SQLite database configured) `sqlite3`.
 
 ```powershell
 git clone https://github.com/mindattic/MindAttic.Launcher.git
@@ -73,7 +73,7 @@ You should see the menu above. On first run the launcher offers every git repo d
   MainMenuCommand   HostAgentCommand   CommitCommand
         |                 |                  |
    Menus/* ------> Services/* ------> external tools
-   (Spectre UI)    (logic + IO)       wt, git, robocopy, sqlcmd, provider exe
+   (Spectre UI)    (logic + IO)       wt, git, robocopy, sqlcmd, sqlite3, provider exe
         |                 |
    Ui/* (Menu,        TitlePinner / HostInputPipeServer
    Screen, Theme)     (per-tab background loops)
@@ -81,7 +81,7 @@ You should see the menu above. On first run the launcher offers every git repo d
    Models/* (Project, AgentProvider, AppSettings)  <--> SettingsStore <--> MindAttic.Vault
 ```
 
-Every external-process invocation (`wt`, `git`, `robocopy`, `sqlcmd`, an agent provider exe) is factored into an injectable service with a pure logic core (parsing, path, SQL and argv composition, idempotency checks), so the decision can be unit-tested even when the process never runs. The project's quality bar ([BIBLE section 8](docs/BIBLE.md#MCO-§8)) requires this before a story is marked done.
+Every external-process invocation (`wt`, `git`, `robocopy`, `sqlcmd`, `sqlite3`, an agent provider exe) is factored into an injectable service with a pure logic core (parsing, path, SQL and argv composition, idempotency checks), so the decision can be unit-tested even when the process never runs. The project's quality bar ([BIBLE section 8](docs/BIBLE.md#MCO-§8)) requires this before a story is marked done.
 
 ## Commands
 
@@ -92,6 +92,9 @@ All sub-commands are declared in `MindAttic.Launcher/Program.cs` and implemented
 | (none) | Runs `MainMenuCommand`, the interactive Spectre.Console menu. | `0` |
 | `host` | Runs an agent provider inside the current tab. Options below. | see below |
 | `commit` | Commits and pushes one project or every roster project. Options below. | `0` all clean or pushed; `1` at least one failure |
+| `backup` | Non-interactive backup (files, AppData, SQL Server, SQLite) — what a scheduled task calls instead of the Backup menu. Options below. | `0` ok; `1` partial failure |
+| `restore` | Restores AppData, SQL Server and SQLite databases from a dated backup folder. Options below. | `0` ok; `1` partial failure; `2` bad `--from` |
+| `bootstrap` | New-machine setup: install prerequisites, clone every `wip`-tagged repo, restore the latest reachable backup. Options below. | `0` ok; `1` partial failure |
 | `version` (alias `--version`) | Prints the assembly's informational version and the running exe's process path. | `0` |
 
 ### host
@@ -135,6 +138,48 @@ Options:
 
 For each target it reads git status, skips clean repos, auto-generates a message from added, modified, deleted and renamed files (capped to 200 characters, falling back to counts) when none is given, then runs `git add -A`, `git commit -m <msg>` and `git push --quiet`. Exit `1` means at least one project had a missing path, an invalid git status, or a failed add, commit or push.
 
+### backup
+
+```powershell
+MindAttic.Launcher.exe backup
+MindAttic.Launcher.exe backup --keep 30
+```
+
+Options:
+
+- `--keep <N>`: prune dated backup folders under `R:\Backup\MindAttic` beyond the newest N (a date's `_a`..`_z` collision siblings are pruned together with it). Omit it to keep every backup.
+
+Runs the exact same four services the interactive Backup menu uses — `BackupService` (files), `AppDataBackupService` (Vault settings/credentials), `SqlBackupService`, `SqliteBackupService` — so a manual run from the menu and an automated run from a scheduled task are provably the same code path. This is what the nightly Scheduled Task calls (see [Scheduled Backup](#scheduled-backup) below); it logs one summary line through the already-wired `MindAttic.Log` sink rather than a separate log file.
+
+### restore
+
+```powershell
+MindAttic.Launcher.exe restore --from R:\Backup\MindAttic\2026-05-23
+MindAttic.Launcher.exe restore --from R:\Backup\MindAttic\2026-05-23 --server localhost
+```
+
+Options:
+
+- `--from <FOLDER>` (required): a dated backup folder as `backup` (or the Backup menu) produces it.
+- `--server <SERVER>`: SQL Server instance to restore every `.bak` into (default `localhost` — one instance for the whole run, same as Bob's own single `-SqlServer` override; the per-server subfolder name under `Databases\` is filesystem-sanitized and not always reversible, e.g. `(localdb)\MSSQLLocalDB`, so pass `--server` explicitly for anything other than the default).
+
+Restores AppData (if `AppData.zip` is present), every `.bak` found anywhere under `{from}\Databases\` (dropping an already-existing database to `SINGLE_USER` and force-replacing it, same conflict handling Bob's own test suite covered), and every SQLite `.sql` dump under `{from}\Databases\SQLite\`, matched back to its live destination file by project name. This is recovery onto an already-cloned, already-running workspace — for a from-scratch machine, see `bootstrap`.
+
+### bootstrap
+
+```powershell
+MindAttic.Launcher.exe bootstrap
+MindAttic.Launcher.exe bootstrap --workspace-root D:\Projects\MindAttic --skip-optional
+```
+
+Options:
+
+- `--workspace-root <PATH>`: where to clone repos (prompted if not passed; default `D:\Projects\MindAttic`).
+- `--from <FOLDER>`: backup folder to restore from (default: the newest one reachable under `R:\Backup\MindAttic`; skipped with a notice if none is reachable).
+- `--skip-optional`: don't prompt for optional dev tools.
+
+New-machine setup: installs `sqlcmd` and SQL Server LocalDB via `winget` if missing (trying fallback package ids in order), prompts for the same optional tools Bob used to offer (VS Code, Visual Studio, SSMS, Notepad++, Node, Claude desktop, Antigravity), clones every repo tagged `wip` on GitHub that isn't already present (reusing the same topic discovery the roster filter uses — nothing to hand-maintain), then runs the same restore path as `restore` against the latest reachable backup. This is Launcher's answer to MindAttic.Bob's `--unpack` — except it runs on a machine that already has git, the .NET runtime and this very exe; getting *that* far is `setup.ps1`'s job (it tries `winget` for git/the .NET SDK before giving up, then offers to run `bootstrap` right after deploying). No self-elevation anywhere in this path: `winget` raises its own UAC prompt only for the one package that needs it.
+
 ## Interactive menu
 
 Launching the exe with no arguments runs `MainMenuCommand`, which loads settings (performing a one-time legacy-file seed if needed, see [Settings and persistence](#settings-and-persistence)), then, before the first menu paint, runs the startup Discover Projects walkthrough (`DiscoverProjectsMenu`, not itself a menu item), offering to add any git repo found directly under the workspace root that is not yet in the roster or on the "never ask again" list. It also runs a one-time build-staleness check (`BuildFreshness.Check()`, which warns when the running exe is behind the latest commit in this repo). (The Claude usage and rate-limit block from `ClaudeStatusService` is currently commented out.)
@@ -146,7 +191,8 @@ Launching the exe with no arguments runs `MainMenuCommand`, which loads settings
 | Commit and sync | `commit` | Opens `CommitMenu`: commit and push one project or all, prompting for an optional message (blank means auto-generated). |
 | Workflow | `workflow` | Opens `WorkflowMenu`, the Launcher's view of [MindAttic.Workflow](https://github.com/mindattic/MindAttic.Workflow): open tickets across every repo, each repo's uncommitted, unpushed and local-only work with its GitHub state, and the ticket-log checks. Read-only; deleting folders stays in the `workflow repos prune` CLI. |
 | Open Project Tab | `open` | Opens `OpenProjectMenu`: pick a project, then which agent CLI to launch it with, then `ProjectActionMenu`. |
-| Backup | `backup` | Runs `BackupMenu` directly: confirms source, target and database list, then runs the file and SQL backup. |
+| Backup | `backup` | Runs `BackupMenu` directly: confirms source, target and database list, then runs the file, AppData, SQL Server and SQLite backup. |
+| Scheduled Backup | `schedule` | Opens `ScheduledBackupMenu`: status (registered/enabled, last run, next run) and Enable/Disable/Run now/Re-register/Remove for the nightly `backup` Scheduled Task. |
 | Settings | `settings` | Opens `SettingsMenu`: the model each agent CLI runs with (only). |
 | Open Command Prompt (Admin) | `cmd` | Opens an elevated `cmd` tab at the workspace root via UAC (`wt … -- cmd`, `Verb=runas`). |
 | Open PowerShell (Admin) | `ps` | Same, but `powershell`. |
@@ -169,7 +215,13 @@ The header also shows the staleness notice when the build is behind; it is not a
 
 ### Settings menu
 
-`SettingsMenu` edits exactly one thing per provider: the model each agent CLI runs with. For each configured provider it shows `<Name> model` and the model parsed out of its `RunCommand` (or "(CLI default)"). Selecting one opens a picker over `AgentProviderRegistry.KnownModels[key]` (currently populated only for Claude: Fable 5, Opus 4.8, 4.7 and 4.6, Sonnet 5, Sonnet 4.6, Haiku 4.5) plus "Enter model id…" (free text) and "Use CLI default" (clears the flag). `ProviderModel.Set` rewrites the `--model`/`-m` token in place inside `RunCommand` (or appends or removes it), and `AgentProviderRegistry.SetModel` persists the change, materializing the code-level defaults into settings on first edit so there is a row to change. There is no "Default Agent" row and no per-project provider override; the provider is a per-launch choice ([MCO-§2](docs/BIBLE.md#MCO-§2)).
+`SettingsMenu` edits the model and API key each agent CLI runs with, the GitHub token, and the Windows Terminal settings path. For each configured provider it shows `<Name> model` and the model parsed out of its `RunCommand` (or "(CLI default)"). Selecting one opens a picker over `AgentProviderRegistry.KnownModels[key]` (currently populated only for Claude: Fable 5, Opus 4.8, 4.7 and 4.6, Sonnet 5, Sonnet 4.6, Haiku 4.5) plus "Enter model id…" (free text) and "Use CLI default" (clears the flag). `ProviderModel.Set` rewrites the `--model`/`-m` token in place inside `RunCommand` (or appends or removes it), and `AgentProviderRegistry.SetModel` persists the change, materializing the code-level defaults into settings on first edit so there is a row to change. There is no "Default Agent" row and no per-project provider override; the provider is a per-launch choice ([MCO-§2](docs/BIBLE.md#MCO-§2)).
+
+Each provider also gets an `<Name> API key` row (`configured` / `(not set)`). Selecting one is a blank-to-leave-unchanged prompt, same shape as the GitHub token row, that writes through `LlmCredentials` to Vault's shared `LlmCredentialStore` at `%APPDATA%\MindAttic\LLM\providers.json` — the keyring every other MindAttic app checks before its own login/config, so a key set here becomes that app's fallback too. `ProviderCredentials.Apply` pushes a configured key to wherever the CLI expects it right before a hosted tab launches: `ANTHROPIC_API_KEY` for Claude, `OPENAI_API_KEY` for Codex, `GEMINI_API_KEY` for Gemini (env vars), and Kimi's own `config.toml` (`KimiConfigSync`). A missing/blank entry is a no-op — the CLI falls back to however it's already configured.
+
+Claude is the one exception: the `claude` CLI itself warns that having both a claude.ai session and `ANTHROPIC_API_KEY` set makes auth unpredictable, and claude.ai wins anyway — so `ClaudeAuthStatus` checks `~/.claude/.credentials.json` for a live `claudeAiOauth` session and `Apply` skips pushing the env var entirely when one is found. The Settings row reflects this ("ignored while logged into claude.ai" / "using your claude.ai login") rather than silently doing nothing.
+
+The "Windows Terminal settings path" row shows any path spliced in already, or "(not set)" with a warning that tab colors won't be written. Selecting it offers every location `WindowsTerminalSchemes.CandidateSettingsPaths` finds on disk (packaged Store install, then the unpackaged install) as one-click picks, plus "Enter path manually…" and "Clear".
 
 ## Settings and persistence
 
@@ -191,7 +243,7 @@ On first run, if that Vault file does not yet exist, `SettingsStore` looks for a
 | `DiscoveryIgnore` | `List<string>?` | Full paths of repos the user chose "never ask again" for during startup discovery. |
 | `Extra` | `Dictionary<string, JsonElement>?` | `[JsonExtensionData]`: any top-level key this version does not model (for example a `"mobile"` block a sibling tool writes) round-trips through a save untouched. |
 
-`Project` (`MindAttic.Launcher/Models/Project.cs`) carries `Name`, `Repo`, `RepoUrl` (captured from `origin` at discovery time, not used by launch logic), `Path`, `Description`, `OpenWith` (detected `.slnx`/`.sln` filename), `RunCommand`, `TabAlias`, `TabColor`, `ColorScheme`, `SqlServer` and `Databases` (SQL backup targets), and its own `Extra` bag. It has no provider field.
+`Project` (`MindAttic.Launcher/Models/Project.cs`) carries `Name`, `Repo`, `RepoUrl` (captured from `origin` at discovery time, not used by launch logic), `Path`, `Description`, `OpenWith` (detected `.slnx`/`.sln` filename), `RunCommand`, `TabAlias`, `TabColor`, `ColorScheme`, `SqlServer` and `Databases` (SQL Server backup targets), `SqliteDatabases` (SQLite backup targets — absolute paths or paths relative to `Path`), and its own `Extra` bag. It has no provider field.
 
 `AgentProvider` (`MindAttic.Launcher/Models/AgentProvider.cs`) carries `Key`, `Name`, `RunCommand` and `Extra`. Every model with an `Extra` bag round-trips unknown keys losslessly; this is project law [MCO-LAW-2](docs/BIBLE.md#MCO-LAW-2).
 
@@ -234,13 +286,27 @@ Separately, `Services/RemoteControlBroadcaster.cs` implements a pipe-based fan-o
 The Backup menu item runs `BackupMenu.Run()` directly (no submenu). It:
 
 1. Resolves a collision-safe target folder via `BackupService.ResolveTargetFolder()`: `R:\Backup\MindAttic\<yyyy-MM-dd>`, or the first free `<date>_a` through `<date>_z` if today's plain folder is taken (it throws only if all 27 slots are used).
-2. Collects SQL backup targets via `SqlBackupService.CollectTargets(settings)`: every non-blank name in each project's `Databases`, paired with that project's `SqlServer` (or `SqlBackupService.DefaultInstance`, `"localhost"`), deduplicated case-insensitively per server and database pair.
-3. Shows the source, target and database list and asks for confirmation.
-4. Runs the file backup: `robocopy <source> <target> /E …` excluding `Library, Temp, Logs, obj, bin, Build, Builds, node_modules, .vs, .idea, .git` and `*.log, *.tmp`, with a live byte-count status tick. Exit codes 0 to 7 are success; 8 or above (or a cancellation) is failure.
-5. Runs the database backups (unconditionally, even if the file backup failed) via `SqlBackupService.Backup`: each target gets `sqlcmd -S <server> -E -C -b -Q "BACKUP DATABASE … WITH FORMAT, INIT, COPY_ONLY, CHECKSUM, NAME = N'MindAttic.Launcher backup';"`, written to `<target>\Databases\<server>\<database>.bak` (both path segments sanitized of illegal filename characters). A failed or cancelled backup deletes its own half-written `.bak` rather than leaving a corrupt file behind.
-6. Reports both outcomes: byte totals and elapsed time for the file copy, and per-database OK or FAILED with `sqlcmd` exit codes and a truncated error tail.
+2. Collects SQL Server backup targets via `SqlBackupService.CollectTargets(settings)`: every non-blank name in each project's `Databases`, paired with that project's `SqlServer` (or `SqlBackupService.DefaultInstance`, `"localhost"`), deduplicated case-insensitively per server and database pair.
+3. Collects SQLite backup targets via `SqliteBackupService.CollectTargets(settings)`: every non-blank path in each project's `SqliteDatabases`, resolved against that project's `Path` when relative, deduplicated by resolved absolute path.
+4. Shows the source, target, SQL Server database list and SQLite database list, and asks for confirmation.
+5. Runs the file backup: `robocopy <source> <target> /E …` excluding `Library, Temp, Logs, obj, bin, Build, Builds, node_modules, .vs, .idea, .git` and `*.log, *.tmp`, with a live byte-count status tick. Exit codes 0 to 7 are success; 8 or above (or a cancellation) is failure.
+6. Runs the SQL Server backups (unconditionally, even if the file backup failed) via `SqlBackupService.Backup`: each target gets `sqlcmd -S <server> -E -C -b -Q "BACKUP DATABASE … WITH FORMAT, INIT, COPY_ONLY, CHECKSUM, NAME = N'MindAttic.Launcher backup';"`, written to `<target>\Databases\<server>\<database>.bak` (both path segments sanitized of illegal filename characters). A failed or cancelled backup deletes its own half-written `.bak` rather than leaving a corrupt file behind.
+7. Runs the SQLite backups (also unconditionally) via `SqliteBackupService.Backup`: each target gets `sqlite3 -readonly <file> .dump`, with its captured stdout written to `<target>\Databases\SQLite\<project>\<db>.sql` (the project name sanitized of illegal filename characters, so two projects with a same-named db file don't collide). `-readonly` plus a pre-flight existence check means sqlite3 is never invoked against — and so never silently creates — a file that isn't already there. A failed or cancelled dump deletes its own partial `.sql` rather than leaving a corrupt file behind.
+8. Reports all three outcomes: byte totals and elapsed time for the file copy, per-SQL-Server-database OK or FAILED with `sqlcmd` exit codes, and per-SQLite-database OK or FAILED with `sqlite3` exit codes, each with a truncated error tail.
 
-This exists because a `robocopy` snapshot of a live `.mdf` file is not a real database backup ([MCO-LAW-3](docs/BIBLE.md#MCO-LAW-3)).
+This exists because a `robocopy` snapshot of a live `.mdf` or `.db` file is not a real database backup ([MCO-LAW-3](docs/BIBLE.md#MCO-LAW-3)).
+
+## Scheduled Backup
+
+The Scheduled Backup menu item (`Services/ScheduledTaskService.cs` + `Menus/ScheduledBackupMenu.cs`) is status/toggle for the nightly backup Windows Scheduled Task, so what's going to fire and when is visible inside Launcher instead of only in Task Scheduler's own UI:
+
+- **Status**: registered?, enabled?, last run time + result, next run time — read via `schtasks /Query /FO CSV /V /NH`.
+- **Enable / Disable**: `schtasks /Change /Enable|/Disable`, keeping the task registered either way.
+- **Run now**: `schtasks /Run`, for testing without waiting for the schedule.
+- **Register / Re-register**: prompts for a daily time and a retention count, then shells to `tools/register-nightly-backup-task.ps1` — the same `S4U`/trigger/principal composition every other MindAttic nightly task uses, kept in one `.ps1` instead of duplicated in C#. The task's action is `MindAttic.Launcher.exe backup --keep <N>` directly; no wrapper script, no separate log file (it already logs through `MindAttic.Log`).
+- **Remove**: `Unregister-ScheduledTask` after a confirm prompt.
+
+The task lives at `\MindAttic\Launcher\MindAtticLauncherNightlyBackup` — every MindAttic scheduled task lives under `\MindAttic\<Project>\`, never the Task Scheduler root, per [`MindAttic.HouseRules.md#HOUSE-LAW-11`](../MindAttic.HouseRules.md#house-law-11--scheduled-tasks-live-under-mindatticproject). This supersedes MindAttic.Bob's `MindAtticBobNightlyBackup` task (archived; see Bob's README).
 
 ## Windows Terminal color schemes
 
@@ -252,7 +318,7 @@ Every project tab gets a `--tabColor` (a plain hex the tab strip renders) and op
 
 ### Roster topic filter
 
-The roster and the Discover Projects walkthrough only show repos tagged with the GitHub topic `work-in-progress`. Tagging or untagging a repo on GitHub is how you move it into or out of the roster; untagging hides the project without deleting its settings entry. On every launch `Services/TopicRepoSync.cs` calls `GitHubTopicRepos` (`GET /user/repos`, paginated) with the GitHub token stored in Vault (set it in the Settings menu) and matches the result against each project's `RepoUrl`. If no token is set, or the fetch fails, the roster is shown unfiltered and a one-line notice explains why, so it never empties out silently.
+The roster and the Discover Projects walkthrough only show repos tagged with the GitHub topic `wip` (`TopicRepoSync.Topic`). Tagging or untagging a repo on GitHub is how you move it into or out of the roster; untagging hides the project without deleting its settings entry. On every launch `Services/TopicRepoSync.cs` calls `GitHubTopicRepos` (`GET /user/repos`, paginated) with the GitHub token stored in Vault (set it in the Settings menu) and matches the result against each project's `RepoUrl`. If no token is set, or the fetch fails, the roster is shown unfiltered and a one-line notice explains why, so it never empties out silently.
 
 Archived repos are never in the roster, even if they still carry the topic (GitHub keeps topics after a repo is archived). When the launcher finds one, it removes the stale topic on GitHub and prints a note. That cleanup needs a token that can edit topics (the classic `repo` scope, or `Administration: write` on a fine-grained token). With a read-only token, the launcher stops after the first refusal, prints a note saying the token can't edit topics, and still hides the repo.
 
@@ -268,7 +334,7 @@ MindAttic.Launcher is the orchestrator, not the thing being orchestrated. It is 
 - A phone or tablet web terminal. That was MindAttic.Mobile (a WebSocket and xterm.js bridge), now removed from the workspace. Remote driving of a tab is Claude Code's own `/remote-control`.
 - A deploy engine. Deploys are MindAttic.Deploy's job (`MindAttic.Deploy.exe all`); this repo's `/deploy` slash command only explains that it has no web deploy.
 - A general settings UI. It edits only its own roster and provider settings and the Windows Terminal `schemes` array.
-- Cross-platform. It targets `net10.0-windows` / `win-x64` and depends on Windows Terminal (`wt`), `robocopy` and `sqlcmd` being on `PATH`.
+- Cross-platform. It targets `net10.0-windows` / `win-x64` and depends on Windows Terminal (`wt`), `robocopy`, `sqlcmd` and (for SQLite backups) `sqlite3` being on `PATH`.
 - A credential store. API keys are resolved through MindAttic.Vault's shared keyring (`MindAttic.Vault.Credentials.LlmCredentialStore`); this repo never hard-codes a secret.
 
 The backup target (`R:\Backup\MindAttic`) and the legacy settings fallback path are fixed in code (`BackupService.DefaultBackupBase`, `SettingsStore`).
@@ -309,9 +375,11 @@ After editing anything under `docs/`, run `powershell -File tools/codex.ps1 doct
 
 ```text
 MindAttic.Launcher/                  the exe project
-  Commands/                          Spectre.Console.Cli sub-commands (host, commit, version, main menu)
-  Menus/                             interactive Spectre.Console screens
-  Services/                          logic + external-process/filesystem seams (git, wt, robocopy, sqlcmd, Vault, ...)
+  Commands/                          Spectre.Console.Cli sub-commands (host, commit, backup, restore,
+                                     bootstrap, version, main menu)
+  Menus/                             interactive Spectre.Console screens (incl. ScheduledBackupMenu)
+  Services/                          logic + external-process/filesystem seams (git, wt, robocopy,
+                                     sqlcmd, sqlite3, winget, schtasks, Vault, ...)
   Models/                            persisted nouns (Project, AgentProvider, AppSettings)
   Ui/                                Menu/Screen/Theme: the keyboard-driven prompt widget + chrome
   Interop/                           CommandLineParser, ConsoleBuffer, ConsoleInputInjector (Win32-adjacent helpers)
@@ -327,6 +395,9 @@ deploy.ps1                           publish to C:\Apps\MindAttic.Launcher\ (+ d
 tools/
   codex.ps1                          docs doctor/digest tooling
   build-readme.ps1                   thin wrapper -> workspace-shared README->HTML engine
+  register-nightly-backup-task.ps1   installs the \MindAttic\Launcher\ nightly `backup` task
+setup.ps1, setup.bat                 first-time checkout setup: prereqs, workspace root, deploy,
+                                     desktop shortcut, then offers to run `bootstrap`
 Directory.Build.props                shared MSBuild settings (Nullable, TreatWarningsAsErrors, ...)
 MindAttic.Launcher.slnx              solution file
 NuGet.config, global.json            package source + SDK roll-forward

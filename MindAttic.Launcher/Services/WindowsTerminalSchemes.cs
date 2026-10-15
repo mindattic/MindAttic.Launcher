@@ -15,6 +15,24 @@ namespace MindAttic.Launcher.Services;
 public sealed class WindowsTerminalSchemes
 {
     /// <summary>
+    /// Well-known locations for Windows Terminal's settings.json: the packaged
+    /// (Microsoft Store) install first, then the unpackaged (winget/scoop/portable)
+    /// install. Nothing in the app can splice a project color scheme until
+    /// <see cref="Models.AppSettings.WindowsTerminalSettingsPath"/> points at one of these.
+    /// </summary>
+    public static IReadOnlyList<string> CandidateSettingsPaths { get; } =
+    [
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Packages", "Microsoft.WindowsTerminal_8wekyb3d8bbwe", "LocalState", "settings.json"),
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Microsoft", "Windows Terminal", "settings.json"),
+    ];
+
+    /// <summary>First candidate in <see cref="CandidateSettingsPaths"/> that exists on disk, else null.</summary>
+    public static string? TryAutoDetectSettingsPath() =>
+        CandidateSettingsPaths.FirstOrDefault(File.Exists);
+
+    /// <summary>
     /// Splices a scheme named <paramref name="schemeName"/> into the
     /// <c>schemes</c> array of <paramref name="contents"/>. Idempotent: if a
     /// scheme with that name already exists the contents are returned unchanged.

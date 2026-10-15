@@ -4,9 +4,11 @@ using Spectre.Console;
 
 namespace MindAttic.Launcher.Menus;
 
-public sealed class BackupMenu(BackupService backup, SettingsStore store, SqlBackupService sql, IReadOnlySet<string>? tagged = null)
+public sealed class BackupMenu(
+    BackupService backup, SettingsStore store, SqlBackupService sql,
+    SqliteBackupService sqlite, AppDataBackupService appData, IReadOnlySet<string>? tagged = null)
 {
-    public BackupMenu() : this(new BackupService(), new SettingsStore(), new SqlBackupService()) { }
+    public BackupMenu() : this(new BackupService(), new SettingsStore(), new SqlBackupService(), new SqliteBackupService(), new AppDataBackupService()) { }
 
     public void Run()
     {
@@ -30,13 +32,17 @@ public sealed class BackupMenu(BackupService backup, SettingsStore store, SqlBac
         // "no databases" and warn, rather than aborting the whole backup because
         // the roster couldn't be loaded.
         IReadOnlyList<BackupTarget> dbTargets;
+        IReadOnlyList<SqliteBackupTarget> sqliteTargets;
         try
         {
-            dbTargets = SqlBackupService.CollectTargets(store.Load(), tagged);
+            var settings = store.Load();
+            dbTargets = SqlBackupService.CollectTargets(settings, tagged);
+            sqliteTargets = SqliteBackupService.CollectTargets(settings, tagged);
         }
         catch (Exception ex)
         {
             dbTargets = [];
+            sqliteTargets = [];
             AnsiConsole.MarkupLine($"  [yellow]Could not read project databases: {Markup.Escape(ex.Message)}[/]");
             AnsiConsole.MarkupLine("  [grey50]Continuing with the file backup only.[/]");
         }
@@ -48,9 +54,22 @@ public sealed class BackupMenu(BackupService backup, SettingsStore store, SqlBac
         if (dbTargets.Count > 0)
         {
             AnsiConsole.WriteLine();
-            AnsiConsole.MarkupLine($"    [yellow]Databases ({dbTargets.Count}):[/]");
+            AnsiConsole.MarkupLine($"    [yellow]SQL Server databases ({dbTargets.Count}):[/]");
             foreach (var t in dbTargets)
                 AnsiConsole.MarkupLine($"      [grey50]{Markup.Escape(t.Database)} @ {Markup.Escape(t.Server)}[/]");
+        }
+        if (sqliteTargets.Count > 0)
+        {
+            AnsiConsole.WriteLine();
+            AnsiConsole.MarkupLine($"    [yellow]SQLite databases ({sqliteTargets.Count}):[/]");
+            foreach (var t in sqliteTargets)
+                AnsiConsole.MarkupLine($"      [grey50]{Markup.Escape(t.DatabaseFile)} ({Markup.Escape(t.Project)})[/]");
+        }
+        if (appData.Exists(appData.Source))
+        {
+            AnsiConsole.WriteLine();
+            AnsiConsole.MarkupLine("    [yellow]AppData settings:[/]");
+            AnsiConsole.MarkupLine($"      [grey50]{Markup.Escape(appData.Source)}[/]");
         }
         AnsiConsole.WriteLine();
 
@@ -113,11 +132,52 @@ public sealed class BackupMenu(BackupService backup, SettingsStore store, SqlBac
                 });
         }
 
+        var sqliteResults = new List<SqliteBackupResult>();
+        string? sqliteError = null;
+        if (sqliteTargets.Count > 0)
+        {
+            AnsiConsole.Status()
+                .Spinner(Spinner.Known.Dots)
+                .Start("  Backing up SQLite databases...", ctx =>
+                {
+                    try
+                    {
+                        sqliteResults = sqlite.Backup(
+                            sqliteTargets, target,
+                            onDone: r => ctx.Status($"  Backing up SQLite databases... [grey50]{Markup.Escape(r.Project)}[/]"))
+                            .ToList();
+                    }
+                    catch (Exception ex)
+                    {
+                        sqliteError = ex.Message;
+                    }
+                });
+        }
+
+        AppDataBackupResult? appDataResult = null;
+        AnsiConsole.Status()
+            .Spinner(Spinner.Known.Dots)
+            .Start("  Backing up AppData settings...", ctx =>
+            {
+                try
+                {
+                    appDataResult = appData.Zip(target);
+                }
+                catch (Exception ex)
+                {
+                    appDataResult = new AppDataBackupResult(false, AppDataBackupService.ResolveZipPath(target), 0, TimeSpan.Zero, ex.Message);
+                }
+            });
+
         AnsiConsole.WriteLine();
         ReportFileResult(result);
         if (dbError is not null)
             AnsiConsole.MarkupLine($"  [red]Database backup error: {Markup.Escape(dbError)}[/]");
         ReportDatabaseResults(dbResults);
+        if (sqliteError is not null)
+            AnsiConsole.MarkupLine($"  [red]SQLite backup error: {Markup.Escape(sqliteError)}[/]");
+        ReportSqliteResults(sqliteResults);
+        ReportAppDataResult(appDataResult);
 
         Screen.PressAnyKey();
     }
@@ -167,6 +227,51 @@ public sealed class BackupMenu(BackupService backup, SettingsStore store, SqlBac
                     if (!string.IsNullOrWhiteSpace(line))
                         AnsiConsole.MarkupLine($"      [grey50]{Markup.Escape(line.TrimEnd())}[/]");
             }
+        }
+    }
+
+    private static void ReportSqliteResults(IReadOnlyList<SqliteBackupResult> results)
+    {
+        if (results.Count == 0) return;
+
+        AnsiConsole.WriteLine();
+        var okCount = results.Count(r => r.Ok);
+        AnsiConsole.MarkupLine($"  [yellow]SQLite databases: {okCount}/{results.Count} backed up[/]");
+        foreach (var r in results)
+        {
+            if (r.Ok)
+            {
+                AnsiConsole.MarkupLine(
+                    $"    [green]OK[/] [grey50]{Markup.Escape(r.Project)}: {Markup.Escape(r.DatabaseFile)} ({Format(r.Elapsed)}) -> {Markup.Escape(r.BackupFile)}[/]");
+            }
+            else
+            {
+                AnsiConsole.MarkupLine(
+                    $"    [red]FAILED {Markup.Escape(r.Project)}: {Markup.Escape(r.DatabaseFile)} (sqlite3 exit {r.ExitCode})[/]");
+                foreach (var line in r.Output.Split('\n'))
+                    if (!string.IsNullOrWhiteSpace(line))
+                        AnsiConsole.MarkupLine($"      [grey50]{Markup.Escape(line.TrimEnd())}[/]");
+            }
+        }
+    }
+
+    private static void ReportAppDataResult(AppDataBackupResult? result)
+    {
+        AnsiConsole.WriteLine();
+        if (result is null)
+        {
+            AnsiConsole.MarkupLine("  [red]AppData backup did not run.[/]");
+        }
+        else if (result.Ok)
+        {
+            AnsiConsole.MarkupLine($"  [green]AppData settings backed up — {FormatBytes(result.Bytes)} in {Format(result.Elapsed)}[/]");
+            AnsiConsole.MarkupLine($"    [grey50]To: {Markup.Escape(result.ZipPath)}[/]");
+            if (!string.IsNullOrWhiteSpace(result.Output))
+                AnsiConsole.MarkupLine($"    [grey50]{Markup.Escape(result.Output)}[/]");
+        }
+        else
+        {
+            AnsiConsole.MarkupLine($"  [red]AppData backup failed: {Markup.Escape(result.Output)}[/]");
         }
     }
 

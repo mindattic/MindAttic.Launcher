@@ -174,6 +174,24 @@ public sealed class GitService
             : "updated");
     }
 
+    /// <summary>Longer than <see cref="DefaultTimeout"/> — a fresh clone of a large repo can take a while.</summary>
+    public static readonly TimeSpan CloneTimeout = TimeSpan.FromMinutes(15);
+
+    /// <summary>
+    /// Clones <paramref name="cloneUrl"/> into <c>{workspaceRoot}\{targetDirName}</c> with
+    /// submodules, for <c>bootstrap</c>'s repo discovery. <paramref name="workspaceRoot"/> is
+    /// used as git's <c>-C</c> directory (same mechanism every other method here uses) rather
+    /// than the clone target itself, since <c>-C</c> requires a directory that already exists.
+    /// </summary>
+    public (bool ok, string? message) Clone(string workspaceRoot, string cloneUrl, string targetDirName)
+    {
+        var (code, stdout, stderr) = Run(workspaceRoot, CloneTimeout, "clone", "--recurse-submodules", cloneUrl, targetDirName);
+        if (code == 0) return (true, "cloned");
+
+        var detail = $"{stdout}\n{stderr}".Trim();
+        return (false, detail.Length == 0 ? $"git clone failed (exit {code})" : detail);
+    }
+
     /// <summary>
     /// True when a failed <see cref="Pull"/> only means the branch has no remote to
     /// pull from (a local-only repo) — nothing to fetch, so not worth a warning.

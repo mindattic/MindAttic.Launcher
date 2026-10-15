@@ -39,6 +39,18 @@ public sealed class Project
     public List<string> Databases { get; set; } = new();
 
     /// <summary>
+    /// Paths to this project's SQLite database files — absolute, or relative to
+    /// <see cref="Path"/>. The backup step runs <c>sqlite3 &lt;file&gt; .dump</c>
+    /// for each into a <c>.sql</c> file in the dated backup folder (schema + data
+    /// as portable SQL text, the SQLite equivalent of a SQL Server
+    /// <c>BACKUP DATABASE</c> — see <see cref="Services.SqliteBackupService"/>).
+    /// The robocopy file snapshot already copies the raw <c>.db</c> file too;
+    /// this is the restorable, diffable companion. Empty means no SQLite
+    /// databases to back up.
+    /// </summary>
+    public List<string> SqliteDatabases { get; set; } = new();
+
+    /// <summary>
     /// Captures per-project keys this app doesn't model (e.g. "mobileEnabled")
     /// so they survive a settings Save instead of being silently dropped. See
     /// <see cref="AppSettings.Extra"/>.

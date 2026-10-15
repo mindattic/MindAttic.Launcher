@@ -4,7 +4,7 @@ project: MindAttic.Launcher
 code: MCO
 layer: bible
 status: living
-updated: 2026-10-03
+updated: 2026-10-14
 ---
 
 # MindAttic.Launcher — Project Bible
@@ -23,8 +23,13 @@ commit/push repos, and back the workspace up.
   per-launch, not saved: nothing about "which CLI for this project" is persisted anywhere.
 - One menu (or `mindattic commit`) to commit + push one or every MindAttic project, with an
   auto-generated message when none is supplied.
-- A real backup: a robocopy snapshot of `D:\Projects\MindAttic` plus full `sqlcmd` SQL Server
-  database backups, into a collision-safe dated folder.
+- A real backup: a robocopy snapshot of `D:\Projects\MindAttic`, full `sqlcmd` SQL Server database
+  backups, `sqlite3`-dumped SQLite databases, and a zip of `%APPDATA%\MindAttic` (Vault's settings
+  and credentials), into a collision-safe dated folder — the exact same four services whether
+  triggered by hand (the Backup menu) or by the `backup` command a scheduled task calls.
+- Restore from that same dated folder (`restore`), and a new-machine `bootstrap` (install
+  prerequisites, clone every `wip`-tagged repo, restore the latest reachable backup) — this repo
+  now owns the full lifecycle MindAttic.Bob used to (archived; see its README).
 - Discovery that surfaces new repos under the workspace root without a hand-edit of settings.
 - Settings that round-trip cleanly through [MindAttic.Vault](https://github.com/mindattic/MindAttic.Vault),
   never silently dropping keys this version doesn't model.
@@ -40,7 +45,7 @@ commit/push repos, and back the workspace up.
   no web deploy of its own: its project page is its GitHub README
   (https://github.com/mindattic/MindAttic.Launcher).
 - NOT cross-platform. It targets `net10.0-windows` / `win-x64` and depends on Windows Terminal (`wt`),
-  `robocopy`, and `sqlcmd`.
+  `robocopy`, `sqlcmd`, and (for SQLite backups) `sqlite3`.
 - NOT a general settings UI. It edits only its own roster/providers and the Windows Terminal
   `schemes` array (idempotent splice).
 
@@ -78,9 +83,9 @@ call stateless/injectable services; the services own all external-process and fi
 
 ### 4.2 Domain model — NOUNS (`MindAttic.Launcher/Models/`)
 - **Project** (`Models/Project.cs`) — a managed repo: `Name`, `Path`, `RepoUrl`, tab alias/color/scheme,
-  `SqlServer` + `Databases`, `[JsonExtensionData] Extra`. `TabTitle` strips the shared `MindAttic.`
-  prefix. Carries no provider — which CLI to launch with is chosen at Open-Project-Tab time, not
-  stored per project.
+  `SqlServer` + `Databases`, `SqliteDatabases`, `[JsonExtensionData] Extra`. `TabTitle` strips the
+  shared `MindAttic.` prefix. Carries no provider — which CLI to launch with is chosen at
+  Open-Project-Tab time, not stored per project.
 - **AgentProvider** (`Models/AgentProvider.cs`) — a launchable agent: `Key`, `Name`, `RunCommand`,
   `Extra`.
 - **AppSettings** (`Models/AppSettings.cs`) — the persisted root: WT settings path, `AgentProviders`,
@@ -88,7 +93,8 @@ call stateless/injectable services; the services own all external-process and fi
   launch and never persisted.
 - Service-local records: `GitStatus`/`GitChange` (`Services/GitService.cs`), `DiscoveredRepo`
   (`Services/ProjectDiscovery.cs`), `PaletteColor` (`Services/ColorPalette.cs`),
-  `DatabaseBackupResult`/`BackupTarget` (`Services/SqlBackupService.cs`).
+  `DatabaseBackupResult`/`BackupTarget` (`Services/SqlBackupService.cs`),
+  `SqliteBackupResult`/`SqliteBackupTarget` (`Services/SqliteBackupService.cs`).
 
 ### 4.3 Key services — VERBS (`MindAttic.Launcher/Services/`)
 - **SettingsStore** — load/save `AppSettings` via Vault; one-time legacy-file seed.
@@ -105,9 +111,33 @@ call stateless/injectable services; the services own all external-process and fi
 - **ProjectRoster** — sort / find roster entries.
 - **BackupService** — robocopy snapshot to a collision-safe dated folder.
 - **SqlBackupService** — `sqlcmd` full (`BACKUP DATABASE`) per database.
+- **SqliteBackupService** — `sqlite3 -readonly <file> .dump` per SQLite database, written to a `.sql`
+  file (SQLite's equivalent of `BACKUP DATABASE`; the file-exists check before invoking is what keeps
+  sqlite3 from silently creating an empty db at a typo'd path).
+- **AppDataBackupService** — zip/unzip `%APPDATA%\MindAttic` (Vault's settings and credential
+  tree) into/from `{targetFolder}\AppData.zip` — the one thing a file+SQL+SQLite backup alone
+  misses, and the reason MindAttic.Bob's pack/bug-out used to be necessary for a full recovery.
+- **SqlRestoreService** / **SqliteRestoreService** — the restore half of the two backup services
+  above: `RESTORE DATABASE ... WITH REPLACE, RECOVERY, MOVE ...` (deriving data/log paths from
+  `SERVERPROPERTY`, dropping an existing database to `SINGLE_USER` first) and replaying a `.sql`
+  dump into a fresh SQLite file, respectively. See `restore` under §4.
+- **PrerequisiteService** — installs what `bootstrap` needs (`sqlcmd`, SQL Server LocalDB) via
+  `winget`, plus the same optional dev tools Bob offered (VS Code, Visual Studio, SSMS,
+  Notepad++, Node, Claude desktop, Antigravity) — no offline installer cache, since that only
+  existed for the no-network bug-out scenario this app doesn't have.
+- **WorkspaceCloneService** — clones every `wip`-tagged repo not already present under the
+  workspace root, reusing `TopicRepoSync`/`GitHubTopicRepos` (the same GitHub-topic discovery the
+  roster already uses) instead of a hand-maintained repo list.
+- **ScheduledTaskService** — status/enable/disable/run-now for the nightly backup Scheduled Task
+  via `schtasks.exe`; registration itself shells to `tools/register-nightly-backup-task.ps1`.
+  Every task lives under `\MindAttic\Launcher\`, per `MindAttic.HouseRules.md#HOUSE-LAW-11`.
 - **ProviderModel** — read/rewrite the `--model`/`-m` token inside a provider's `RunCommand`.
-- **ProviderCredentials** / **KimiConfigSync** — push each provider's Vault-held API key to where its
-  CLI reads it (env var for Gemini; idempotent `config.toml` splice for Kimi) right before launch.
+- **ProviderCredentials** / **KimiConfigSync** / **LlmCredentials** / **ClaudeAuthStatus** — push each
+  provider's Vault-held API key (edited via `Menus/SettingsMenu.cs`, stored in the shared
+  `LlmCredentialStore` at `%APPDATA%\MindAttic\LLM\providers.json`) to where its CLI reads it (env var
+  for Claude/Codex/Gemini; idempotent `config.toml` splice for Kimi) right before launch — except
+  Claude, where an active claude.ai login (`~/.claude/.credentials.json`) always wins and the push is
+  skipped entirely.
 - **ExecutableResolver** — resolve npm `.cmd`/`.ps1` CLI shims that `Process.Start` can't find.
 - **ProjectCompanionService** — ensure a project's companion service (e.g. Prose.Hub) is running
   before an agent session starts.
@@ -146,9 +176,13 @@ a future schema adds, survive a Save instead of being silently dropped. (`Models
 `Models/Project.cs`, `Models/AgentProvider.cs`.)
 
 ### {#MCO-LAW-3} A backup means a real database backup, not a file copy.
-robocopy snapshotting a live `.mdf` is not a backup, so backup runs `sqlcmd BACKUP DATABASE`
-(schema + data, checksummed, copy-only) per configured database alongside the file snapshot.
-(`Services/SqlBackupService.cs`, `Services/BackupService.cs`.)
+robocopy snapshotting a live `.mdf` or `.db` is not a backup, so backup also runs `sqlcmd BACKUP
+DATABASE` (schema + data, checksummed, copy-only) per configured SQL Server database and
+`sqlite3 .dump` per configured SQLite database, alongside the file snapshot and an
+`%APPDATA%\MindAttic` zip (Vault settings/credentials — otherwise a restore would come back with
+every repo and database but none of Vault's own state). `restore` and `bootstrap` consume exactly
+this layout back; there is no second, divergent backup format.
+(`Services/SqlBackupService.cs`, `Services/SqliteBackupService.cs`, `Services/BackupService.cs`.)
 
 ### {#MCO-LAW-4} Windows Terminal edits are idempotent splices.
 Writing a `MindAttic-<Name>` scheme into WT `settings.json` returns the contents unchanged if a
@@ -161,20 +195,22 @@ an LLM SDK, makes an LLM API call, or owns an FTP/deploy pipeline; spawning an a
 talks to an LLM is orchestration, not an LLM call. (`Commands/HostAgentCommand.cs`.)
 
 ## 6. Verified state {#MCO-§6}
-Evidence (2026-10-03, `net10.0-windows`):
+Evidence (2026-10-14, `net10.0-windows`):
 - **Build:** `dotnet build` succeeds (`TreatWarningsAsErrors=true`, `Nullable=enable`).
-- **Tests:** `dotnet test` → **152 passed, 0 failed, 0 skipped** (NUnit 4), ~270 ms.
+- **Tests:** `dotnet test` → **214 passed, 0 failed, 0 skipped** (NUnit 4), ~400 ms.
 - Coverage spans: settings/Vault round-trip + legacy seed + unknown-key preservation
   (`SettingsStoreTests`); provider list resolution + model-flag rewriting (`AgentProviderRegistryTests`); `git
   --porcelain` parsing incl. renames/untracked/both-modified + auto message
   (`GitServiceTests`); the dated-backup-folder allocator + exclude lists (`BackupServiceTests`);
-  SQL backup path/SQL composition (`SqlBackupServiceTests`); WT scheme splice idempotency
+  SQL Server backup path/SQL composition (`SqlBackupServiceTests`); SQLite backup path composition +
+  the missing-file guard (`SqliteBackupServiceTests`); WT scheme splice idempotency
   (`WindowsTerminalSchemesTests`); argv quoting (`CommandLineParserTests`); discovery
   (`ProjectDiscoveryTests`); tab-title rules (`ProjectTests`); title-pinner busy detection (`TitlePinnerTests`); remote-control
   broadcast (`RemoteControlBroadcasterTests`); build freshness (`BuildFreshnessTests`); color
   palette (`ColorPaletteTests`); WT launcher (`WindowsTerminalLauncherTests`); roster
-  (`ProjectRosterTests`); model-flag rewriting (`ProviderModelTests`); provider credential push
-  (`ProviderCredentialsTests`, `KimiConfigSyncTests`); CLI shim resolution
+  (`ProjectRosterTests`); model-flag rewriting (`ProviderModelTests`); provider credential push incl.
+  the claude.ai-login precedence (`ProviderCredentialsTests`, `KimiConfigSyncTests`,
+  `ClaudeAuthStatusTests`); CLI shim resolution
   (`ExecutableResolverTests`); companion-service startup (`ProjectCompanionServiceTests`).
 - See [USER_STORIES.md](USER_STORIES.md) for the per-capability status + verifying test names.
 

@@ -72,6 +72,47 @@ public sealed class BackupServiceTests
     }
 
     [Test]
+    public void ResolveStaleFolders_keeps_newest_N_dates()
+    {
+        var folders = new[]
+        {
+            @"R:\Backup\MindAttic\2026-05-21",
+            @"R:\Backup\MindAttic\2026-05-22",
+            @"R:\Backup\MindAttic\2026-05-23",
+        };
+        Assert.That(BackupService.ResolveStaleFolders(folders, keep: 2),
+            Is.EquivalentTo(new[] { @"R:\Backup\MindAttic\2026-05-21" }));
+    }
+
+    [Test]
+    public void ResolveStaleFolders_prunes_collision_siblings_together_with_their_date()
+    {
+        var folders = new[]
+        {
+            @"R:\Backup\MindAttic\2026-05-22",
+            @"R:\Backup\MindAttic\2026-05-22_a",
+            @"R:\Backup\MindAttic\2026-05-23",
+        };
+        Assert.That(BackupService.ResolveStaleFolders(folders, keep: 1),
+            Is.EquivalentTo(new[] { @"R:\Backup\MindAttic\2026-05-22", @"R:\Backup\MindAttic\2026-05-22_a" }));
+    }
+
+    [Test]
+    public void ResolveStaleFolders_prunes_nothing_when_under_the_limit()
+    {
+        var folders = new[] { @"R:\Backup\MindAttic\2026-05-23" };
+        Assert.That(BackupService.ResolveStaleFolders(folders, keep: 30), Is.Empty);
+    }
+
+    [Test]
+    public void ResolveStaleFolders_treats_keep_zero_or_negative_as_keep_nothing()
+    {
+        var folders = new[] { @"R:\Backup\MindAttic\2026-05-23" };
+        Assert.That(BackupService.ResolveStaleFolders(folders, keep: 0), Is.EquivalentTo(folders));
+        Assert.That(BackupService.ResolveStaleFolders(folders, keep: -1), Is.EquivalentTo(folders));
+    }
+
+    [Test]
     public void Exclude_lists_match_original_PS_launcher()
     {
         Assert.That(BackupService.ExcludeDirs, Is.EquivalentTo(new[]

@@ -53,8 +53,9 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
 
         var commit   = new CommitMenu(store, git, tagged);
         var open     = new OpenProjectMenu(store, providers, wt, tagged);
-        var backup   = new BackupMenu(new BackupService(), store, new SqlBackupService(), tagged);
-        var settingsMenu = new SettingsMenu(providers);
+        var backup   = new BackupMenu(new BackupService(), store, new SqlBackupService(), new SqliteBackupService(), new AppDataBackupService(), tagged);
+        var scheduledBackup = new ScheduledBackupMenu();
+        var settingsMenu = new SettingsMenu(providers, store);
         var workflow = new WorkflowMenu(Directory.Exists(ExePath.WorkspaceRoot) ? ExePath.WorkspaceRoot : MindAtticRoot());
 
         // Checked once at launch: running git every menu redraw would be wasteful,
@@ -78,6 +79,7 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
             new() { Name = "Commit and sync",               Description = "commit and push changes per project or across all", Tag = "commit" },
             new() { Name = "Workflow",                      Description = "open tickets, repo status and ticket-log checks across the workspace", Tag = "workflow" },
             new() { Name = "Backup",                        Description = "back up MindAttic to R:\\Backup\\MindAttic", Tag = "backup" },
+            new() { Name = "Scheduled Backup",              Description = "status and toggle for the nightly backup task", Tag = "schedule" },
             new() { Name = "Orchestrator",                  Description = "the dashboard: every session, the token budget and pace, the ticket queue", Tag = "orchestrator" },
             new() { Name = "Settings",                      Description = "CLI development: the model each agent CLI runs with", Tag = "settings" },
             new() { Name = "Open Command Prompt (Admin)",   Description = "open cmd as Administrator at the workspace root", Tag = "cmd" },
@@ -115,6 +117,7 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
                 case "workflow": workflow.Run(); break;
                 case "open":     open.Run(); break;
                 case "backup":   backup.Run(); break;
+                case "schedule": scheduledBackup.Run(); break;
                 case "orchestrator": OpenOrchestrator(); break;
                 case "settings": settingsMenu.Run(); break;
                 case "cmd":

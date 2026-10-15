@@ -147,6 +147,37 @@ public sealed class BackupService
         return new BackupResult(ok, code, sw.Elapsed, targetFolder, finalBytes, output);
     }
 
+    /// <summary>
+    /// Picks which dated backup folders to delete so only the newest
+    /// <paramref name="keep"/> distinct dates remain — a date's <c>_a</c>..
+    /// <c>_z</c> collision siblings (see <see cref="ResolveTargetFolder"/>)
+    /// are pruned together with their date, never individually. Pure: takes
+    /// the folder list the caller already enumerated, so it's testable
+    /// without touching disk. <paramref name="keep"/> &lt;= 0 means "keep
+    /// nothing" (every dated folder is stale).
+    /// </summary>
+    public static IReadOnlyList<string> ResolveStaleFolders(IReadOnlyList<string> existingFolders, int keep)
+    {
+        var dated = existingFolders
+            .Select(folder => (Folder: folder, Date: ParseDatePrefix(Path.GetFileName(folder))))
+            .Where(x => x.Date.HasValue)
+            .GroupBy(x => x.Date!.Value)
+            .OrderByDescending(g => g.Key)
+            .ToList();
+
+        return dated.Skip(Math.Max(keep, 0))
+            .SelectMany(g => g.Select(x => x.Folder))
+            .ToList();
+    }
+
+    private static DateTime? ParseDatePrefix(string folderName)
+    {
+        var datePart = folderName.Length >= 10 ? folderName[..10] : folderName;
+        return DateTime.TryParseExact(datePart, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d)
+            ? d
+            : null;
+    }
+
     private static long GetDirectorySize(string path)
     {
         try
