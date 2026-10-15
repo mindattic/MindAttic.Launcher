@@ -78,6 +78,7 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
             new() { Name = "Commit and sync",               Description = "commit and push changes per project or across all", Tag = "commit" },
             new() { Name = "Workflow",                      Description = "open tickets, repo status and ticket-log checks across the workspace", Tag = "workflow" },
             new() { Name = "Backup",                        Description = "back up MindAttic to R:\\Backup\\MindAttic", Tag = "backup" },
+            new() { Name = "Orchestrator",                  Description = "the dashboard: every session, the token budget and pace, the ticket queue", Tag = "orchestrator" },
             new() { Name = "Settings",                      Description = "CLI development: the model each agent CLI runs with", Tag = "settings" },
             new() { Name = "Open Command Prompt (Admin)",   Description = "open cmd as Administrator at the workspace root", Tag = "cmd" },
             new() { Name = "Open PowerShell (Admin)",       Description = "open PowerShell as Administrator at the workspace root", Tag = "ps" },
@@ -114,6 +115,7 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
                 case "workflow": workflow.Run(); break;
                 case "open":     open.Run(); break;
                 case "backup":   backup.Run(); break;
+                case "orchestrator": OpenOrchestrator(); break;
                 case "settings": settingsMenu.Run(); break;
                 case "cmd":
                 case "ps":
@@ -155,6 +157,28 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
             : "[yellow]less than a day[/] behind the latest commit";
         AnsiConsole.MarkupLine($"  [grey50]Heads up:[/] this menu build is {age}. [grey50]Choose Restart to republish & reload.[/]");
         AnsiConsole.WriteLine();
+    }
+
+    /// <summary>
+    /// Opens the orchestrator dashboard where it installs itself (C:\Apps, or per-user Programs when
+    /// C:\Apps isn't writable). It's a separate app, so it opens beside this menu, not in a tab.
+    /// </summary>
+    private static void OpenOrchestrator()
+    {
+        var exe = new[]
+        {
+            @"C:\Apps\MindAttic.Orchestrator\MindAttic.Orchestrator.exe",
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "MindAttic.Orchestrator", "MindAttic.Orchestrator.exe"),
+        }.FirstOrDefault(File.Exists);
+        if (exe is null)
+        {
+            AnsiConsole.MarkupLine("[yellow]The orchestrator isn't installed. Double-click MindAttic.Orchestrator.exe once (or run its deploy.ps1) and it installs itself.[/]");
+            Thread.Sleep(2500);
+            return;
+        }
+        Screen.Working("Opening the orchestrator…");
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe) { UseShellExecute = true, WorkingDirectory = Path.GetDirectoryName(exe) });
+        Thread.Sleep(800);
     }
 
     private static string MindAtticRoot()
