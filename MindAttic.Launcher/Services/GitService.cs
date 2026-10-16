@@ -107,10 +107,23 @@ public sealed class GitService
         var dotGit = Path.Combine(repoPath, ".git");
         if (!Directory.Exists(dotGit) && !File.Exists(dotGit)) return new GitStatus([], "not a git repo");
 
-        var (code, stdout, stderr) = Run(repoPath, DefaultTimeout, "status", "--porcelain");
+        var (code, stdout, stderr) = Run(repoPath, DefaultTimeout, ["status", "--porcelain", "--", .. WorkingTreePathspec]);
         if (code != 0) return new GitStatus([], $"git status failed: {stderr.Trim()}");
         return ParseStatus(stdout);
     }
+
+    /// <summary>
+    /// The whole working tree minus Prose's local agent state, which Prose's own .gitignore keeps out of every
+    /// repo (<c>.prose/commands</c> is tracked). A repo whose only changes are that state reads as clean.
+    /// </summary>
+    public static readonly IReadOnlyList<string> WorkingTreePathspec =
+    [
+        ".",
+        ":(exclude,glob).prose/agent-session.json*",
+        ":(exclude,glob).prose/agent-queue.json*",
+        ":(exclude).prose/quicksave.md",
+        ":(exclude).prose/archive",
+    ];
 
     /// <summary>Convenience wrapper: returns the user-facing summary string (or the error explanation).</summary>
     public string ShortStatus(string repoPath) => Status(repoPath).Short();
@@ -210,7 +223,7 @@ public sealed class GitService
 
         var message = string.IsNullOrWhiteSpace(userMessage) ? status.AutoMessage() : userMessage.Trim();
 
-        var (addCode, _, addErr) = Run(repoPath, DefaultTimeout, "add", "-A");
+        var (addCode, _, addErr) = Run(repoPath, DefaultTimeout, ["add", "-A", "--", .. WorkingTreePathspec]);
         if (addCode != 0) return (false, $"git add failed: {addErr.Trim()}", message);
 
         var (commitCode, _, commitErr) = Run(repoPath, DefaultTimeout, "commit", "-m", message);

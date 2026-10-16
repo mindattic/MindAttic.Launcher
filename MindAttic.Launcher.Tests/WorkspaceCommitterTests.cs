@@ -158,6 +158,28 @@ public sealed class WorkspaceCommitterTests
         Assert.That(File.ReadAllText(Path.Combine(wf, "data", "workflow.sql")), Does.Contain("FLOW-T1"), "the dump was rewritten after the repo's own ticket");
     }
 
+    [Test]
+    public void Prose_local_agent_state_is_never_committed_and_alone_reads_as_clean()
+    {
+        var alpha = NewRepo("Alpha");
+        NewRepo(WorkspaceCommitter.WorkflowRepoName);
+        Register(alpha, "ALP");
+        var prose = Path.Combine(alpha, ".prose");
+        Directory.CreateDirectory(Path.Combine(prose, "commands"));
+        Directory.CreateDirectory(Path.Combine(prose, "archive"));
+        foreach (var f in new[] { "agent-session.json", "agent-session.json.001", "agent-queue.json", "quicksave.md", Path.Combine("archive", "old.md") })
+            File.WriteAllText(Path.Combine(prose, f), "local");
+
+        Assert.That(Committer().Run([Project("Alpha", alpha)], "Anything").Single().Detail, Is.EqualTo("nothing to commit"));
+
+        File.WriteAllText(Path.Combine(prose, "commands", "commit.md"), "tracked");
+        Committer().Run([Project("Alpha", alpha)], "Add the shared Prose commands");
+
+        var committed = Git(alpha, "show", "--name-only", "--format=", "HEAD");
+        Assert.That(committed, Does.Contain(".prose/commands/commit.md"));
+        Assert.That(committed, Does.Not.Contain("agent-session").And.Not.Contain("agent-queue").And.Not.Contain("quicksave").And.Not.Contain("archive"));
+    }
+
     private WorkspaceCommitter Committer() => new(new GitService(), root, dbPath);
 
     private static Project Project(string name, string path) => new() { Name = name, Path = path };
