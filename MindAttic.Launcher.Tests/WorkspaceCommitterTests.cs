@@ -25,9 +25,13 @@ public sealed class WorkspaceCommitterTests
     [TearDown]
     public void TearDown()
     {
-        foreach (var f in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
-            File.SetAttributes(f, FileAttributes.Normal);
-        Directory.Delete(root, recursive: true);
+        foreach (var dir in clones.Append(root).Where(Directory.Exists))
+        {
+            foreach (var f in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
+                File.SetAttributes(f, FileAttributes.Normal);
+            Directory.Delete(dir, recursive: true);
+        }
+        clones.Clear();
     }
 
     [Test]
@@ -199,6 +203,71 @@ public sealed class WorkspaceCommitterTests
         Assert.That(Git(alpha, "show", "--name-only", "--format=", "HEAD"), Does.Contain("a.cs"));
     }
 
+    [Test]
+    public void A_remote_that_moved_ahead_is_rebased_onto_and_the_commit_still_pushes()
+    {
+        var (alpha, other) = WithRemote("shared.txt");
+        File.WriteAllText(Path.Combine(other, "theirs.txt"), "from another machine");
+        Git(other, "add", "-A"); Git(other, "commit", "-q", "-m", "Theirs"); Git(other, "push", "-q");
+        File.WriteAllText(Path.Combine(alpha, "a.cs"), "class A {}");
+
+        var r = Committer().Run([Project("Alpha", alpha)], "Add the A class").Single(x => x.Project == "Alpha");
+
+        Assert.That((r.Ok, r.Detail), Is.EqualTo((true, "synced")));
+        Assert.That(Git(alpha, "log", "--format=%s", "-2"), Is.EqualTo("Add the A class (ALP-T1)\nTheirs"), "rebased onto the remote, not merged");
+        Assert.That(Git(alpha, "rev-parse", "HEAD"), Is.EqualTo(Git(alpha, "rev-parse", "origin/main")));
+    }
+
+    [Test]
+    public void A_conflicting_rebase_is_undone_and_the_local_commit_is_kept()
+    {
+        var (alpha, other) = WithRemote("shared.txt");
+        File.WriteAllText(Path.Combine(other, "shared.txt"), "their line");
+        Git(other, "add", "-A"); Git(other, "commit", "-q", "-m", "Theirs"); Git(other, "push", "-q");
+        File.WriteAllText(Path.Combine(alpha, "shared.txt"), "our line");
+
+        var r = Committer().Run([Project("Alpha", alpha)], "Fix the shared line").Single(x => x.Project == "Alpha");
+
+        Assert.That(r.Ok, Is.False);
+        Assert.That(r.Detail, Does.StartWith(GitService.PushFailedPrefix).And.Contain("rebase was undone"));
+        Assert.That(Directory.Exists(Path.Combine(alpha, ".git", "rebase-merge")) || Directory.Exists(Path.Combine(alpha, ".git", "rebase-apply")), Is.False, "no rebase left half-done");
+        Assert.That(Git(alpha, "log", "-1", "--format=%s"), Is.EqualTo("Fix the shared line (ALP-T1)"));
+        Assert.That(File.ReadAllText(Path.Combine(alpha, "shared.txt")), Is.EqualTo("our line"));
+        using var db = WorkflowDb.Open(dbPath);
+        Assert.That(db.Ticket("ALP-T1")!.Value.Ticket.Status, Is.EqualTo(TicketRules.Closed), "the commit landed locally, so the ticket stays closed");
+    }
+
+    [Test]
+    public void IsBehindRemote_recognises_only_a_rejected_push()
+    {
+        Assert.That(GitService.IsBehindRemote(" ! [rejected]        main -> main (non-fast-forward)"), Is.True);
+        Assert.That(GitService.IsBehindRemote(" ! [rejected]        main -> main (fetch first)"), Is.True);
+        Assert.That(GitService.IsBehindRemote("remote: This repository was archived so it is read-only."), Is.False);
+    }
+
+    /// <summary>Alpha (registered, pushed to a bare remote with one seeded file) and a second clone of that remote.</summary>
+    private (string Alpha, string Other) WithRemote(string seedFile)
+    {
+        var alpha = NewRepo("Alpha");
+        NewRepo(WorkspaceCommitter.WorkflowRepoName);
+        Register(alpha, "ALP");
+        var remote = Path.Combine(root, "remote.git");
+        Git(root, "init", "--bare", "-q", "-b", "main", remote);
+        File.WriteAllText(Path.Combine(alpha, seedFile), "seed");
+        Git(alpha, "add", "-A"); Git(alpha, "commit", "-q", "-m", "seed");
+        Git(alpha, "remote", "add", "origin", remote);
+        Git(alpha, "push", "-q", "-u", "origin", "main");
+
+        var other = Path.Combine(Path.GetTempPath(), "mco-other-" + Guid.NewGuid().ToString("N"));
+        clones.Add(other);
+        Git(root, "clone", "-q", remote, other);
+        Git(other, "config", "user.name", "Other");
+        Git(other, "config", "user.email", "other@example.com");
+        return (alpha, other);
+    }
+
+    private readonly List<string> clones = [];
+
     private WorkspaceCommitter Committer() => new(new GitService(), root, dbPath);
 
     private static Project Project(string name, string path) => new() { Name = name, Path = path };
@@ -220,7 +289,7 @@ public sealed class WorkspaceCommitterTests
     {
         var path = Path.Combine(root, name);
         Directory.CreateDirectory(path);
-        Git(path, "init", "-q");
+        Git(path, "init", "-q", "-b", "main");
         Git(path, "config", "user.name", "Test");
         Git(path, "config", "user.email", "test@example.com");
         Git(path, "config", "commit.gpgsign", "false");

@@ -237,14 +237,39 @@ public sealed class GitService
         var (commitCode, _, commitErr) = Run(repoPath, DefaultTimeout, "commit", "-m", message);
         if (commitCode != 0) return (false, $"git commit failed: {commitErr.Trim()}", message);
 
-        var (pushCode, _, pushErr) = Run(repoPath, DefaultTimeout, "push", "--quiet");
-        if (pushCode != 0) return (false, $"{PushFailedPrefix} {pushErr.Trim()}", message);
-
-        return (true, "synced", message);
+        return Push(repoPath) is { } pushError ? (false, pushError, message) : (true, "synced", message);
     }
 
     /// <summary>Starts the failure message when the commit landed but the push didn't.</summary>
     public const string PushFailedPrefix = "git push failed:";
+
+    /// <summary>
+    /// Pushes; when the remote has moved ahead, rebases the local commits onto it (autostashing anything left
+    /// unstaged, such as Prose's agent state) and pushes again. A conflicting rebase is aborted, so the repo is
+    /// left exactly as it was. Returns null on success, else the failure (starting with <see cref="PushFailedPrefix"/>).
+    /// </summary>
+    private string? Push(string repoPath)
+    {
+        var (pushCode, _, pushErr) = Run(repoPath, DefaultTimeout, "push", "--quiet");
+        if (pushCode == 0) return null;
+        if (!IsBehindRemote(pushErr)) return $"{PushFailedPrefix} {pushErr.Trim()}";
+
+        var (rebaseCode, rebaseOut, rebaseErr) = Run(repoPath, DefaultTimeout, "pull", "--rebase", "--autostash", "--quiet");
+        if (rebaseCode != 0)
+        {
+            Run(repoPath, DefaultTimeout, "rebase", "--abort");
+            var detail = $"{rebaseOut}\n{rebaseErr}".Trim();
+            return $"{PushFailedPrefix} the remote moved ahead and rebasing onto it conflicts, so the rebase was undone; pull and resolve by hand ({detail})";
+        }
+
+        var (retryCode, _, retryErr) = Run(repoPath, DefaultTimeout, "push", "--quiet");
+        return retryCode == 0 ? null : $"{PushFailedPrefix} {retryErr.Trim()}";
+    }
+
+    /// <summary>True when git refused a push only because the remote has commits the local branch lacks.</summary>
+    public static bool IsBehindRemote(string pushError) =>
+        pushError.Contains("non-fast-forward", StringComparison.OrdinalIgnoreCase)
+        || pushError.Contains("fetch first", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Commits and pushes only <paramref name="paths"/>, leaving any other changes in the repo alone.</summary>
     public (bool ok, string message) CommitPaths(string repoPath, string message, IReadOnlyList<string> paths)
@@ -258,8 +283,7 @@ public sealed class GitService
         var (commitCode, _, commitErr) = Run(repoPath, DefaultTimeout, ["commit", "-m", message, "--", .. paths]);
         if (commitCode != 0) return (false, $"git commit failed: {commitErr.Trim()}");
 
-        var (pushCode, _, pushErr) = Run(repoPath, DefaultTimeout, "push", "--quiet");
-        return pushCode != 0 ? (false, $"{PushFailedPrefix} {pushErr.Trim()}") : (true, "synced");
+        return Push(repoPath) is { } pushError ? (false, pushError) : (true, "synced");
     }
 
     private static (int code, string stdout, string stderr) Run(string repoPath, TimeSpan timeout, params string[] args)
