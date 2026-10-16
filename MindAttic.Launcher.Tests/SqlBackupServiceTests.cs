@@ -281,4 +281,134 @@ public sealed class SqlBackupServiceTests
 
         Assert.That(results, Is.Empty);
     }
+
+    [Test]
+    public void BuildListDatabasesSql_excludes_system_databases_and_offline_ones()
+    {
+        var sql = SqlBackupService.BuildListDatabasesSql();
+        Assert.Multiple(() =>
+        {
+            Assert.That(sql, Does.Contain("database_id > 4"));
+            Assert.That(sql, Does.Contain("state = 0"));
+            Assert.That(sql, Does.Contain("sys.databases"));
+        });
+    }
+
+    [Test]
+    public void BuildListArguments_suppresses_headers_and_row_counts_for_parsing()
+    {
+        var args = SqlBackupService.BuildListArguments(SqlBackupService.LocalDbInstance, "SELECT name FROM sys.databases;");
+        Assert.That(args, Is.EqualTo(new[]
+        {
+            "-S", SqlBackupService.LocalDbInstance, "-E", "-C", "-b", "-h", "-1", "-W", "-Q", "SELECT name FROM sys.databases;"
+        }));
+    }
+
+    [TestCase("One\nTwo\nThree\n", new[] { "One", "Two", "Three" })]
+    [TestCase("One\r\nTwo\r\n", new[] { "One", "Two" })]
+    [TestCase("\n\nOne\n\n", new[] { "One" })]
+    [TestCase("", new string[0])]
+    public void ParseDatabaseNames_splits_lines_and_drops_blanks(string output, string[] expected) =>
+        Assert.That(SqlBackupService.ParseDatabaseNames(output), Is.EqualTo(expected));
+
+    [Test]
+    public void DiscoverDatabases_defaults_to_localdb_and_returns_one_target_per_line()
+    {
+        IReadOnlyList<string>? captured = null;
+        var subject = new SqlBackupService("sqlcmd", (args, _) =>
+        {
+            captured = args;
+            return (0, "Alpha\nBeta\nGamma\n");
+        });
+
+        var result = subject.DiscoverDatabases();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Ok, Is.True);
+            Assert.That(result.Server, Is.EqualTo(SqlBackupService.LocalDbInstance));
+            Assert.That(result.Targets, Is.EquivalentTo(new[]
+            {
+                new BackupTarget(SqlBackupService.LocalDbInstance, "Alpha"),
+                new BackupTarget(SqlBackupService.LocalDbInstance, "Beta"),
+                new BackupTarget(SqlBackupService.LocalDbInstance, "Gamma")
+            }));
+            Assert.That(captured, Is.Not.Null);
+            Assert.That(captured![1], Is.EqualTo(SqlBackupService.LocalDbInstance));
+        });
+    }
+
+    [Test]
+    public void DiscoverDatabases_honors_an_explicit_server_override()
+    {
+        var subject = new SqlBackupService("sqlcmd", (_, _) => (0, "SomeDb\n"));
+
+        var result = subject.DiscoverDatabases(@".\SQLEXPRESS");
+
+        Assert.That(result.Server, Is.EqualTo(@".\SQLEXPRESS"));
+        Assert.That(result.Targets, Is.EqualTo(new[] { new BackupTarget(@".\SQLEXPRESS", "SomeDb") }));
+    }
+
+    [Test]
+    public void DiscoverDatabases_fails_closed_on_nonzero_exit_without_throwing()
+    {
+        var subject = new SqlBackupService("sqlcmd", (_, _) => (1, "Login failed."));
+
+        var result = subject.DiscoverDatabases();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Ok, Is.False);
+            Assert.That(result.Targets, Is.Empty);
+            Assert.That(result.Output, Does.Contain("Login failed"));
+        });
+    }
+
+    [Test]
+    public void DiscoverDatabases_gives_a_clear_message_when_sqlcmd_is_not_on_path()
+    {
+        var subject = new SqlBackupService("sqlcmd",
+            (_, _) => throw new System.ComponentModel.Win32Exception(2, "The system cannot find the file specified."));
+
+        var result = subject.DiscoverDatabases();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Ok, Is.False);
+            Assert.That(result.Output, Does.Contain("not found on PATH"));
+        });
+    }
+
+    [Test]
+    public void DiscoverDatabases_turns_runner_exception_into_a_failed_result_instead_of_throwing()
+    {
+        var subject = new SqlBackupService("sqlcmd", (_, _) => throw new InvalidOperationException("LocalDB not installed"));
+
+        var result = subject.DiscoverDatabases();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Ok, Is.False);
+            Assert.That(result.Output, Does.Contain("LocalDB not installed"));
+        });
+    }
+
+    [Test]
+    public void Merge_combines_sources_and_dedupes_case_insensitively_first_source_wins()
+    {
+        var roster = new[] { new BackupTarget("localhost", "AlphaDb") };
+        var discovered = new[]
+        {
+            new BackupTarget("localhost", "alphadb"), // same as roster's, different case
+            new BackupTarget(SqlBackupService.LocalDbInstance, "BetaDb")
+        };
+
+        var merged = SqlBackupService.Merge(roster, discovered);
+
+        Assert.That(merged, Is.EquivalentTo(new[]
+        {
+            new BackupTarget("localhost", "AlphaDb"),
+            new BackupTarget(SqlBackupService.LocalDbInstance, "BetaDb")
+        }));
+    }
 }

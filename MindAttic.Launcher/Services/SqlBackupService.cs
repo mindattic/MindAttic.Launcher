@@ -10,6 +10,9 @@ public sealed record DatabaseBackupResult(
 /// <summary>A (instance, database) pair to back up. Value-equal so duplicates dedupe.</summary>
 public readonly record struct BackupTarget(string Server, string Database);
 
+/// <summary>Outcome of listing every user database on a SQL Server instance.</summary>
+public sealed record DatabaseDiscoveryResult(string Server, bool Ok, IReadOnlyList<BackupTarget> Targets, string Output = "");
+
 /// <summary>
 /// sqlcmd-backed full backup (schema + data) of each project's SQL Server
 /// databases into <c>{datedFolder}\Databases\{db}.bak</c>. A file-only robocopy
@@ -23,6 +26,14 @@ public sealed class SqlBackupService
 {
     public const string DefaultInstance = "localhost";
     public const string DatabasesSubfolder = "Databases";
+
+    /// <summary>
+    /// The LocalDB instance Bob's own backup used to enumerate every user
+    /// database (MCO-T21) — EF Core/Visual Studio projects routinely create
+    /// LocalDB databases ad hoc, so they're never added to a project's
+    /// <see cref="Project.Databases"/> list, and the roster alone misses them.
+    /// </summary>
+    public const string LocalDbInstance = @"(localdb)\MSSQLLocalDB";
 
     /// <summary>Runs sqlcmd with the given argument list; returns its exit code and combined output.</summary>
     public delegate (int ExitCode, string Output) SqlcmdRunner(IReadOnlyList<string> args, CancellationToken ct);
@@ -70,6 +81,24 @@ public sealed class SqlBackupService
         string.IsNullOrWhiteSpace(instance) ? DefaultInstance : instance.Trim();
 
     /// <summary>
+    /// Merges one or more target lists into the distinct (instance, database)
+    /// set, case-insensitively, first-source-wins on a collision — used to
+    /// combine roster-listed targets with <see cref="DiscoverDatabases"/>'s
+    /// auto-discovered ones without double-backing-up a database that happens
+    /// to be both.
+    /// </summary>
+    public static IReadOnlyList<BackupTarget> Merge(params IReadOnlyList<BackupTarget>[] sources)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var targets = new List<BackupTarget>();
+        foreach (var source in sources)
+            foreach (var t in source)
+                if (seen.Add($"{t.Server}\u0000{t.Database}"))
+                    targets.Add(t);
+        return targets;
+    }
+
+    /// <summary>
     /// Maps a (server, database) pair to its .bak path under the dated folder,
     /// scrubbing path-illegal chars from both. The server is part of the path so
     /// the same database name on two different instances (e.g. <c>App</c> on
@@ -114,6 +143,30 @@ public sealed class SqlBackupService
     /// </summary>
     public static IReadOnlyList<string> BuildArguments(string server, string sql) =>
         ["-S", server, "-E", "-C", "-b", "-Q", sql];
+
+    /// <summary>
+    /// Lists every user database on an instance: <c>database_id &gt; 4</c> excludes
+    /// the four fixed system databases (master/tempdb/model/msdb, ids 1-4), and
+    /// <c>state = 0</c> (ONLINE) skips one that's mid-attach/restore/offline so a
+    /// transient state doesn't turn into a spurious backup failure.
+    /// </summary>
+    public static string BuildListDatabasesSql() =>
+        "SET NOCOUNT ON; SELECT name FROM sys.databases WHERE database_id > 4 AND state = 0 ORDER BY name;";
+
+    /// <summary>
+    /// sqlcmd args for a query meant to be parsed rather than read: <c>-h -1</c>
+    /// drops the column-header/row-count banner and <c>-W</c> trims trailing
+    /// padding, so stdout is exactly one database name per line.
+    /// </summary>
+    public static IReadOnlyList<string> BuildListArguments(string server, string sql) =>
+        ["-S", server, "-E", "-C", "-b", "-h", "-1", "-W", "-Q", sql];
+
+    /// <summary>Splits sqlcmd's one-name-per-line output, dropping blank lines.</summary>
+    public static IReadOnlyList<string> ParseDatabaseNames(string output) =>
+        output.Split('\n')
+            .Select(line => line.Trim('\r', ' '))
+            .Where(line => line.Length > 0)
+            .ToList();
 
     /// <summary>sqlcmd exits 0 on success; a non-zero code (or a cancellation) is a failure.</summary>
     public static bool ComputeOk(int exitCode, bool cancelled) => !cancelled && exitCode == 0;
@@ -189,6 +242,48 @@ public sealed class SqlBackupService
         }
         return new DatabaseBackupResult(
             target.Server, target.Database, ok, code, sw.Elapsed, file, ok ? "" : Tail(output, 2000));
+    }
+
+    /// <summary>
+    /// Auto-discovers every user database on <paramref name="server"/> (default:
+    /// <see cref="LocalDbInstance"/>) so the nightly run backs up what's actually
+    /// on the instance instead of only whatever a project happened to list in the
+    /// roster (MCO-T21: the roster lists none, so without this LocalDB's
+    /// databases were silently never backed up). Best-effort: a missing sqlcmd,
+    /// an instance that isn't running, or any other failure comes back as
+    /// <c>Ok: false</c> with zero targets rather than throwing, so a dev machine
+    /// without LocalDB doesn't fail the whole backup.
+    /// </summary>
+    public DatabaseDiscoveryResult DiscoverDatabases(string? server = null, CancellationToken ct = default)
+    {
+        var instance = string.IsNullOrWhiteSpace(server) ? LocalDbInstance : server.Trim();
+        var args = BuildListArguments(instance, BuildListDatabasesSql());
+
+        int code;
+        string output;
+        try
+        {
+            (code, output) = run(args, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            return new DatabaseDiscoveryResult(instance, false, [], "cancelled");
+        }
+        catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 2)
+        {
+            return new DatabaseDiscoveryResult(instance, false, [],
+                $"'{Executable}' not found on PATH — install the SQL Server command-line tools (sqlcmd).");
+        }
+        catch (Exception ex)
+        {
+            return new DatabaseDiscoveryResult(instance, false, [], ex.Message);
+        }
+
+        if (!ComputeOk(code, ct.IsCancellationRequested))
+            return new DatabaseDiscoveryResult(instance, false, [], Tail(output, 2000));
+
+        var targets = ParseDatabaseNames(output).Select(name => new BackupTarget(instance, name)).ToList();
+        return new DatabaseDiscoveryResult(instance, true, targets);
     }
 
     private (int, string) DefaultRun(IReadOnlyList<string> args, CancellationToken ct)

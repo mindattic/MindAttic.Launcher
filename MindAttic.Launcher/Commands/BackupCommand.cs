@@ -59,6 +59,16 @@ public sealed class BackupCommand : Command<BackupCommand.Settings>
 
         var settingsData = store.Load();
         var dbTargets = SqlBackupService.CollectTargets(settingsData);
+        var localDb = sql.DiscoverDatabases(SqlBackupService.LocalDbInstance);
+        if (localDb.Ok)
+        {
+            dbTargets = SqlBackupService.Merge(dbTargets, localDb.Targets);
+            AnsiConsole.MarkupLine($"[white]LocalDB discovery:[/] [green]OK[/] ({localDb.Targets.Count} found)");
+        }
+        else
+        {
+            AnsiConsole.MarkupLine($"[yellow]LocalDB discovery skipped:[/] {Markup.Escape(localDb.Output)}");
+        }
         var dbResults = sql.Backup(dbTargets, target);
         foreach (var r in dbResults)
         {
