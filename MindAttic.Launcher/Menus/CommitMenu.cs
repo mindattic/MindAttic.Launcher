@@ -84,7 +84,8 @@ public sealed class CommitMenu(SettingsStore store, GitService git, IReadOnlySet
         if (r.Ok && r.Detail == "nothing to commit") return $"{name} [grey50]nothing to commit[/]";
         var label = string.IsNullOrEmpty(r.CommitMessage) ? "" : $" [darkorange]{Markup.Escape(r.CommitMessage)}[/]";
         var ticket = r.TicketCreated ? $" [cyan]new ticket {Markup.Escape(r.TicketId!)}[/]" : "";
-        var detail = r.Ok ? $"[green]{Markup.Escape(r.Detail)}[/]" : $"[red]{Markup.Escape(r.Detail)}[/]";
+        var color = !r.Ok ? "red" : r.Detail == GitService.ArchivedNotice ? "yellow" : "green";
+        var detail = $"[{color}]{Markup.Escape(r.Detail)}[/]";
         return $"{name}{label}{ticket} {detail}";
     }
 }

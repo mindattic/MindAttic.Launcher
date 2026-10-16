@@ -254,6 +254,30 @@ public sealed class WorkspaceCommitterTests
     }
 
     [Test]
+    public void An_archived_remote_keeps_commits_local_without_failing_the_run()
+    {
+        var (alpha, _) = WithRemote("shared.txt");
+        // GitHub's own wording when it refuses a push to an archived repository.
+        File.WriteAllText(Path.Combine(root, "remote.git", "hooks", "pre-receive"),
+            "#!/bin/sh\necho 'This repository was archived so it is read-only.' >&2\nexit 1\n");
+        File.WriteAllText(Path.Combine(alpha, "a.cs"), "class A {}");
+
+        var first = Committer().Run([Project("Alpha", alpha)], "Add the A class").Single(x => x.Project == "Alpha");
+        Assert.That((first.Ok, first.Detail), Is.EqualTo((true, GitService.ArchivedNotice)));
+        Assert.That(Git(alpha, "log", "-1", "--format=%s"), Is.EqualTo("Add the A class (ALP-T1)"), "committed locally");
+
+        var again = Committer().Run([Project("Alpha", alpha)], null).Single();
+        Assert.That((again.Ok, again.Detail), Is.EqualTo((true, GitService.ArchivedNotice)), "the unpushed commit doesn't fail every later run");
+    }
+
+    [Test]
+    public void IsArchivedRemote_recognises_github_s_refusal()
+    {
+        Assert.That(GitService.IsArchivedRemote("remote: This repository was archived so it is read-only.\nfatal: unable to access"), Is.True);
+        Assert.That(GitService.IsArchivedRemote(" ! [rejected]        main -> main (non-fast-forward)"), Is.False);
+    }
+
+    [Test]
     public void IsBehindRemote_recognises_only_a_rejected_push()
     {
         Assert.That(GitService.IsBehindRemote(" ! [rejected]        main -> main (non-fast-forward)"), Is.True);

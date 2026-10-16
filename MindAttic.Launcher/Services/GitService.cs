@@ -237,7 +237,8 @@ public sealed class GitService
         var (commitCode, _, commitErr) = Run(repoPath, DefaultTimeout, "commit", "-m", message);
         if (commitCode != 0) return (false, $"git commit failed: {commitErr.Trim()}", message);
 
-        return Push(repoPath) is { } pushError ? (false, pushError, message) : (true, "synced", message);
+        var (pushed, detail) = Push(repoPath);
+        return (pushed, detail, message);
     }
 
     /// <summary>Starts the failure message when the commit landed but the push didn't.</summary>
@@ -251,31 +252,41 @@ public sealed class GitService
     }
 
     /// <summary>Pushes commits an earlier run left behind, the same way <see cref="Commit"/> pushes.</summary>
-    public (bool ok, string message) PushPending(string repoPath) =>
-        Push(repoPath) is { } pushError ? (false, pushError) : (true, "synced");
+    public (bool ok, string message) PushPending(string repoPath) => Push(repoPath);
+
+    /// <summary>
+    /// What a commit run reports for a repo GitHub has archived: it is read-only, so commits stay local by design.
+    /// An expected state, not a failure, so it doesn't fail every run (or the <c>commit</c> exit code).
+    /// </summary>
+    public const string ArchivedNotice = "archived on GitHub (read-only); kept local";
 
     /// <summary>
     /// Pushes; when the remote has moved ahead, rebases the local commits onto it (autostashing anything left
     /// unstaged, such as Prose's agent state) and pushes again. A conflicting rebase is aborted, so the repo is
-    /// left exactly as it was. Returns null on success, else the failure (starting with <see cref="PushFailedPrefix"/>).
+    /// left exactly as it was. A failure's detail starts with <see cref="PushFailedPrefix"/>.
     /// </summary>
-    private string? Push(string repoPath)
+    private (bool ok, string detail) Push(string repoPath)
     {
         var (pushCode, _, pushErr) = Run(repoPath, DefaultTimeout, "push", "--quiet");
-        if (pushCode == 0) return null;
-        if (!IsBehindRemote(pushErr)) return $"{PushFailedPrefix} {pushErr.Trim()}";
+        if (pushCode == 0) return (true, "synced");
+        if (IsArchivedRemote(pushErr)) return (true, ArchivedNotice);
+        if (!IsBehindRemote(pushErr)) return (false, $"{PushFailedPrefix} {pushErr.Trim()}");
 
         var (rebaseCode, rebaseOut, rebaseErr) = Run(repoPath, DefaultTimeout, "pull", "--rebase", "--autostash", "--quiet");
         if (rebaseCode != 0)
         {
             Run(repoPath, DefaultTimeout, "rebase", "--abort");
             var detail = $"{rebaseOut}\n{rebaseErr}".Trim();
-            return $"{PushFailedPrefix} the remote moved ahead and rebasing onto it conflicts, so the rebase was undone; pull and resolve by hand ({detail})";
+            return (false, $"{PushFailedPrefix} the remote moved ahead and rebasing onto it conflicts, so the rebase was undone; pull and resolve by hand ({detail})");
         }
 
         var (retryCode, _, retryErr) = Run(repoPath, DefaultTimeout, "push", "--quiet");
-        return retryCode == 0 ? null : $"{PushFailedPrefix} {retryErr.Trim()}";
+        return retryCode == 0 ? (true, "synced") : (false, $"{PushFailedPrefix} {retryErr.Trim()}");
     }
+
+    /// <summary>True when GitHub refused a push because the repository is archived.</summary>
+    public static bool IsArchivedRemote(string pushError) =>
+        pushError.Contains("repository was archived", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>True when git refused a push only because the remote has commits the local branch lacks.</summary>
     public static bool IsBehindRemote(string pushError) =>
@@ -294,7 +305,7 @@ public sealed class GitService
         var (commitCode, _, commitErr) = Run(repoPath, DefaultTimeout, ["commit", "-m", message, "--", .. paths]);
         if (commitCode != 0) return (false, $"git commit failed: {commitErr.Trim()}");
 
-        return Push(repoPath) is { } pushError ? (false, pushError) : (true, "synced");
+        return Push(repoPath);
     }
 
     private static (int code, string stdout, string stderr) Run(string repoPath, TimeSpan timeout, params string[] args)

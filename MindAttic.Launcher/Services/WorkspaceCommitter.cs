@@ -68,7 +68,7 @@ public sealed partial class WorkspaceCommitter(GitService git, string workspaceR
             var unpushed = git.UnpushedCount(p.Path);
             if (unpushed == 0) return new(p.Name, true, "nothing to commit");
             var (pushed, pushDetail) = git.PushPending(p.Path);
-            return new(p.Name, pushed, pushed ? $"pushed {unpushed} earlier commit(s)" : pushDetail);
+            return new(p.Name, pushed, pushed && pushDetail != GitService.ArchivedNotice ? $"pushed {unpushed} earlier commit(s)" : pushDetail);
         }
 
         if (isWorkflow && carriedTicket is not null && status.Changes.All(c => IsDatabaseFile(c.FileName)))
