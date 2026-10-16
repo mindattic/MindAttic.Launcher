@@ -66,7 +66,7 @@ function Test-FrontMatter ($path, $expectedLayer) {
         if (-not $fm.ContainsKey($k)) { Add-Err "front-matter: $rel missing key '$k'" }
     }
     if ($fm.ContainsKey('codex') -and $fm['codex'] -ne '1') { Add-Err "front-matter: $rel codex must be 1" }
-    if ($fm.ContainsKey('code')  -and $fm['code'] -ne 'MCO') { Add-Err "front-matter: $rel code must be MCO" }
+    if ($fm.ContainsKey('code')  -and $fm['code'] -ne 'M.LNCH') { Add-Err "front-matter: $rel code must be M.LNCH" }
     if ($expectedLayer -and $fm.ContainsKey('layer') -and $fm['layer'] -ne $expectedLayer) {
         Add-Err "front-matter: $rel layer is '$($fm['layer'])', expected '$expectedLayer'"
     }
@@ -108,11 +108,11 @@ function Invoke-Digest {
     if (-not (Test-Path $BiblePath)) { Add-Err "digest: $BiblePath not found"; return }
     $bible = Read-Utf8Raw $BiblePath
 
-    $sect = [char]::ConvertFromUtf32(0x00A7)   # section sign used in {#MCO-<sect>N} anchors
-    $s1 = Get-Section $bible ('MCO-' + $sect + '1')
-    $s3 = Get-Section $bible ('MCO-' + $sect + '3')
-    $s5 = Get-Section $bible ('MCO-' + $sect + '5')
-    $s9 = Get-Section $bible ('MCO-' + $sect + '9')
+    $sect = [char]::ConvertFromUtf32(0x00A7)   # section sign used in {#M.LNCH-<sect>N} anchors
+    $s1 = Get-Section $bible ('M.LNCH-' + $sect + '1')
+    $s3 = Get-Section $bible ('M.LNCH-' + $sect + '3')
+    $s5 = Get-Section $bible ('M.LNCH-' + $sect + '5')
+    $s9 = Get-Section $bible ('M.LNCH-' + $sect + '9')
 
     # status index from USER_STORIES.md
     $done = 0; $partial = 0; $planned = 0; $cut = 0
@@ -124,27 +124,27 @@ function Invoke-Digest {
         $cut     = ([regex]::Matches($st, $script:GlyphCut)).Count
     }
 
-    # pending decisions (every "## MCO-A<n>" entry still in AMENDMENTS.md; normally none)
+    # pending decisions (every "## M.LNCH-A<n>" entry still in AMENDMENTS.md; normally none)
     $pending = New-Object System.Collections.Generic.List[string]
     if (Test-Path $AmendPath) {
         foreach ($l in (Read-Utf8Lines $AmendPath)) {
-            if ($l -match '^##\s+(MCO-A\d+.*)$') { $pending.Add($Matches[1]) }
+            if ($l -match '^##\s+(M\.LNCH-A\d+.*)$') { $pending.Add($Matches[1]) }
         }
     }
 
     $sb = New-Object System.Text.StringBuilder
     [void]$sb.AppendLine('AUTHORITATIVE - full detail in docs/BIBLE.md')
-    [void]$sb.AppendLine('<!-- generatedFrom: MCO-bible -->')
+    [void]$sb.AppendLine('<!-- generatedFrom: M.LNCH-bible -->')
     [void]$sb.AppendLine('')
     [void]$sb.AppendLine('# MindAttic.Launcher (MCO) - Bible digest')
     [void]$sb.AppendLine('')
-    [void]$sb.AppendLine("## The one sentence (#MCO-${sect}1)")
+    [void]$sb.AppendLine("## The one sentence (#M.LNCH-${sect}1)")
     [void]$sb.AppendLine($s1); [void]$sb.AppendLine('')
-    [void]$sb.AppendLine("## What it is NOT (#MCO-${sect}3)")
+    [void]$sb.AppendLine("## What it is NOT (#M.LNCH-${sect}3)")
     [void]$sb.AppendLine($s3); [void]$sb.AppendLine('')
-    [void]$sb.AppendLine("## The Laws (#MCO-${sect}5)")
+    [void]$sb.AppendLine("## The Laws (#M.LNCH-${sect}5)")
     [void]$sb.AppendLine($s5); [void]$sb.AppendLine('')
-    [void]$sb.AppendLine("## Glossary (#MCO-${sect}9)")
+    [void]$sb.AppendLine("## Glossary (#M.LNCH-${sect}9)")
     [void]$sb.AppendLine($s9); [void]$sb.AppendLine('')
     [void]$sb.AppendLine('## Status index (docs/USER_STORIES.md)')
     [void]$sb.AppendLine("- done: $done")
@@ -197,7 +197,7 @@ function Invoke-Doctor {
     foreach ($ref in $linkRefs) {
         $id = $ref.Id
         if ($id -like 'HOUSE-*') { continue }                 # external (MindAttic.HouseRules.md)
-        if ($id -notmatch '^MCO-') { continue }               # not a Codex ID we own
+        if ($id -notmatch '^M\.LNCH-') { continue }               # not a Codex ID we own
         if (-not $anchors.ContainsKey($id)) {
             Add-Err "links: $($ref.Src) references '#$id' but no '{#$id}' anchor exists"
         }
@@ -231,7 +231,7 @@ function Invoke-Doctor {
                 Get-Content -Raw) -join "`n"
         }
         # split into story bullets, look at each done-glyph line block
-        $donePattern = '(?ms)^\-\s+\*\*(MCO-US-[A-Za-z0-9]+)\s*' + $script:GlyphDone + '\*\*.*?(?=^\-\s+\*\*MCO-US-|\Z)'
+        $donePattern = '(?ms)^\-\s+\*\*(M\.LNCH-US-[A-Za-z0-9]+)\s*' + $script:GlyphDone + '\*\*.*?(?=^\-\s+\*\*M\.LNCH-US-|\Z)'
         foreach ($m in [regex]::Matches($storyText, $donePattern)) {
             $sid   = $m.Groups[1].Value
             $block = $m.Value
@@ -280,7 +280,7 @@ function Invoke-Doctor {
         }
         # generatedFrom presence
         $dg = Read-Utf8Raw $DigestPath
-        if ($dg -notmatch 'generatedFrom:\s*MCO-bible') {
+        if ($dg -notmatch 'generatedFrom:\s*M\.LNCH-bible') {
             Add-Err 'digest: BIBLE.digest.md missing generatedFrom marker'
         }
     }

@@ -39,7 +39,7 @@ public sealed class BackupMenu(
             dbTargets = SqlBackupService.CollectTargets(settings, tagged);
             sqliteTargets = SqliteBackupService.CollectTargets(settings, tagged);
 
-            // Round out the roster with whatever's actually on LocalDB (MCO-T21):
+            // Round out the roster with whatever's actually on LocalDB (M.LNCH-T21):
             // EF/VS-created databases there are rarely added to a project's
             // roster entry, so roster-only would silently skip them. Best-effort
             // — a machine with no LocalDB just contributes nothing here.

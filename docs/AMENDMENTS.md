@@ -1,7 +1,7 @@
 ---
 codex: 1
 project: MindAttic.Launcher
-code: MCO
+code: M.LNCH
 layer: amendments
 status: living
 updated: 2026-10-03

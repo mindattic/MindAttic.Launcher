@@ -1,7 +1,7 @@
 ---
 codex: 1
 project: MindAttic.Launcher
-code: MCO
+code: M.LNCH
 layer: bible
 status: living
 updated: 2026-10-14
@@ -11,13 +11,13 @@ updated: 2026-10-14
 > Single source of truth for what MindAttic.Launcher IS, is NOT, and the rules that keep it coherent.
 > README says how to build/run; this says how to think about the system.
 
-## 1. The one sentence {#MCO-§1}
+## 1. The one sentence {#M.LNCH-§1}
 MindAttic.Launcher is a single Windows binary (`MindAttic.Launcher.exe`) that is the launcher and
 orchestrator for the whole MindAttic workspace: an interactive [Spectre.Console](https://spectreconsole.net/)
 menu plus a small set of CLI sub-commands that spawn per-project agent tabs in Windows Terminal,
 commit/push repos, and back the workspace up.
 
-## 2. The product promise {#MCO-§2}
+## 2. The product promise {#M.LNCH-§2}
 - Pick a project, then pick an agent CLI (Claude/Codex/Gemini/Kimi) — a working agent session opens
   in a titled, colored Windows Terminal tab rooted at the right repo. The provider choice is
   per-launch, not saved: nothing about "which CLI for this project" is persisted anywhere.
@@ -34,7 +34,7 @@ commit/push repos, and back the workspace up.
 - Settings that round-trip cleanly through [MindAttic.Vault](https://github.com/mindattic/MindAttic.Vault),
   never silently dropping keys this version doesn't model.
 
-## 3. What it is NOT {#MCO-§3}
+## 3. What it is NOT {#M.LNCH-§3}
 - NOT an agent itself. It hosts and launches agents (`mindattic host` execs the provider with
   inherited stdio); it does not call any LLM, and no code path references an LLM SDK.
 - NOT a phone/iPad web terminal. That role belongs to the sibling **MindAttic.Mobile** repo — a
@@ -49,7 +49,7 @@ commit/push repos, and back the workspace up.
 - NOT a general settings UI. It edits only its own roster/providers and the Windows Terminal
   `schemes` array (idempotent splice).
 
-## 4. Architecture canon {#MCO-§4}
+## 4. Architecture canon {#M.LNCH-§4}
 A single-file, framework-dependent `win-x64` exe. Spectre.Console.Cli routes `args` to a default
 interactive menu command or to named sub-commands. The interactive menu drives a set of menus that
 call stateless/injectable services; the services own all external-process and filesystem work.
@@ -149,7 +149,7 @@ call stateless/injectable services; the services own all external-process and fi
 - Interop: **CommandLineParser** (argv split honoring quotes), **ConsoleBuffer**,
   **ConsoleInputInjector**.
 
-## 5. The Laws {#MCO-§5}
+## 5. The Laws {#M.LNCH-§5}
 This project **inherits** the org-wide laws in
 [`MindAttic.HouseRules.md`](../../MindAttic.HouseRules.md) by reference — they are not restated here.
 The directly load-bearing inherited laws for this repo:
@@ -165,17 +165,17 @@ The directly load-bearing inherited laws for this repo:
 
 Project-specific laws:
 
-### {#MCO-LAW-1} A failed external command fails loudly, never silently.
+### {#M.LNCH-LAW-1} A failed external command fails loudly, never silently.
 An explicit `--provider` that doesn't resolve, an empty `RunCommand`, or a missing project is a
 distinct non-zero exit code (4 / 2 / 1), not a quiet fallback to a default — hiding the mistake would
 start the wrong agent. (`Commands/HostAgentCommand.cs`.)
 
-### {#MCO-LAW-2} Settings round-trip is loss-free.
+### {#M.LNCH-LAW-2} Settings round-trip is loss-free.
 Every model that Vault persists carries `[JsonExtensionData] Extra` so keys a sibling tool wrote, or
 a future schema adds, survive a Save instead of being silently dropped. (`Models/AppSettings.cs`,
 `Models/Project.cs`, `Models/AgentProvider.cs`.)
 
-### {#MCO-LAW-3} A backup means a real database backup, not a file copy.
+### {#M.LNCH-LAW-3} A backup means a real database backup, not a file copy.
 robocopy snapshotting a live `.mdf` or `.db` is not a backup, so backup also runs `sqlcmd BACKUP
 DATABASE` (schema + data, checksummed, copy-only) per configured SQL Server database and
 `sqlite3 .dump` per configured SQLite database, alongside the file snapshot and an
@@ -184,17 +184,17 @@ every repo and database but none of Vault's own state). `restore` and `bootstrap
 this layout back; there is no second, divergent backup format.
 (`Services/SqlBackupService.cs`, `Services/SqliteBackupService.cs`, `Services/BackupService.cs`.)
 
-### {#MCO-LAW-4} Windows Terminal edits are idempotent splices.
+### {#M.LNCH-LAW-4} Windows Terminal edits are idempotent splices.
 Writing a `MindAttic-<Name>` scheme into WT `settings.json` returns the contents unchanged if a
 scheme with that name already exists — never duplicating or clobbering the user's WT config.
 (`Services/WindowsTerminalSchemes.cs`.)
 
-### {#MCO-LAW-5} Orchestration only; no agent, no LLM here.
+### {#M.LNCH-LAW-5} Orchestration only; no agent, no LLM here.
 This binary launches and hosts agents; deploys are run from MindAttic.Deploy itself. No code path links
 an LLM SDK, makes an LLM API call, or owns an FTP/deploy pipeline; spawning an agent CLI that itself
 talks to an LLM is orchestration, not an LLM call. (`Commands/HostAgentCommand.cs`.)
 
-## 6. Verified state {#MCO-§6}
+## 6. Verified state {#M.LNCH-§6}
 Evidence (2026-10-14, `net10.0-windows`):
 - **Build:** `dotnet build` succeeds (`TreatWarningsAsErrors=true`, `Nullable=enable`).
 - **Tests:** `dotnet test` → **214 passed, 0 failed, 0 skipped** (NUnit 4), ~400 ms.
@@ -214,15 +214,15 @@ Evidence (2026-10-14, `net10.0-windows`):
   (`ExecutableResolverTests`); companion-service startup (`ProjectCompanionServiceTests`).
 - See [USER_STORIES.md](USER_STORIES.md) for the per-capability status + verifying test names.
 
-## 7. Active frontier {#MCO-§7}
+## 7. Active frontier {#M.LNCH-§7}
 - Open RFC: [`rfc/0001-testable-menus.md`](rfc/0001-testable-menus.md) — make the interactive menu flows testable
-  (closes [MCO-US-A5](USER_STORIES.md)).
+  (closes [M.LNCH-US-A5](USER_STORIES.md)).
 - Backlog and partial/planned capabilities live in [USER_STORIES.md](USER_STORIES.md) under
   **Priority backlog**. The headline goal is a frictionless single-binary workspace orchestrator;
   the menus exercised only interactively (Backup/Open/Commit/Settings wiring) are the
   least test-covered surface and the next place to add coverage.
 
-## 8. Quality bar {#MCO-§8}
+## 8. Quality bar {#M.LNCH-§8}
 A feature is done (`✅`) only when:
 1. It builds clean under `TreatWarningsAsErrors=true` with nullable enabled.
 2. Pure logic (parsing, path/SQL/command composition, resolution, allocation, idempotency) is
@@ -232,7 +232,7 @@ A feature is done (`✅`) only when:
 4. The capability's story in [USER_STORIES.md](USER_STORIES.md) cites the verifying test.
    Anything proven only by hand stays `🟡`.
 
-## 9. Glossary {#MCO-§9}
+## 9. Glossary {#M.LNCH-§9}
 - **Workspace root** — `D:\Projects\MindAttic`, the parent dir holding every MindAttic repo.
 - **Roster** — the `Projects` list in settings; the set of managed repos.
 - **Provider** — a launchable agent CLI (`AgentProvider.RunCommand`, e.g. `claude`, `codex`).

@@ -29,7 +29,7 @@ public sealed class SqlBackupService
 
     /// <summary>
     /// The LocalDB instance Bob's own backup used to enumerate every user
-    /// database (MCO-T21) — EF Core/Visual Studio projects routinely create
+    /// database (M.LNCH-T21) — EF Core/Visual Studio projects routinely create
     /// LocalDB databases ad hoc, so they're never added to a project's
     /// <see cref="Project.Databases"/> list, and the roster alone misses them.
     /// </summary>
@@ -248,7 +248,7 @@ public sealed class SqlBackupService
     /// Auto-discovers every user database on <paramref name="server"/> (default:
     /// <see cref="LocalDbInstance"/>) so the nightly run backs up what's actually
     /// on the instance instead of only whatever a project happened to list in the
-    /// roster (MCO-T21: the roster lists none, so without this LocalDB's
+    /// roster (M.LNCH-T21: the roster lists none, so without this LocalDB's
     /// databases were silently never backed up). Best-effort: a missing sqlcmd,
     /// an instance that isn't running, or any other failure comes back as
     /// <c>Ok: false</c> with zero targets rather than throwing, so a dev machine

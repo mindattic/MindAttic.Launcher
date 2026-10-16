@@ -39,7 +39,7 @@ public sealed class CommitCommand : Command<CommitCommand.Settings>
 
         // A specific --project always resolves by name, topic status aside —
         // an explicit target that silently no-ops because it fell off the
-        // tagged list would violate MCO-LAW-1 (fail loudly, not quietly). The
+        // tagged list would violate M.LNCH-LAW-1 (fail loudly, not quietly). The
         // "commit everything" default is where the topic decides the roster.
         var targets = string.IsNullOrWhiteSpace(settings.Project)
             ? ProjectRoster.Sorted(app, TopicRepoSync.FetchOrNull())

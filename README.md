@@ -81,7 +81,7 @@ You should see the menu above. On first run the launcher offers every git repo d
    Models/* (Project, AgentProvider, AppSettings)  <--> SettingsStore <--> MindAttic.Vault
 ```
 
-Every external-process invocation (`wt`, `git`, `robocopy`, `sqlcmd`, `sqlite3`, an agent provider exe) is factored into an injectable service with a pure logic core (parsing, path, SQL and argv composition, idempotency checks), so the decision can be unit-tested even when the process never runs. The project's quality bar ([BIBLE section 8](docs/BIBLE.md#MCO-§8)) requires this before a story is marked done.
+Every external-process invocation (`wt`, `git`, `robocopy`, `sqlcmd`, `sqlite3`, an agent provider exe) is factored into an injectable service with a pure logic core (parsing, path, SQL and argv composition, idempotency checks), so the decision can be unit-tested even when the process never runs. The project's quality bar ([BIBLE section 8](docs/BIBLE.md#M.LNCH-§8)) requires this before a story is marked done.
 
 ## Commands
 
@@ -203,7 +203,7 @@ The header also shows the staleness notice when the build is behind; it is not a
 
 ### Open Project Tab
 
-`OpenProjectMenu` lists every roster project sorted by name. Picking one prompts "Open `<Project>` with which agent?" over every configured provider (Claude, Codex, Gemini, Kimi by default, in that order). This choice is never persisted (see [MCO-§2](docs/BIBLE.md#MCO-§2)). It then opens `ProjectActionMenu` for that project and provider:
+`OpenProjectMenu` lists every roster project sorted by name. Picking one prompts "Open `<Project>` with which agent?" over every configured provider (Claude, Codex, Gemini, Kimi by default, in that order). This choice is never persisted (see [M.LNCH-§2](docs/BIBLE.md#M.LNCH-§2)). It then opens `ProjectActionMenu` for that project and provider:
 
 | Item | Tag | Description |
 |---|---|---|
@@ -215,7 +215,7 @@ The header also shows the staleness notice when the build is behind; it is not a
 
 ### Settings menu
 
-`SettingsMenu` edits the model and API key each agent CLI runs with, the GitHub token, and the Windows Terminal settings path. For each configured provider it shows `<Name> model` and the model parsed out of its `RunCommand` (or "(CLI default)"). Selecting one opens a picker over `AgentProviderRegistry.KnownModels[key]` (currently populated only for Claude: Fable 5, Opus 4.8, 4.7 and 4.6, Sonnet 5, Sonnet 4.6, Haiku 4.5) plus "Enter model id…" (free text) and "Use CLI default" (clears the flag). `ProviderModel.Set` rewrites the `--model`/`-m` token in place inside `RunCommand` (or appends or removes it), and `AgentProviderRegistry.SetModel` persists the change, materializing the code-level defaults into settings on first edit so there is a row to change. There is no "Default Agent" row and no per-project provider override; the provider is a per-launch choice ([MCO-§2](docs/BIBLE.md#MCO-§2)).
+`SettingsMenu` edits the model and API key each agent CLI runs with, the GitHub token, and the Windows Terminal settings path. For each configured provider it shows `<Name> model` and the model parsed out of its `RunCommand` (or "(CLI default)"). Selecting one opens a picker over `AgentProviderRegistry.KnownModels[key]` (currently populated only for Claude: Fable 5, Opus 4.8, 4.7 and 4.6, Sonnet 5, Sonnet 4.6, Haiku 4.5) plus "Enter model id…" (free text) and "Use CLI default" (clears the flag). `ProviderModel.Set` rewrites the `--model`/`-m` token in place inside `RunCommand` (or appends or removes it), and `AgentProviderRegistry.SetModel` persists the change, materializing the code-level defaults into settings on first edit so there is a row to change. There is no "Default Agent" row and no per-project provider override; the provider is a per-launch choice ([M.LNCH-§2](docs/BIBLE.md#M.LNCH-§2)).
 
 Each provider also gets an `<Name> API key` row (`configured` / `(not set)`). Selecting one is a blank-to-leave-unchanged prompt, same shape as the GitHub token row, that writes through `LlmCredentials` to Vault's shared `LlmCredentialStore` at `%APPDATA%\MindAttic\LLM\providers.json` — the keyring every other MindAttic app checks before its own login/config, so a key set here becomes that app's fallback too. `ProviderCredentials.Apply` pushes a configured key to wherever the CLI expects it right before a hosted tab launches: `ANTHROPIC_API_KEY` for Claude, `OPENAI_API_KEY` for Codex, `GEMINI_API_KEY` for Gemini (env vars), and Kimi's own `config.toml` (`KimiConfigSync`). A missing/blank entry is a no-op — the CLI falls back to however it's already configured.
 
@@ -245,7 +245,7 @@ On first run, if that Vault file does not yet exist, `SettingsStore` looks for a
 
 `Project` (`MindAttic.Launcher/Models/Project.cs`) carries `Name`, `Repo`, `RepoUrl` (captured from `origin` at discovery time, not used by launch logic), `Path`, `Description`, `OpenWith` (detected `.slnx`/`.sln` filename), `RunCommand`, `TabAlias`, `TabColor`, `ColorScheme`, `SqlServer` and `Databases` (SQL Server backup targets), `SqliteDatabases` (SQLite backup targets — absolute paths or paths relative to `Path`), and its own `Extra` bag. It has no provider field.
 
-`AgentProvider` (`MindAttic.Launcher/Models/AgentProvider.cs`) carries `Key`, `Name`, `RunCommand` and `Extra`. Every model with an `Extra` bag round-trips unknown keys losslessly; this is project law [MCO-LAW-2](docs/BIBLE.md#MCO-LAW-2).
+`AgentProvider` (`MindAttic.Launcher/Models/AgentProvider.cs`) carries `Key`, `Name`, `RunCommand` and `Extra`. Every model with an `Extra` bag round-trips unknown keys losslessly; this is project law [M.LNCH-LAW-2](docs/BIBLE.md#M.LNCH-LAW-2).
 
 ## Agent providers and host tabs
 
@@ -294,7 +294,7 @@ The Backup menu item runs `BackupMenu.Run()` directly (no submenu). It:
 7. Runs the SQLite backups (also unconditionally) via `SqliteBackupService.Backup`: each target gets `sqlite3 -readonly <file> .dump`, with its captured stdout written to `<target>\Databases\SQLite\<project>\<db>.sql` (the project name sanitized of illegal filename characters, so two projects with a same-named db file don't collide). `-readonly` plus a pre-flight existence check means sqlite3 is never invoked against — and so never silently creates — a file that isn't already there. A failed or cancelled dump deletes its own partial `.sql` rather than leaving a corrupt file behind.
 8. Reports all three outcomes: byte totals and elapsed time for the file copy, per-SQL-Server-database OK or FAILED with `sqlcmd` exit codes, and per-SQLite-database OK or FAILED with `sqlite3` exit codes, each with a truncated error tail.
 
-This exists because a `robocopy` snapshot of a live `.mdf` or `.db` file is not a real database backup ([MCO-LAW-3](docs/BIBLE.md#MCO-LAW-3)).
+This exists because a `robocopy` snapshot of a live `.mdf` or `.db` file is not a real database backup ([M.LNCH-LAW-3](docs/BIBLE.md#M.LNCH-LAW-3)).
 
 ## Scheduled Backup
 
@@ -310,7 +310,7 @@ The task lives at `\MindAttic\Launcher\MindAtticLauncherNightlyBackup` — every
 
 ## Windows Terminal color schemes
 
-Every project tab gets a `--tabColor` (a plain hex the tab strip renders) and optionally a matching `MindAttic-<Name>` scheme in Windows Terminal's own `settings.json`: all ANSI colors shared, only `background` differs, derived by scaling the tab color to about 16% brightness (`ColorPalette.DarkBackground`). `Services/WindowsTerminalSchemes.cs` writes this scheme with a targeted text splice (locate the `schemes` array, insert the block after its `[`) rather than a JSON parse and reserialize, so the user's hand-maintained WT settings file is not reflowed. The splice is idempotent: re-running it with a scheme name that already exists returns the file unchanged ([MCO-LAW-4](docs/BIBLE.md#MCO-LAW-4)).
+Every project tab gets a `--tabColor` (a plain hex the tab strip renders) and optionally a matching `MindAttic-<Name>` scheme in Windows Terminal's own `settings.json`: all ANSI colors shared, only `background` differs, derived by scaling the tab color to about 16% brightness (`ColorPalette.DarkBackground`). `Services/WindowsTerminalSchemes.cs` writes this scheme with a targeted text splice (locate the `schemes` array, insert the block after its `[`) rather than a JSON parse and reserialize, so the user's hand-maintained WT settings file is not reflowed. The splice is idempotent: re-running it with a scheme name that already exists returns the file unchanged ([M.LNCH-LAW-4](docs/BIBLE.md#M.LNCH-LAW-4)).
 
 ### Project discovery
 
@@ -324,7 +324,7 @@ Archived repos are never in the roster, even if they still carry the topic (GitH
 
 ## Deploys
 
-The Launcher has no deploy menu item or sub-command; run MindAttic.Deploy directly (`MindAttic.Deploy.exe all`, or its interactive menu). This repo itself has no web deploy: this GitHub README is the project page. This binary owns no FTP pipeline and no per-project deploy state ([MCO-LAW-5](docs/BIBLE.md#MCO-LAW-5)); deploying is, and will remain, MindAttic.Deploy's job.
+The Launcher has no deploy menu item or sub-command; run MindAttic.Deploy directly (`MindAttic.Deploy.exe all`, or its interactive menu). This repo itself has no web deploy: this GitHub README is the project page. This binary owns no FTP pipeline and no per-project deploy state ([M.LNCH-LAW-5](docs/BIBLE.md#M.LNCH-LAW-5)); deploying is, and will remain, MindAttic.Deploy's job.
 
 ## Limitations
 

@@ -1,7 +1,7 @@
 ---
 codex: 1
 project: MindAttic.Launcher
-code: MCO
+code: M.LNCH
 layer: rfc
 status: planned
 updated: 2026-10-03
@@ -12,7 +12,7 @@ updated: 2026-10-03
 ## Problem
 The pure services are well covered (156 green tests), but the interactive Spectre.Console menus
 (`OpenProjectMenu`, `ProjectActionMenu`, `BackupMenu`, `CommitMenu`, `SettingsMenu`, `PullMenu`) are
-exercised only by hand. The largest gap is "Open Project Tab" ([MCO-US-A5](../USER_STORIES.md)),
+exercised only by hand. The largest gap is "Open Project Tab" ([M.LNCH-US-A5](../USER_STORIES.md)),
 where the `wt` tab spec is assembled inside the menu rather than in a pure seam.
 
 ## Options compared
@@ -25,8 +25,8 @@ where the `wt` tab spec is assembled inside the menu rather than in a pure seam.
   environment-fragile.
 
 ## Decision
-Pending. Default lean is **A** — it closes MCO-US-A5 with the smallest, most stable change and is
-consistent with [MCO-§8](../BIBLE.md#MCO-§8) point 3.
+Pending. Default lean is **A** — it closes M.LNCH-US-A5 with the smallest, most stable change and is
+consistent with [M.LNCH-§8](../BIBLE.md#M.LNCH-§8) point 3.
 
 ## What NOT to do
 Do not assert on Spectre prompt strings, and do not spawn real `wt`/`git`/`robocopy` in unit tests.
@@ -38,5 +38,5 @@ Keep external-process invocation behind an injectable seam.
 3. Repeat for the remaining menus as coverage warrants (risk: low; effort scales with menu count).
 
 ## Graduates into
-[BIBLE §6](../BIBLE.md#MCO-§6) (verified state), [USER_STORIES](../USER_STORIES.md) (MCO-US-A5 → ✅,
+[BIBLE §6](../BIBLE.md#M.LNCH-§6) (verified state), [USER_STORIES](../USER_STORIES.md) (M.LNCH-US-A5 → ✅,
 plus the backlog menu-smoke item).

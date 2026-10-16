@@ -6,7 +6,7 @@ namespace MindAttic.Launcher.Services;
 /// replace its <c>api_key</c> line) rather than a TOML parse-and-reserialize, so
 /// every other table, model, and comment in the user's file survives untouched.
 /// Same idempotent-splice contract as <see cref="WindowsTerminalSchemes"/>
-/// (MCO-LAW-4): a no-op write when the key already matches.
+/// (M.LNCH-LAW-4): a no-op write when the key already matches.
 /// </summary>
 public static class KimiConfigSync
 {
