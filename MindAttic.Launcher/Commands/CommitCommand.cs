@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
+using MindAttic.Launcher.Menus;
 using MindAttic.Launcher.Services;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -9,7 +10,8 @@ namespace MindAttic.Launcher.Commands;
 /// <summary>
 /// Out-of-menu commit subcommand. <c>mindattic commit</c> commits + pushes
 /// every project; <c>mindattic commit --project Name</c> targets one project;
-/// <c>--message "..."</c> overrides the auto-generated message.
+/// <c>--message "..."</c> overrides the auto-generated message. Each commit is
+/// aligned to a workflow ticket (see <see cref="WorkspaceCommitter"/>).
 /// </summary>
 [SuppressMessage("Performance", "CA1812", Justification = "Instantiated by Spectre.Console.Cli")]
 public sealed class CommitCommand : Command<CommitCommand.Settings>
@@ -21,7 +23,7 @@ public sealed class CommitCommand : Command<CommitCommand.Settings>
         public string? Project { get; init; }
 
         [CommandOption("-m|--message <MESSAGE>")]
-        [Description("Commit message (defaults to auto-generated from status).")]
+        [Description("Commit message (defaults to auto-generated from status). Naming one of the repo's tickets (e.g. M.LNCH-T21) aligns to it; otherwise a closed ticket is created.")]
         public string? Message { get; init; }
     }
 
@@ -45,40 +47,8 @@ public sealed class CommitCommand : Command<CommitCommand.Settings>
             ? ProjectRoster.Sorted(app, TopicRepoSync.FetchOrNull())
             : new[] { ProjectRoster.FindByName(app, settings.Project!) ?? throw new InvalidOperationException($"Unknown project: {settings.Project}") };
 
-        var ok = true;
-        foreach (var p in targets)
-        {
-            if (!Directory.Exists(p.Path))
-            {
-                AnsiConsole.MarkupLine($"[white]{Markup.Escape(p.Name)}:[/] [red]path not found[/]");
-                ok = false;
-                continue;
-            }
-
-            var status = git.Status(p.Path);
-            if (!status.IsValid)
-            {
-                AnsiConsole.MarkupLine($"[white]{Markup.Escape(p.Name)}:[/] [red]{Markup.Escape(status.Error ?? "")}[/]");
-                ok = false;
-                continue;
-            }
-            if (status.IsClean)
-            {
-                AnsiConsole.MarkupLine($"[white]{Markup.Escape(p.Name)}:[/] [grey50]nothing to commit[/]");
-                continue;
-            }
-
-            var (committed, msg, commitMessage) = git.Commit(p.Path, settings.Message);
-            var label = string.IsNullOrEmpty(commitMessage) ? "" : $" [darkorange]{Markup.Escape(commitMessage)}[/]";
-            if (committed)
-                AnsiConsole.MarkupLine($"[white]{Markup.Escape(p.Name)}:[/]{label} [green]{Markup.Escape(msg)}[/]");
-            else
-            {
-                AnsiConsole.MarkupLine($"[white]{Markup.Escape(p.Name)}:[/]{label} [red]{Markup.Escape(msg)}[/]");
-                ok = false;
-            }
-        }
-
-        return ok ? 0 : 1;
+        var results = new WorkspaceCommitter(git, ExePath.WorkspaceRoot)
+            .Run(targets, settings.Message, r => AnsiConsole.MarkupLine(CommitMenu.Format(r)));
+        return results.All(r => r.Ok) ? 0 : 1;
     }
 }

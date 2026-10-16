@@ -217,9 +217,28 @@ public sealed class GitService
         if (commitCode != 0) return (false, $"git commit failed: {commitErr.Trim()}", message);
 
         var (pushCode, _, pushErr) = Run(repoPath, DefaultTimeout, "push", "--quiet");
-        if (pushCode != 0) return (false, $"git push failed: {pushErr.Trim()}", message);
+        if (pushCode != 0) return (false, $"{PushFailedPrefix} {pushErr.Trim()}", message);
 
         return (true, "synced", message);
+    }
+
+    /// <summary>Starts the failure message when the commit landed but the push didn't.</summary>
+    public const string PushFailedPrefix = "git push failed:";
+
+    /// <summary>Commits and pushes only <paramref name="paths"/>, leaving any other changes in the repo alone.</summary>
+    public (bool ok, string message) CommitPaths(string repoPath, string message, IReadOnlyList<string> paths)
+    {
+        var (addCode, _, addErr) = Run(repoPath, DefaultTimeout, ["add", "--", .. paths]);
+        if (addCode != 0) return (false, $"git add failed: {addErr.Trim()}");
+
+        var (diffCode, _, _) = Run(repoPath, DefaultTimeout, ["diff", "--cached", "--quiet", "--", .. paths]);
+        if (diffCode == 0) return (true, "nothing to commit");
+
+        var (commitCode, _, commitErr) = Run(repoPath, DefaultTimeout, ["commit", "-m", message, "--", .. paths]);
+        if (commitCode != 0) return (false, $"git commit failed: {commitErr.Trim()}");
+
+        var (pushCode, _, pushErr) = Run(repoPath, DefaultTimeout, "push", "--quiet");
+        return pushCode != 0 ? (false, $"{PushFailedPrefix} {pushErr.Trim()}") : (true, "synced");
     }
 
     private static (int code, string stdout, string stderr) Run(string repoPath, TimeSpan timeout, params string[] args)

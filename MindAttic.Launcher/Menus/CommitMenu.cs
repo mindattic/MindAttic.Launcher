@@ -50,7 +50,7 @@ public sealed class CommitMenu(SettingsStore store, GitService git, IReadOnlySet
             new TextPrompt<string>("  > ").AllowEmpty());
         AnsiConsole.WriteLine();
 
-        foreach (var p in projects) CommitProject(p, userMessage);
+        Commit(projects, userMessage);
 
         AnsiConsole.WriteLine();
         AnsiConsole.MarkupLine("  [green]Done.[/]");
@@ -66,38 +66,25 @@ public sealed class CommitMenu(SettingsStore store, GitService git, IReadOnlySet
             new TextPrompt<string>("  > ").AllowEmpty());
         AnsiConsole.WriteLine();
 
-        CommitProject(project, userMessage);
+        Commit([project], userMessage);
 
         AnsiConsole.WriteLine();
         AnsiConsole.MarkupLine("  [green]Done.[/]");
         Screen.PressAnyKey();
     }
 
-    private void CommitProject(Project p, string? userMessage)
+    private void Commit(IReadOnlyList<Project> projects, string? userMessage) =>
+        new WorkspaceCommitter(git, ExePath.WorkspaceRoot)
+            .Run(projects, userMessage, r => AnsiConsole.MarkupLine("    " + Format(r)));
+
+    /// <summary>One result line, shared with <c>mindattic commit</c>.</summary>
+    public static string Format(ProjectCommitResult r)
     {
-        if (!Directory.Exists(p.Path))
-        {
-            AnsiConsole.MarkupLine($"    [white]{Markup.Escape(p.Name)}:[/] [red]path not found[/]");
-            return;
-        }
-
-        var status = git.Status(p.Path);
-        if (!status.IsValid)
-        {
-            AnsiConsole.MarkupLine($"    [white]{Markup.Escape(p.Name)}:[/] [red]{Markup.Escape(status.Error ?? "")}[/]");
-            return;
-        }
-        if (status.IsClean)
-        {
-            AnsiConsole.MarkupLine($"    [white]{Markup.Escape(p.Name)}:[/] [grey50]nothing to commit[/]");
-            return;
-        }
-
-        var (ok, message, commitMessage) = git.Commit(p.Path, userMessage);
-        var label = string.IsNullOrEmpty(commitMessage) ? "" : $" [darkorange]{Markup.Escape(commitMessage)}[/]";
-        if (ok)
-            AnsiConsole.MarkupLine($"    [white]{Markup.Escape(p.Name)}:[/]{label} [green]{Markup.Escape(message)}[/]");
-        else
-            AnsiConsole.MarkupLine($"    [white]{Markup.Escape(p.Name)}:[/]{label} [red]{Markup.Escape(message)}[/]");
+        var name = $"[white]{Markup.Escape(r.Project)}:[/]";
+        if (r.Ok && r.Detail == "nothing to commit") return $"{name} [grey50]nothing to commit[/]";
+        var label = string.IsNullOrEmpty(r.CommitMessage) ? "" : $" [darkorange]{Markup.Escape(r.CommitMessage)}[/]";
+        var ticket = r.TicketCreated ? $" [cyan]new ticket {Markup.Escape(r.TicketId!)}[/]" : "";
+        var detail = r.Ok ? $"[green]{Markup.Escape(r.Detail)}[/]" : $"[red]{Markup.Escape(r.Detail)}[/]";
+        return $"{name}{label}{ticket} {detail}";
     }
 }
