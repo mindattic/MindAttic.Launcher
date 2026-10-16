@@ -85,8 +85,8 @@ public sealed class WorkspaceCommitterTests
         }
 
         var sync = results.Single(r => r.Project == WorkspaceCommitter.WorkflowRepoName);
-        Assert.That(sync.CommitMessage, Is.EqualTo(WorkspaceCommitter.SyncMessage), "the database itself is committed after a single-repo run");
-        Assert.That(Git(Path.Combine(root, WorkspaceCommitter.WorkflowRepoName), "log", "-1", "--format=%s"), Is.EqualTo(WorkspaceCommitter.SyncMessage));
+        Assert.That(sync.CommitMessage, Is.EqualTo(WorkspaceCommitter.SyncMessageFor("ALP-T1")), "the database itself is committed after a single-repo run, citing the ticket it carries");
+        Assert.That(Git(Path.Combine(root, WorkspaceCommitter.WorkflowRepoName), "log", "-1", "--format=%s"), Is.EqualTo("Sync the workflow database (ALP-T1)"));
     }
 
     [Test]
@@ -135,9 +135,27 @@ public sealed class WorkspaceCommitterTests
         var results = Committer().Run([Project(WorkspaceCommitter.WorkflowRepoName, wf), Project("Alpha", alpha)], null);
 
         Assert.That(results.Select(r => r.Project), Is.EqualTo(new[] { "Alpha", WorkspaceCommitter.WorkflowRepoName }));
-        Assert.That(results[1].CommitMessage, Is.EqualTo(WorkspaceCommitter.SyncMessage), "only database files changed there, so no ticket of its own");
+        Assert.That(results[1].CommitMessage, Is.EqualTo(WorkspaceCommitter.SyncMessageFor("ALP-T1")), "only database files changed there, so it cites the run's ticket instead of making its own");
         Assert.That(Git(wf, "status", "--porcelain"), Is.Empty);
         Assert.That(File.ReadAllText(Path.Combine(wf, "data", "workflow.sql")), Does.Contain("ALP-T1"));
+    }
+
+    [Test]
+    public void A_database_change_made_outside_the_run_gets_a_workflow_ticket_of_its_own()
+    {
+        var alpha = NewRepo("Alpha");
+        var wf = NewRepo(WorkspaceCommitter.WorkflowRepoName);
+        Register(alpha, "ALP");
+        Register(wf, "FLOW");
+        using (var db = WorkflowDb.Open(dbPath)) db.Add("Alpha", "fix", TicketRules.Open, "Filed from elsewhere", "");
+
+        var r = Committer().Run([Project(WorkspaceCommitter.WorkflowRepoName, wf)], null).Single();
+
+        Assert.That(r.TicketCreated, Is.True);
+        Assert.That(r.TicketId, Is.EqualTo("FLOW-T1"));
+        Assert.That(Git(wf, "log", "-1", "--format=%s"), Does.EndWith("(FLOW-T1)"), "the commit-msg hook refuses a subject without a ticket");
+        Assert.That(Git(wf, "status", "--porcelain"), Is.Empty);
+        Assert.That(File.ReadAllText(Path.Combine(wf, "data", "workflow.sql")), Does.Contain("FLOW-T1"), "the dump was rewritten after the repo's own ticket");
     }
 
     private WorkspaceCommitter Committer() => new(new GitService(), root, dbPath);

@@ -35,22 +35,25 @@ public sealed partial class WorkspaceCommitter(GitService git, string workspaceR
         void Add(ProjectCommitResult r) { results.Add(r); report?.Invoke(r); }
 
         var ordered = projects.OrderBy(p => IsWorkflowRepo(p.Path) ? 1 : 0).ToList();
-        var created = false;
+        string? lastCreated = null;
         var workflowCommitted = false;
         foreach (var p in ordered)
         {
-            var r = CommitProject(p, userMessage);
-            created |= r.TicketCreated;
+            var r = CommitProject(p, userMessage, lastCreated);
+            if (r.TicketCreated) lastCreated = r.TicketId;
             workflowCommitted |= IsWorkflowRepo(p.Path);
             Add(r);
         }
 
         // A single-repo commit still created a ticket in the shared database; push it so other machines see it.
-        if (created && !workflowCommitted) Add(SyncWorkflowDb());
+        if (lastCreated is not null && !workflowCommitted) Add(SyncWorkflowDb(lastCreated));
         return results;
     }
 
-    private ProjectCommitResult CommitProject(Project p, string? userMessage)
+    /// <summary>The database sync's subject cites a ticket it carries, as the workspace commit-msg hook requires.</summary>
+    public static string SyncMessageFor(string ticketId) => WithTicket(SyncMessage, ticketId);
+
+    private ProjectCommitResult CommitProject(Project p, string? userMessage, string? carriedTicket)
     {
         if (!Directory.Exists(p.Path)) return new(p.Name, false, "path not found");
 
@@ -61,10 +64,10 @@ public sealed partial class WorkspaceCommitter(GitService git, string workspaceR
         if (!status.IsValid) return new(p.Name, false, status.Error ?? "");
         if (status.IsClean) return new(p.Name, true, "nothing to commit");
 
-        if (isWorkflow && status.Changes.All(c => IsDatabaseFile(c.FileName)))
+        if (isWorkflow && carriedTicket is not null && status.Changes.All(c => IsDatabaseFile(c.FileName)))
         {
-            var (synced, syncDetail, _) = git.Commit(p.Path, SyncMessage);
-            return new(p.Name, synced, syncDetail, SyncMessage);
+            var (synced, syncDetail, syncMessage) = git.Commit(p.Path, SyncMessageFor(carriedTicket));
+            return new(p.Name, synced, syncDetail, syncMessage, carriedTicket);
         }
 
         var auto = string.IsNullOrWhiteSpace(userMessage);
@@ -86,6 +89,7 @@ public sealed partial class WorkspaceCommitter(GitService git, string workspaceR
 
         var ticket = db.Add(repoName, InferType(message, auto, status.Changes), TicketRules.Closed, Summary(message), "");
         db.Render(new Workspace(workspaceRoot), [repoName]);
+        if (isWorkflow) WriteDump(); // the dump must carry this repo's own new ticket
         message = WithTicket(message, ticket.Id);
 
         var (done, result, commitMessage) = git.Commit(p.Path, message);
@@ -99,14 +103,15 @@ public sealed partial class WorkspaceCommitter(GitService git, string workspaceR
         return new(p.Name, done, result, commitMessage, ticket.Id, TicketCreated: true);
     }
 
-    private ProjectCommitResult SyncWorkflowDb()
+    private ProjectCommitResult SyncWorkflowDb(string ticketId)
     {
         if (!Directory.Exists(WorkflowRepoPath)) return new(WorkflowRepoName, false, "repo not found; run 'workflow db sync' to push the new tickets");
         WriteDump();
-        var (ok, detail) = git.CommitPaths(WorkflowRepoPath, SyncMessage,
+        var message = SyncMessageFor(ticketId);
+        var (ok, detail) = git.CommitPaths(WorkflowRepoPath, message,
             [WorkflowDb.RelativePath, WorkflowDb.DumpRelativePath]);
         var landed = ok || detail.StartsWith(GitService.PushFailedPrefix, StringComparison.Ordinal);
-        return new(WorkflowRepoName, ok, detail, landed ? SyncMessage : "");
+        return new(WorkflowRepoName, ok, detail, landed ? message : "", ticketId);
     }
 
     /// <summary>The readable dump committed beside the database, the same file <c>workflow db sync</c> writes.</summary>
