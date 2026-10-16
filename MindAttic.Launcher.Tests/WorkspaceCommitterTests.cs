@@ -180,6 +180,25 @@ public sealed class WorkspaceCommitterTests
         Assert.That(committed, Does.Not.Contain("agent-session").And.Not.Contain("agent-queue").And.Not.Contain("quicksave").And.Not.Contain("archive"));
     }
 
+    [Test]
+    public void A_repo_that_already_gitignores_prose_state_still_commits()
+    {
+        var alpha = NewRepo("Alpha");
+        NewRepo(WorkspaceCommitter.WorkflowRepoName);
+        Register(alpha, "ALP");
+        File.WriteAllText(Path.Combine(alpha, ".gitignore"), ".prose/agent-session.json\n.prose/archive/\n");
+        Git(alpha, "add", "-A"); Git(alpha, "commit", "-q", "-m", "seed");
+        Directory.CreateDirectory(Path.Combine(alpha, ".prose", "archive"));
+        File.WriteAllText(Path.Combine(alpha, ".prose", "agent-session.json"), "local");
+        File.WriteAllText(Path.Combine(alpha, ".prose", "archive", "old.md"), "local");
+        File.WriteAllText(Path.Combine(alpha, "a.cs"), "class A {}");
+
+        var r = Committer().Run([Project("Alpha", alpha)], "Add the A class").Single(x => x.Project == "Alpha");
+
+        Assert.That(r.Detail, Does.StartWith(GitService.PushFailedPrefix), "git add must not trip over an ignored path named in a pathspec");
+        Assert.That(Git(alpha, "show", "--name-only", "--format=", "HEAD"), Does.Contain("a.cs"));
+    }
+
     private WorkspaceCommitter Committer() => new(new GitService(), root, dbPath);
 
     private static Project Project(string name, string path) => new() { Name = name, Path = path };

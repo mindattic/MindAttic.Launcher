@@ -116,14 +116,20 @@ public sealed class GitService
     /// The whole working tree minus Prose's local agent state, which Prose's own .gitignore keeps out of every
     /// repo (<c>.prose/commands</c> is tracked). A repo whose only changes are that state reads as clean.
     /// </summary>
-    public static readonly IReadOnlyList<string> WorkingTreePathspec =
+    public static readonly IReadOnlyList<string> LocalStatePaths =
     [
-        ".",
-        ":(exclude,glob).prose/agent-session.json*",
-        ":(exclude,glob).prose/agent-queue.json*",
-        ":(exclude).prose/quicksave.md",
-        ":(exclude).prose/archive",
+        ":(glob).prose/agent-session.json*",
+        ":(glob).prose/agent-queue.json*",
+        ".prose/quicksave.md",
+        ".prose/archive",
     ];
+
+    /// <summary>
+    /// For <c>git status</c> only: <c>git add</c> refuses an exclude that names a .gitignored path, so staging
+    /// adds everything and then unstages <see cref="LocalStatePaths"/> instead.
+    /// </summary>
+    public static readonly IReadOnlyList<string> WorkingTreePathspec =
+        [".", .. LocalStatePaths.Select(p => p.StartsWith(":(glob)", StringComparison.Ordinal) ? ":(exclude,glob)" + p[7..] : ":(exclude)" + p)];
 
     /// <summary>Convenience wrapper: returns the user-facing summary string (or the error explanation).</summary>
     public string ShortStatus(string repoPath) => Status(repoPath).Short();
@@ -223,8 +229,10 @@ public sealed class GitService
 
         var message = string.IsNullOrWhiteSpace(userMessage) ? status.AutoMessage() : userMessage.Trim();
 
-        var (addCode, _, addErr) = Run(repoPath, DefaultTimeout, ["add", "-A", "--", .. WorkingTreePathspec]);
+        var (addCode, _, addErr) = Run(repoPath, DefaultTimeout, "add", "-A");
         if (addCode != 0) return (false, $"git add failed: {addErr.Trim()}", message);
+        var (resetCode, _, resetErr) = Run(repoPath, DefaultTimeout, ["reset", "-q", "--", .. LocalStatePaths]);
+        if (resetCode != 0) return (false, $"git reset of local agent state failed: {resetErr.Trim()}", message);
 
         var (commitCode, _, commitErr) = Run(repoPath, DefaultTimeout, "commit", "-m", message);
         if (commitCode != 0) return (false, $"git commit failed: {commitErr.Trim()}", message);
