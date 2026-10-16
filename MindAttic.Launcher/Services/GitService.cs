@@ -243,6 +243,17 @@ public sealed class GitService
     /// <summary>Starts the failure message when the commit landed but the push didn't.</summary>
     public const string PushFailedPrefix = "git push failed:";
 
+    /// <summary>Commits on the current branch its upstream doesn't have yet; 0 when there's no upstream.</summary>
+    public int UnpushedCount(string repoPath)
+    {
+        var (code, stdout, _) = Run(repoPath, DefaultTimeout, "rev-list", "--count", "@{upstream}..HEAD");
+        return code == 0 && int.TryParse(stdout.Trim(), out var n) ? n : 0;
+    }
+
+    /// <summary>Pushes commits an earlier run left behind, the same way <see cref="Commit"/> pushes.</summary>
+    public (bool ok, string message) PushPending(string repoPath) =>
+        Push(repoPath) is { } pushError ? (false, pushError) : (true, "synced");
+
     /// <summary>
     /// Pushes; when the remote has moved ahead, rebases the local commits onto it (autostashing anything left
     /// unstaged, such as Prose's agent state) and pushes again. A conflicting rebase is aborted, so the repo is

@@ -238,6 +238,22 @@ public sealed class WorkspaceCommitterTests
     }
 
     [Test]
+    public void A_clean_repo_left_ahead_by_an_earlier_failed_push_is_pushed()
+    {
+        var (alpha, other) = WithRemote("shared.txt");
+        File.WriteAllText(Path.Combine(alpha, "a.cs"), "class A {}");
+        Git(alpha, "add", "-A"); Git(alpha, "commit", "-q", "-m", "Add the A class (ALP-T1)");
+        File.WriteAllText(Path.Combine(other, "theirs.txt"), "from another machine");
+        Git(other, "add", "-A"); Git(other, "commit", "-q", "-m", "Theirs"); Git(other, "push", "-q");
+
+        var r = Committer().Run([Project("Alpha", alpha)], null).Single();
+
+        Assert.That((r.Ok, r.Detail), Is.EqualTo((true, "pushed 1 earlier commit(s)")));
+        Assert.That(Git(alpha, "rev-parse", "HEAD"), Is.EqualTo(Git(alpha, "rev-parse", "origin/main")));
+        Assert.That(Git(alpha, "log", "--format=%s", "-2"), Is.EqualTo("Add the A class (ALP-T1)\nTheirs"));
+    }
+
+    [Test]
     public void IsBehindRemote_recognises_only_a_rejected_push()
     {
         Assert.That(GitService.IsBehindRemote(" ! [rejected]        main -> main (non-fast-forward)"), Is.True);
