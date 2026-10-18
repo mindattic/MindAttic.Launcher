@@ -208,8 +208,65 @@ public sealed class PrerequisiteServiceTests
     public void AiClis_cover_the_default_providers_CLIs()
     {
         var commands = PrerequisiteService.AiClis.Select(c => c.Command).ToList();
-        foreach (var provider in AgentProviderRegistry.Defaults.Where(p => p.Key != "Kimi"))
+        foreach (var provider in AgentProviderRegistry.Defaults)
             Assert.That(commands, Does.Contain(provider.RunCommand.Split(' ')[0]), provider.Key);
+    }
+
+    [Test]
+    public void Kimi_is_installed_by_Moonshots_install_script()
+    {
+        var kimi = PrerequisiteService.AiClis.Single(c => c.Command == "kimi");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(kimi.InstallScriptUrl, Is.EqualTo("https://code.kimi.com/kimi-code/install.ps1"));
+            Assert.That(kimi.NpmPackage, Is.Null);
+            Assert.That(kimi.WingetId, Is.Null);
+        });
+    }
+
+    [Test]
+    public void EnsureAiCli_runs_an_install_script_non_interactively_and_refreshes_PATH()
+    {
+        var installed = false;
+        var refreshes = 0;
+        var calls = new List<string>();
+        var subject = new PrerequisiteService(
+            exists: cmd => cmd == "kimi" && installed,
+            run: (exe, args, _) => { calls.Add($"{exe} {string.Join(' ', args)}"); installed = true; return (0, ""); },
+            refreshPath: () => refreshes++);
+
+        var r = subject.EnsureAiCli(new AiCliSpec("Kimi Code CLI", "kimi", null, null, "https://example.test/install.ps1"));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(r.Present, Is.True);
+            Assert.That(r.Installed, Is.True);
+            Assert.That(calls, Is.EqualTo(new[]
+            {
+                "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command irm 'https://example.test/install.ps1' | iex"
+            }));
+            Assert.That(refreshes, Is.EqualTo(1));
+        });
+    }
+
+    [Test]
+    public void EnsureAiCli_reports_a_failed_install_script_as_a_warning()
+    {
+        var refreshes = 0;
+        var subject = new PrerequisiteService(
+            exists: _ => false,
+            run: (_, _, _) => (1, "error: checksum mismatch"),
+            refreshPath: () => refreshes++);
+
+        var r = subject.EnsureAiCli(new AiCliSpec("Kimi Code CLI", "kimi", null, null, "https://example.test/install.ps1"));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(r.Present, Is.False);
+            Assert.That(r.Error, Does.Contain("checksum mismatch"));
+            Assert.That(refreshes, Is.EqualTo(0));
+        });
     }
 
     [Test]

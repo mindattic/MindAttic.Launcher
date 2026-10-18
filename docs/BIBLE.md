@@ -123,7 +123,7 @@ call stateless/injectable services; the services own all external-process and fi
   dump into a fresh SQLite file, respectively. See `restore` under §4.
 - **PrerequisiteService** — installs what `bootstrap` needs (`sqlcmd`, SQL Server LocalDB, which
   it also creates/starts) via `winget`, refreshing the process PATH after each install, the AI
-  agent CLIs the tabs run (npm/winget), plus the same optional dev tools Bob offered (VS Code,
+  agent CLIs the tabs run (npm/winget, Kimi's own install script), plus the same optional dev tools Bob offered (VS Code,
   Visual Studio, SSMS, Notepad++, Node, Claude desktop, Antigravity) — no offline installer
   cache, since that only existed for the no-network bug-out scenario this app doesn't have.
 - **WorkspaceCloneService** — clones every `wip`-tagged repo not already present under the

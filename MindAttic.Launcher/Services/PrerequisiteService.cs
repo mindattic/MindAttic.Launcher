@@ -14,10 +14,11 @@ public sealed record PrerequisiteCheckResult(string Command, bool Present, bool 
 public sealed record OptionalToolSpec(string Name, string? CommandOnPath, string WingetId, IReadOnlyList<string>? InstallPaths = null);
 
 /// <summary>
-/// An AI agent CLI the Launcher's tabs run. Installed from npm when <paramref name="NpmPackage"/> is
-/// set, otherwise from winget — the same split Bob used.
+/// An AI agent CLI the Launcher's tabs run. Installed by the vendor's own PowerShell install script
+/// when <paramref name="InstallScriptUrl"/> is set, else from npm when <paramref name="NpmPackage"/>
+/// is set, otherwise from winget — the npm/winget split Bob used.
 /// </summary>
-public sealed record AiCliSpec(string Name, string Command, string? NpmPackage, string? WingetId);
+public sealed record AiCliSpec(string Name, string Command, string? NpmPackage, string? WingetId, string? InstallScriptUrl = null);
 
 /// <summary>
 /// Installs what <c>bootstrap</c> needs via <c>winget</c> — consistent with this app's everything
@@ -68,7 +69,14 @@ public sealed class PrerequisiteService
         new("Claude Code CLI", "claude", "@anthropic-ai/claude-code", null),
         new("OpenAI Codex CLI", "codex", "@openai/codex", null),
         new("Antigravity CLI", "agy", null, "Google.AntigravityCLI"),
+        // Moonshot's documented Windows install (kimi.com Kimi Code CLI getting-started): a single
+        // kimi.exe in %USERPROFILE%\.kimi-code\bin, checksum-verified, bin added to the user PATH.
+        // No Node needed, no prompts on success.
+        new("Kimi Code CLI", "kimi", null, null, KimiInstallScriptUrl),
     ];
+
+    /// <summary>Moonshot's official Kimi Code CLI installer for Windows.</summary>
+    public const string KimiInstallScriptUrl = "https://code.kimi.com/kimi-code/install.ps1";
 
     /// <summary>winget package that provides npm, installed on demand when an npm-based CLI is missing.</summary>
     public const string NodeWingetId = "OpenJS.NodeJS.LTS";
@@ -99,6 +107,14 @@ public sealed class PrerequisiteService
         ["list", "--id", wingetId, "-e", "--accept-source-agreements"];
 
     public static IReadOnlyList<string> BuildNpmInstallArguments(string package) => ["install", "-g", package];
+
+    /// <summary>
+    /// Runs a vendor's <c>irm &lt;url&gt; | iex</c> installer. -NonInteractive matters: Kimi's script ends
+    /// a failed install with <c>Read-Host "Press Enter to exit"</c>, which then throws (and the script
+    /// catches it and exits 1) instead of waiting forever on a console nobody is watching.
+    /// </summary>
+    public static IReadOnlyList<string> BuildInstallScriptArguments(string url) =>
+        ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", $"irm '{url}' | iex"];
 
     /// <summary>
     /// The PATH a fresh shell would see (machine, then user — what an installer just changed),
@@ -183,8 +199,9 @@ public sealed class PrerequisiteService
     }
 
     /// <summary>
-    /// Ensures an AI CLI is on PATH: npm for an npm package (installing Node.js first via winget
-    /// when npm itself is missing, as Bob's prerequisites did), winget otherwise. A failure is
+    /// Ensures an AI CLI is on PATH: the vendor's install script when it has one, npm for an npm
+    /// package (installing Node.js first via winget when npm itself is missing, as Bob's
+    /// prerequisites did), winget otherwise. A failure is
     /// reported, never fatal — the pipeline itself doesn't need these.
     /// </summary>
     public PrerequisiteCheckResult EnsureAiCli(AiCliSpec cli, CancellationToken ct = default)
@@ -200,7 +217,14 @@ public sealed class PrerequisiteService
     private PrerequisiteCheckResult InstallAiCli(AiCliSpec cli, CancellationToken ct)
     {
         string? error;
-        if (cli.NpmPackage is { Length: > 0 } package)
+        if (cli.InstallScriptUrl is { Length: > 0 } url)
+        {
+            // The script adds its bin folder to the user PATH; re-read it so 'kimi' is found below.
+            var (code, output) = run("powershell.exe", BuildInstallScriptArguments(url), ct);
+            if (code == 0) refreshPath();
+            error = code == 0 ? null : output;
+        }
+        else if (cli.NpmPackage is { Length: > 0 } package)
         {
             if (!exists("npm"))
             {
