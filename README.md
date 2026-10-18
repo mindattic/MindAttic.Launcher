@@ -223,6 +223,8 @@ Each provider also gets an `<Name> API key` row (`configured` / `(not set)`). Se
 
 Claude is the one exception: the `claude` CLI itself warns that having both a claude.ai session and `ANTHROPIC_API_KEY` set makes auth unpredictable, and claude.ai wins anyway — so `ClaudeAuthStatus` checks `~/.claude/.credentials.json` for a live `claudeAiOauth` session and `Apply` skips pushing the env var entirely when one is found. The Settings row reflects this ("ignored while logged into claude.ai" / "using your claude.ai login") rather than silently doing nothing.
 
+Once MindAttic.Orchestrator's billing switch has set a mode (`~/.claude/session-context/billing.json`, read by `ClaudeBillingMode`), Claude follows it instead: `team` never pushes the key and strips an inherited `ANTHROPIC_API_KEY`, and `api` pushes the Vault key even while a claude.ai login is signed in (the switch has approved the key in Claude Code). With no mode set, the login rule above still applies.
+
 The "Windows Terminal settings path" row shows any path spliced in already, or "(not set)" with a warning that tab colors won't be written. Selecting it offers every location `WindowsTerminalSchemes.CandidateSettingsPaths` finds on disk (packaged Store install, then the unpackaged install) as one-click picks, plus "Enter path manually…" and "Clear".
 
 ## Settings and persistence
@@ -276,6 +278,7 @@ Every agent session is a Windows Terminal tab running `MindAttic.Launcher.exe ho
 
 - `TitlePinner` polls the console's bottom rows every 250 ms (`ConsoleBuffer.ReadBottomRows`) for a busy signature ("esc to interrupt", "ctrl+c to cancel", or Claude Code's "N shell(s)" background-job footer) and reasserts the tab title with a busy (`▶`) or idle (`⏸`) glyph whenever the CLI's own title write has clobbered it. Windows Terminal exposes no API for another process to set a tab's title, so the watchdog has to live inside the hosted process. This requires the tab be opened without `--suppressApplicationTitle` (`BuildAgentTab` sets `SuppressApplicationTitle = false`).
 - `HostInputPipeServer` listens on a per-tab named pipe (`mindattic-host-{provider}-{pid}`, single-instance) and injects any text it receives into the console's input buffer via `ConsoleInputInjector`, the delivery mechanism for [Remote control](#remote-control).
+- `HostControlPipeServer` (Claude tabs) listens on `mindattic-control-{provider}-{pid}`, outside the tab prefix, for MindAttic.Orchestrator's requests; nothing it receives is typed into the CLI. A `restart-resume` request (its billing switch) is held until the CLI it names is at its next idle point (`ClaudeRestartGate`: the session's `.state.json` says `idle` and no subagent of it runs) and the billing mode is still the one asked for; then the host ends that `claude` and starts `claude --resume <session>` in the same tab, with the new mode's environment. The contract is the Orchestrator's `docs/ORCHESTRATION.md`, section Billing.
 
 ## Remote control
 

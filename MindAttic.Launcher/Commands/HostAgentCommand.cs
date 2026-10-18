@@ -115,48 +115,105 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
         // landing during agent startup isn't missed.
         using var inputPipe = new HostInputPipeServer(provider.Key);
 
-        // Bare npm-shim names (codex, gemini, ...) have no .exe on PATH, and
-        // CreateProcessW (what Process.Start uses below) doesn't walk PATHEXT
-        // the way cmd.exe does — so resolve to the actual .cmd/.bat shim first.
-        var psi = new ProcessStartInfo(ExecutableResolver.Resolve(parts[0]))
-        {
-            UseShellExecute = false,
-            // Working directory matches the wt tab so the agent starts in the
-            // right root; menu code already passes -d to wt, but be defensive in
-            // case someone runs `mindattic host` directly.
-            WorkingDirectory = Directory.Exists(workingDir) ? workingDir : Environment.CurrentDirectory
-        };
-        for (var i = 1; i < parts.Length; i++) psi.ArgumentList.Add(parts[i]);
-        // wt.exe can carry a stale NO_COLOR=1 from a since-unset registry value
-        // (it only re-reads the environment on its own fresh launch), which
-        // would otherwise flow down and strip every hosted agent's colors.
-        psi.EnvironmentVariables.Remove("NO_COLOR");
-        // A seed prompt is the agent's first positional arg — `claude <flags>
-        // "<order>"` / `codex <flags> "<order>"`. Both start interactive with
-        // the prompt loaded; the Status tab uses this to pre-fill /status.
-        if (!string.IsNullOrWhiteSpace(settings.Prompt))
-            psi.ArgumentList.Add(settings.Prompt!);
+        // Claude tabs also take the Orchestrator's restart-resume requests on a
+        // control pipe of their own (its billing switch, M.LNCH-T38): the CLI is
+        // restarted with --resume at its next idle point, billing the new mode.
+        var isClaude = string.Equals(provider.Key, "Claude", StringComparison.OrdinalIgnoreCase);
+        RestartResumeRequest? pending = null;
+        var pendingLock = new object();
+        using var controlPipe = isClaude
+            ? HostControlPipeServer.ForProvider(provider.Key, r => { lock (pendingLock) pending = r; })
+            : null;
 
-        // Push this provider's API key (if Vault has one) to wherever its CLI
-        // expects it — an env var for Gemini, config.toml for Kimi. A missing
-        // Vault entry is a no-op; the CLI falls back to its own configured auth.
-        ProviderCredentials.Apply(psi, provider.Key);
+        ProcessStartInfo BuildStartInfo(string? resumeSession)
+        {
+            // Bare npm-shim names (codex, gemini, ...) have no .exe on PATH, and
+            // CreateProcessW (what Process.Start uses below) doesn't walk PATHEXT
+            // the way cmd.exe does — so resolve to the actual .cmd/.bat shim first.
+            var psi = new ProcessStartInfo(ExecutableResolver.Resolve(parts[0]))
+            {
+                UseShellExecute = false,
+                // Working directory matches the wt tab so the agent starts in the
+                // right root; menu code already passes -d to wt, but be defensive in
+                // case someone runs `mindattic host` directly.
+                WorkingDirectory = Directory.Exists(workingDir) ? workingDir : Environment.CurrentDirectory
+            };
+            for (var i = 1; i < parts.Length; i++) psi.ArgumentList.Add(parts[i]);
+            // wt.exe can carry a stale NO_COLOR=1 from a since-unset registry value
+            // (it only re-reads the environment on its own fresh launch), which
+            // would otherwise flow down and strip every hosted agent's colors.
+            psi.EnvironmentVariables.Remove("NO_COLOR");
+            if (resumeSession is not null)
+            {
+                // A restart carries the conversation on; the seed prompt was its first turn's.
+                psi.ArgumentList.Add("--resume");
+                psi.ArgumentList.Add(resumeSession);
+            }
+            // A seed prompt is the agent's first positional arg — `claude <flags>
+            // "<order>"` / `codex <flags> "<order>"`. Both start interactive with
+            // the prompt loaded; the Status tab uses this to pre-fill /status.
+            else if (!string.IsNullOrWhiteSpace(settings.Prompt))
+                psi.ArgumentList.Add(settings.Prompt!);
+
+            // Push this provider's API key (if Vault has one) to wherever its CLI
+            // expects it — an env var for Gemini, config.toml for Kimi. A missing
+            // Vault entry is a no-op; the CLI falls back to its own configured auth.
+            // Claude follows the Orchestrator's billing mode (ClaudeBillingMode).
+            ProviderCredentials.Apply(psi, provider.Key);
+            return psi;
+        }
 
         // Ensure any project companion services (e.g. Prose.Hub) are running
         // across all providers (Claude, Codex, Gemini, Kimi).
         ProjectCompanionService.EnsureStarted(project, workingDir);
 
+        Process? p = null;
         try
         {
-            using var p = Process.Start(psi)
-                          ?? throw new InvalidOperationException($"Failed to start {parts[0]}");
-            p.WaitForExit();
-            return p.ExitCode;
+            p = Process.Start(BuildStartInfo(null))
+                ?? throw new InvalidOperationException($"Failed to start {parts[0]}");
+            while (true)
+            {
+                if (p.WaitForExit(1000))
+                {
+                    p.WaitForExit();
+                    return p.ExitCode;
+                }
+
+                RestartResumeRequest? request;
+                lock (pendingLock) request = pending;
+                if (request is null) continue;
+
+                // Only the CLI the request names, and only while the mode is still the one asked for;
+                // anything else is dropped. One waiting for its idle point stays pending.
+                if (!ClaudeRestartGate.IsFor(request, p.Id) || !ClaudeRestartGate.StillWanted(request))
+                {
+                    lock (pendingLock) if (ReferenceEquals(pending, request)) pending = null;
+                    continue;
+                }
+                if (!ClaudeRestartGate.IsIdle(request)) continue;
+                lock (pendingLock) if (ReferenceEquals(pending, request)) pending = null;
+
+                System.Console.WriteLine();
+                System.Console.WriteLine(request.Billing == ClaudeBillingMode.Api
+                    ? "Restarting Claude to bill the API key, resuming this conversation..."
+                    : "Restarting Claude to bill your Claude Team login, resuming this conversation...");
+                try { p.Kill(entireProcessTree: true); }
+                catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or AggregateException) { }
+                p.WaitForExit();
+                p.Dispose();
+                p = Process.Start(BuildStartInfo(request.Session))
+                    ?? throw new InvalidOperationException($"Failed to restart {parts[0]}");
+            }
         }
         catch (Exception ex)
         {
             System.Console.Error.WriteLine($"Failed to launch {provider.Key}: {ex.Message}");
             return 3;
+        }
+        finally
+        {
+            p?.Dispose();
         }
     }
 

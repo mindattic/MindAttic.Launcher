@@ -54,9 +54,75 @@ public sealed class ProviderCredentialsTests
         var psi = new ProcessStartInfo("claude");
         var missingCredentialsPath = Path.Combine(Path.GetTempPath(), "MindAttic.Launcher.Tests", Guid.NewGuid().ToString("N"), ".credentials.json");
 
-        ProviderCredentials.Apply(psi, "Claude", store, claudeCredentialsPath: missingCredentialsPath);
+        ProviderCredentials.Apply(psi, "Claude", store, claudeCredentialsPath: missingCredentialsPath, billingModePath: MissingPath("billing.json"));
 
         Assert.That(psi.Environment["ANTHROPIC_API_KEY"], Is.EqualTo("sk-ant-test-key"));
+    }
+
+    private static string MissingPath(string name) =>
+        Path.Combine(Path.GetTempPath(), "MindAttic.Launcher.Tests", Guid.NewGuid().ToString("N"), name);
+
+    /// <summary>A temp billing.json with <paramref name="mode"/>, and a live claude.ai login beside it.</summary>
+    private static (string Dir, string Billing, string Credentials) BillingFixture(string mode)
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "MindAttic.Launcher.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        var billing = Path.Combine(dir, "billing.json");
+        File.WriteAllText(billing, $$"""{ "mode": "{{mode}}", "since": 1760803200.0, "by": "cli" }""");
+        var credentials = Path.Combine(dir, ".credentials.json");
+        File.WriteAllText(credentials, """{ "claudeAiOauth": { "accessToken": "fake-session-token" } }""");
+        return (dir, billing, credentials);
+    }
+
+    [Test]
+    public void Apply_pushes_the_Claude_key_in_api_mode_even_with_a_claude_ai_login()
+    {
+        var (dir, billing, credentials) = BillingFixture("api");
+        try
+        {
+            var store = new FakeCredentialStore(new() { ["claude"] = "sk-ant-api-mode" });
+            var psi = new ProcessStartInfo("claude");
+
+            ProviderCredentials.Apply(psi, "Claude", store, claudeCredentialsPath: credentials, billingModePath: billing);
+
+            Assert.That(psi.Environment["ANTHROPIC_API_KEY"], Is.EqualTo("sk-ant-api-mode"));
+        }
+        finally { Directory.Delete(dir, recursive: true); }
+    }
+
+    [Test]
+    public void Apply_strips_an_inherited_Claude_key_in_team_mode()
+    {
+        var (dir, billing, _) = BillingFixture("team");
+        try
+        {
+            var store = new FakeCredentialStore(new() { ["claude"] = "sk-ant-should-be-ignored" });
+            var psi = new ProcessStartInfo("claude");
+            psi.Environment["ANTHROPIC_API_KEY"] = "sk-ant-inherited";
+
+            // No claude.ai login at all: team still never pushes the key.
+            ProviderCredentials.Apply(psi, "Claude", store, claudeCredentialsPath: MissingPath(".credentials.json"), billingModePath: billing);
+
+            Assert.That(psi.Environment.ContainsKey("ANTHROPIC_API_KEY"), Is.False);
+        }
+        finally { Directory.Delete(dir, recursive: true); }
+    }
+
+    [Test]
+    public void An_unknown_billing_mode_keeps_the_login_rule()
+    {
+        var (dir, billing, credentials) = BillingFixture("bitcoin");
+        try
+        {
+            var store = new FakeCredentialStore(new() { ["claude"] = "sk-ant-should-be-ignored" });
+            var psi = new ProcessStartInfo("claude");
+            psi.Environment.Remove("ANTHROPIC_API_KEY");
+
+            ProviderCredentials.Apply(psi, "Claude", store, claudeCredentialsPath: credentials, billingModePath: billing);
+
+            Assert.That(psi.Environment.ContainsKey("ANTHROPIC_API_KEY"), Is.False);
+        }
+        finally { Directory.Delete(dir, recursive: true); }
     }
 
     [Test]
@@ -73,7 +139,7 @@ public sealed class ProviderCredentialsTests
             var psi = new ProcessStartInfo("claude");
             psi.Environment.Remove("ANTHROPIC_API_KEY");
 
-            ProviderCredentials.Apply(psi, "Claude", store, claudeCredentialsPath: credentialsPath);
+            ProviderCredentials.Apply(psi, "Claude", store, claudeCredentialsPath: credentialsPath, billingModePath: MissingPath("billing.json"));
 
             Assert.That(psi.Environment.ContainsKey("ANTHROPIC_API_KEY"), Is.False);
         }
