@@ -45,7 +45,7 @@ public sealed class RestoreCommand : Command<RestoreCommand.Settings>
         return ok ? 0 : 1;
     }
 
-    private static bool RestoreAppData(string from)
+    internal static bool RestoreAppData(string from)
     {
         var zipPath = Path.Combine(from, AppDataBackupService.ZipFileName);
         if (!File.Exists(zipPath))
@@ -70,7 +70,7 @@ public sealed class RestoreCommand : Command<RestoreCommand.Settings>
     /// not always reversible (e.g. <c>(localdb)\MSSQLLocalDB</c>), so it's not used to resolve a
     /// per-file server; pass <c>--server</c> for anything other than the default instance.
     /// </summary>
-    private static bool RestoreSqlDatabases(string from, string server)
+    internal static bool RestoreSqlDatabases(string from, string server)
     {
         var databasesRoot = Path.Combine(from, SqlBackupService.DatabasesSubfolder);
         if (!Directory.Exists(databasesRoot)) return true;
@@ -98,7 +98,7 @@ public sealed class RestoreCommand : Command<RestoreCommand.Settings>
     /// A dump with no matching project in the current roster is reported and skipped — there's
     /// nowhere known to put it back.
     /// </summary>
-    private static bool RestoreSqliteDatabases(string from)
+    internal static bool RestoreSqliteDatabases(string from)
     {
         var sqliteRoot = Path.Combine(from, SqlBackupService.DatabasesSubfolder, SqliteBackupService.SqliteSubfolder);
         if (!Directory.Exists(sqliteRoot)) return true;

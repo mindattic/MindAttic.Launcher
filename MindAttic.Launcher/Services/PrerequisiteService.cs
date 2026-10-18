@@ -4,15 +4,28 @@ namespace MindAttic.Launcher.Services;
 
 public sealed record PrerequisiteCheckResult(string Command, bool Present, bool Installed, string? Error);
 
-/// <summary>An optional dev tool bootstrap can offer to install — never required by the pipeline.</summary>
-public sealed record OptionalToolSpec(string Name, string CommandOnPath, string WingetId);
+/// <summary>
+/// An optional dev tool bootstrap can offer to install — never required by the pipeline.
+/// <paramref name="CommandOnPath"/> is only set for a tool that really puts its own command on PATH;
+/// a GUI app that doesn't (Claude desktop, Antigravity IDE, Visual Studio, SSMS) is found through
+/// <paramref name="InstallPaths"/> (environment variables expanded) or, failing that, by asking
+/// winget whether its package is installed.
+/// </summary>
+public sealed record OptionalToolSpec(string Name, string? CommandOnPath, string WingetId, IReadOnlyList<string>? InstallPaths = null);
+
+/// <summary>
+/// An AI agent CLI the Launcher's tabs run. Installed from npm when <paramref name="NpmPackage"/> is
+/// set, otherwise from winget — the same split Bob used.
+/// </summary>
+public sealed record AiCliSpec(string Name, string Command, string? NpmPackage, string? WingetId);
 
 /// <summary>
 /// Installs what <c>bootstrap</c> needs via <c>winget</c> — consistent with this app's everything
 /// -is-an-exec'd-process ethos. By the time <c>bootstrap</c> runs, Launcher itself already proves
-/// git and the .NET runtime are present (the seed script, <c>bootstrap.ps1</c>, handles that one
+/// git and the .NET runtime are present (the seed script, <c>setup.ps1</c>, handles that one
 /// chicken-and-egg step), so this only covers what Bob calls its own hard requirements beyond
-/// that — <c>sqlcmd</c> and SQL Server LocalDB — plus the same optional dev tools Bob offers.
+/// that — <c>sqlcmd</c> and SQL Server LocalDB (which it also creates/starts) — the AI agent CLIs
+/// the tabs run, plus the same optional dev tools Bob offers.
 /// No offline installer cache: that existed only to support the no-network bug-out scenario,
 /// which no longer exists now that every repo lives on GitHub.
 /// </summary>
@@ -20,6 +33,12 @@ public sealed class PrerequisiteService
 {
     public delegate bool CommandExistsChecker(string command);
     public delegate (int ExitCode, string Output) ProcessRunner(string executable, IReadOnlyList<string> args, CancellationToken ct);
+
+    /// <summary>The LocalDB instance bootstrap restores into unless told otherwise (Bob's <c>-SqlServer</c> default).</summary>
+    public const string DefaultLocalDbInstance = "MSSQLLocalDB";
+
+    /// <summary>Server name for <see cref="DefaultLocalDbInstance"/>, as sqlcmd addresses it.</summary>
+    public const string DefaultLocalDbServer = @"(localdb)\" + DefaultLocalDbInstance;
 
     /// <summary>(command on PATH, winget ids tried in order).</summary>
     public static readonly IReadOnlyList<(string Command, string[] WingetIds)> HardRequirements =
@@ -33,32 +52,114 @@ public sealed class PrerequisiteService
         new("Notepad++", "notepad++", "Notepad++.Notepad++"),
         new("Node.js and npm", "npm", "OpenJS.NodeJS.LTS"),
         new("VS Code", "code", "Microsoft.VisualStudioCode"),
-        new("Visual Studio Community", "devenv", "Microsoft.VisualStudio.2022.Community"),
-        new("SQL Server Management Studio", "ssms", "Microsoft.SQLServerManagementStudio"),
-        new("Claude desktop", "claude", "Anthropic.Claude"),
-        new("Antigravity IDE", "agy", "Google.AntigravityIDE"),
+        // Neither devenv nor ssms is on PATH outside a Developer prompt, so winget answers for them.
+        new("Visual Studio Community", null, "Microsoft.VisualStudio.2022.Community"),
+        new("SQL Server Management Studio", null, "Microsoft.SQLServerManagementStudio"),
+        // 'claude' on PATH is the Claude Code CLI, not the desktop app; 'agy' is the Antigravity CLI, not the IDE.
+        new("Claude desktop", null, "Anthropic.Claude",
+            [@"%LOCALAPPDATA%\AnthropicClaude\claude.exe", @"%LOCALAPPDATA%\Programs\AnthropicClaude\Claude.exe"]),
+        new("Antigravity IDE", null, "Google.AntigravityIDE",
+            [@"%LOCALAPPDATA%\Programs\Antigravity\Antigravity.exe"]),
     ];
+
+    /// <summary>The CLIs <see cref="AgentProviderRegistry.Defaults"/> run, installed the way Bob installed them.</summary>
+    public static readonly IReadOnlyList<AiCliSpec> AiClis =
+    [
+        new("Claude Code CLI", "claude", "@anthropic-ai/claude-code", null),
+        new("OpenAI Codex CLI", "codex", "@openai/codex", null),
+        new("Antigravity CLI", "agy", null, "Google.AntigravityCLI"),
+    ];
+
+    /// <summary>winget package that provides npm, installed on demand when an npm-based CLI is missing.</summary>
+    public const string NodeWingetId = "OpenJS.NodeJS.LTS";
 
     private readonly CommandExistsChecker exists;
     private readonly ProcessRunner run;
+    private readonly Action refreshPath;
+    private readonly Func<string, bool> fileExists;
 
-    public PrerequisiteService() : this(DefaultCommandExists, DefaultRun) { }
+    public PrerequisiteService() : this(DefaultCommandExists, DefaultRun, RefreshProcessPath, File.Exists) { }
 
-    public PrerequisiteService(CommandExistsChecker exists, ProcessRunner run)
+    /// <summary>
+    /// Test seam. <paramref name="refreshPath"/> defaults to a no-op and <paramref name="fileExists"/> to
+    /// "nothing exists", so a test never touches the real environment or disk.
+    /// </summary>
+    public PrerequisiteService(CommandExistsChecker exists, ProcessRunner run, Action? refreshPath = null, Func<string, bool>? fileExists = null)
     {
         this.exists = exists;
         this.run = run;
+        this.refreshPath = refreshPath ?? (() => { });
+        this.fileExists = fileExists ?? (_ => false);
     }
 
     public static IReadOnlyList<string> BuildWingetInstallArguments(string wingetId) =>
         ["install", "--id", wingetId, "-e", "--silent", "--accept-package-agreements", "--accept-source-agreements"];
 
+    public static IReadOnlyList<string> BuildWingetListArguments(string wingetId) =>
+        ["list", "--id", wingetId, "-e", "--accept-source-agreements"];
+
+    public static IReadOnlyList<string> BuildNpmInstallArguments(string package) => ["install", "-g", package];
+
+    /// <summary>
+    /// The PATH a fresh shell would see (machine, then user — what an installer just changed),
+    /// followed by any entry only this process had, so nothing the caller added is lost.
+    /// </summary>
+    public static string MergePath(string? machine, string? user, string? current)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var merged = new List<string>();
+        foreach (var source in new[] { machine, user, current })
+        {
+            if (string.IsNullOrEmpty(source)) continue;
+            foreach (var raw in source.Split(';'))
+            {
+                var entry = raw.Trim();
+                if (entry.Length == 0) continue;
+                if (seen.Add(entry.TrimEnd('\\'))) merged.Add(entry);
+            }
+        }
+        return string.Join(';', merged);
+    }
+
+    /// <summary>
+    /// Re-reads PATH from the registry into this process, as Bob's <c>Update-SessionPath</c> does after
+    /// every install: winget changes the machine/user PATH, not ours, so without this a tool it just
+    /// installed (sqlcmd, sqllocaldb, npm) isn't found by the very next step.
+    /// </summary>
+    public static void RefreshProcessPath()
+    {
+        var merged = MergePath(
+            Environment.GetEnvironmentVariable("Path", EnvironmentVariableTarget.Machine),
+            Environment.GetEnvironmentVariable("Path", EnvironmentVariableTarget.User),
+            Environment.GetEnvironmentVariable("Path"));
+        if (merged.Length > 0) Environment.SetEnvironmentVariable("Path", merged);
+    }
+
     public bool CommandExists(string command) => exists(command);
 
+    /// <summary>Installs a winget package and, on success, refreshes this process's PATH.</summary>
     public (bool Ok, string Output) InstallViaWinget(string wingetId, CancellationToken ct = default)
     {
         var (code, output) = run("winget", BuildWingetInstallArguments(wingetId), ct);
+        if (code == 0) refreshPath();
         return (code == 0, output);
+    }
+
+    /// <summary>
+    /// Whether an optional tool is already installed: its own command on PATH, one of its known
+    /// install paths, or winget reporting its package as installed.
+    /// </summary>
+    public bool IsInstalled(OptionalToolSpec tool, CancellationToken ct = default)
+    {
+        if (tool.CommandOnPath is { Length: > 0 } cmd && exists(cmd)) return true;
+        foreach (var path in tool.InstallPaths ?? [])
+            if (fileExists(Environment.ExpandEnvironmentVariables(path))) return true;
+        try
+        {
+            var (code, _) = run("winget", BuildWingetListArguments(tool.WingetId), ct);
+            return code == 0;
+        }
+        catch { return false; }
     }
 
     /// <summary>
@@ -79,6 +180,91 @@ public sealed class PrerequisiteService
         }
         return new PrerequisiteCheckResult(command, Present: false, Installed: false,
             lastError is null ? $"'{command}' not found and no winget id succeeded." : $"'{command}' not found: {lastError}");
+    }
+
+    /// <summary>
+    /// Ensures an AI CLI is on PATH: npm for an npm package (installing Node.js first via winget
+    /// when npm itself is missing, as Bob's prerequisites did), winget otherwise. A failure is
+    /// reported, never fatal — the pipeline itself doesn't need these.
+    /// </summary>
+    public PrerequisiteCheckResult EnsureAiCli(AiCliSpec cli, CancellationToken ct = default)
+    {
+        if (exists(cli.Command)) return new PrerequisiteCheckResult(cli.Command, Present: true, Installed: false, null);
+        try { return InstallAiCli(cli, ct); }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            return new PrerequisiteCheckResult(cli.Command, false, false, $"'{cli.Command}' not installed: {ex.Message}");
+        }
+    }
+
+    private PrerequisiteCheckResult InstallAiCli(AiCliSpec cli, CancellationToken ct)
+    {
+        string? error;
+        if (cli.NpmPackage is { Length: > 0 } package)
+        {
+            if (!exists("npm"))
+            {
+                var (nodeOk, nodeOut) = InstallViaWinget(NodeWingetId, ct);
+                if (!nodeOk && !exists("npm"))
+                    return new PrerequisiteCheckResult(cli.Command, false, false,
+                        $"npm isn't available and Node.js couldn't be installed ({nodeOut}); install Node, then 'npm install -g {package}'.");
+            }
+
+            // npm is npm.cmd on Windows; Process.Start only resolves .exe from a bare name.
+            var (code, output) = run("npm.cmd", BuildNpmInstallArguments(package), ct);
+            if (code == 0) refreshPath();
+            error = code == 0 ? null : output;
+        }
+        else if (cli.WingetId is { Length: > 0 } id)
+        {
+            var (ok, output) = InstallViaWinget(id, ct);
+            error = ok ? null : output;
+        }
+        else
+        {
+            error = "no install source";
+        }
+
+        return exists(cli.Command) || error is null
+            ? new PrerequisiteCheckResult(cli.Command, Present: true, Installed: true, null)
+            : new PrerequisiteCheckResult(cli.Command, Present: false, Installed: false, $"'{cli.Command}' not installed: {error}");
+    }
+
+    /// <summary>
+    /// The LocalDB instance name in a <c>(localdb)\Instance</c> server name, or null for any other server.
+    /// </summary>
+    public static string? LocalDbInstanceOf(string? server)
+    {
+        const string prefix = @"(localdb)\";
+        if (server is null || !server.Trim().StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return null;
+        var instance = server.Trim()[prefix.Length..].Trim();
+        return instance.Length == 0 ? null : instance;
+    }
+
+    /// <summary>
+    /// Starts a LocalDB instance, creating it first when it doesn't exist yet — Bob's
+    /// <c>Start-LocalDb</c>. A fresh LocalDB install has no instance running, so without this every
+    /// <c>.bak</c> restore into <c>(localdb)\MSSQLLocalDB</c> fails to connect.
+    /// </summary>
+    public (bool Ok, string Message) EnsureLocalDbRunning(string instance, CancellationToken ct = default)
+    {
+        try { return StartOrCreateLocalDb(instance, ct); }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            return (false, $"couldn't run sqllocaldb: {ex.Message}");
+        }
+    }
+
+    private (bool Ok, string Message) StartOrCreateLocalDb(string instance, CancellationToken ct)
+    {
+        var (startCode, startOut) = run("sqllocaldb", ["start", instance], ct);
+        if (startCode == 0) return (true, "running");
+
+        var (createCode, createOut) = run("sqllocaldb", ["create", instance, "-s"], ct);
+        if (createCode == 0) return (true, "created and started");
+
+        var detail = string.Join("\n", startOut, createOut).Trim();
+        return (false, detail.Length == 0 ? $"sqllocaldb couldn't start or create '{instance}'" : detail);
     }
 
     private static bool DefaultCommandExists(string command)

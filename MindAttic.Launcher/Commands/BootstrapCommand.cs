@@ -1,18 +1,18 @@
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using MindAttic.Launcher.Services;
-using MindAttic.Vault.Credentials;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
 namespace MindAttic.Launcher.Commands;
 
 /// <summary>
-/// New-machine setup: install prerequisites, clone every <c>wip</c>-tagged repo, restore the
-/// latest reachable backup. Launcher's answer to Bob's <c>--unpack</c> — except this is recovery
-/// onto a machine that already has git, the .NET runtime, and this very exe (the one piece that
-/// can't be Launcher code; see <c>bootstrap.ps1</c> at the repo root for that seed step). No
-/// self-elevation: <c>winget</c> raises its own UAC prompt only for the one package that needs it.
+/// New-machine setup: install prerequisites and the AI agent CLIs, restore AppData, clone (or
+/// pull) every <c>wip</c>-tagged repo, start LocalDB, restore the databases. Launcher's answer to
+/// Bob's <c>--unpack</c> — except this is recovery onto a machine that already has git, the .NET
+/// runtime, and this very exe (the one piece that can't be Launcher code; see <c>setup.ps1</c> at
+/// the repo root for that seed step). No self-elevation: <c>winget</c> raises its own UAC prompt
+/// only for the one package that needs it.
 /// </summary>
 [SuppressMessage("Performance", "CA1812", Justification = "Instantiated by Spectre.Console.Cli")]
 public sealed class BootstrapCommand : Command<BootstrapCommand.Settings>
@@ -27,9 +27,42 @@ public sealed class BootstrapCommand : Command<BootstrapCommand.Settings>
         [Description(@"Dated backup folder to restore from (default: the newest one reachable under R:\Backup\MindAttic).")]
         public string? From { get; init; }
 
+        [CommandOption("--server <SERVER>")]
+        [Description(@"SQL Server instance to restore every .bak into (default: (localdb)\MSSQLLocalDB, which bootstrap installs and starts).")]
+        public string? Server { get; init; }
+
         [CommandOption("--skip-optional")]
         [Description("Don't prompt for optional dev tools (VS Code, Visual Studio, SSMS, Notepad++, Node, Claude desktop, Antigravity).")]
         public bool SkipOptional { get; init; }
+    }
+
+    /// <summary>
+    /// Bootstrap's phases, in the order <see cref="RunPhases"/> runs them. AppData comes before the
+    /// repos because the GitHub token that finds the <c>wip</c>-tagged repos lives in AppData
+    /// (<c>%APPDATA%\MindAttic\GitHub\tokens.json</c>), and so does the roster the SQLite restore
+    /// matches dumps against; the databases come after the repos, whose folders the SQLite files
+    /// live in, and after LocalDB is running.
+    /// </summary>
+    public sealed record Phases(
+        Func<bool> Prerequisites,
+        Func<bool> OptionalTools,
+        Func<bool> AiClis,
+        Func<bool> RestoreAppData,
+        Func<bool> Repos,
+        Func<bool> StartLocalDb,
+        Func<bool> RestoreDatabases);
+
+    /// <summary>Runs every phase in order — one failing never skips the rest — and reports whether all succeeded.</summary>
+    public static bool RunPhases(Phases phases)
+    {
+        var ok = true;
+        foreach (var phase in new[]
+                 {
+                     phases.Prerequisites, phases.OptionalTools, phases.AiClis, phases.RestoreAppData,
+                     phases.Repos, phases.StartLocalDb, phases.RestoreDatabases
+                 })
+            ok &= phase();
+        return ok;
     }
 
     public override int Execute(CommandContext context, Settings settings)
@@ -39,10 +72,26 @@ public sealed class BootstrapCommand : Command<BootstrapCommand.Settings>
             workspaceRoot = AnsiConsole.Ask("Workspace root?", @"D:\Projects\MindAttic");
         Directory.CreateDirectory(workspaceRoot);
 
-        var ok = true;
-
-        AnsiConsole.MarkupLine("[bold]Prerequisites[/]");
+        var server = string.IsNullOrWhiteSpace(settings.Server) ? PrerequisiteService.DefaultLocalDbServer : settings.Server.Trim();
         var prereq = new PrerequisiteService();
+        var from = settings.From ?? FindNewestBackupFolder();
+
+        var ok = RunPhases(new Phases(
+            Prerequisites: () => EnsurePrerequisites(prereq),
+            OptionalTools: () => { if (!settings.SkipOptional) OfferOptionalTools(prereq); return true; },
+            AiClis: () => { EnsureAiClis(prereq); return true; },
+            RestoreAppData: () => RestoreAppData(from),
+            Repos: () => CloneRepos(workspaceRoot),
+            StartLocalDb: () => StartLocalDb(prereq, server),
+            RestoreDatabases: () => RestoreDatabases(from, server)));
+
+        return ok ? 0 : 1;
+    }
+
+    private static bool EnsurePrerequisites(PrerequisiteService prereq)
+    {
+        AnsiConsole.MarkupLine("[bold]Prerequisites[/]");
+        var ok = true;
         foreach (var (command, wingetIds) in PrerequisiteService.HardRequirements)
         {
             var r = prereq.EnsureHard(command, wingetIds);
@@ -51,72 +100,113 @@ public sealed class BootstrapCommand : Command<BootstrapCommand.Settings>
                 ? $"  [green]OK[/] {Markup.Escape(command)}{(r.Installed ? " (installed)" : "")}"
                 : $"  [red]MISSING[/] {Markup.Escape(command)} — {Markup.Escape(r.Error ?? "")}");
         }
+        return ok;
+    }
 
-        if (!settings.SkipOptional)
-        {
-            AnsiConsole.WriteLine();
-            AnsiConsole.MarkupLine("[bold]Optional tools[/]");
-            foreach (var tool in PrerequisiteService.OptionalTools)
-            {
-                if (prereq.CommandExists(tool.CommandOnPath))
-                {
-                    AnsiConsole.MarkupLine($"  [grey50]{Markup.Escape(tool.Name)} already installed — skipped[/]");
-                    continue;
-                }
-                if (!AnsiConsole.Confirm($"  Install {tool.Name}?", defaultValue: false)) continue;
-
-                var (installOk, output) = prereq.InstallViaWinget(tool.WingetId);
-                AnsiConsole.MarkupLine(installOk
-                    ? $"  [green]Installed {Markup.Escape(tool.Name)}[/]"
-                    : $"  [yellow]Could not install {Markup.Escape(tool.Name)}: {Markup.Escape(output)}[/]");
-            }
-        }
-
+    private static void OfferOptionalTools(PrerequisiteService prereq)
+    {
         AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine("[bold]Repos[/]");
-        var token = GitHubCredentials.DefaultStore.Get(GitHubCredentials.TokenName);
-        if (string.IsNullOrWhiteSpace(token))
+        AnsiConsole.MarkupLine("[bold]Optional tools[/]");
+        foreach (var tool in PrerequisiteService.OptionalTools)
         {
-            AnsiConsole.MarkupLine("  [yellow]No GitHub token configured — can't discover which repos to clone.[/]");
-            AnsiConsole.MarkupLine("  [grey50]Set one from the Settings menu once Launcher is up, then run 'bootstrap' again.[/]");
-            ok = false;
-        }
-        else
-        {
-            var tagged = TopicRepoSync.FetchOrNull();
-            if (tagged is null)
+            if (prereq.IsInstalled(tool))
             {
-                AnsiConsole.MarkupLine("  [yellow]Could not fetch the tagged repo list from GitHub.[/]");
-                ok = false;
+                AnsiConsole.MarkupLine($"  [grey50]{Markup.Escape(tool.Name)} already installed — skipped[/]");
+                continue;
             }
-            else
-            {
-                var clone = new WorkspaceCloneService();
-                var results = clone.CloneAll(workspaceRoot, tagged, r =>
-                {
-                    AnsiConsole.MarkupLine(r.Ok
-                        ? $"  [green]{(r.AlreadyPresent ? "present" : "cloned")}[/] {Markup.Escape(r.RepoName)}"
-                        : $"  [red]FAILED[/] {Markup.Escape(r.RepoName)}: {Markup.Escape(r.Message ?? "")}");
-                });
-                ok &= results.All(r => r.Ok);
-            }
-        }
+            if (!AnsiConsole.Confirm($"  Install {tool.Name}?", defaultValue: false)) continue;
 
+            var (installOk, output) = prereq.InstallViaWinget(tool.WingetId);
+            AnsiConsole.MarkupLine(installOk
+                ? $"  [green]Installed {Markup.Escape(tool.Name)}[/]"
+                : $"  [yellow]Could not install {Markup.Escape(tool.Name)}: {Markup.Escape(output)}[/]");
+        }
+    }
+
+    /// <summary>The CLIs the tabs run. Never fails bootstrap: the pipeline itself doesn't need them.</summary>
+    private static void EnsureAiClis(PrerequisiteService prereq)
+    {
         AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine("[bold]Restore[/]");
-        var from = settings.From ?? FindNewestBackupFolder();
+        AnsiConsole.MarkupLine("[bold]AI agent CLIs[/]");
+        foreach (var cli in PrerequisiteService.AiClis)
+        {
+            var r = prereq.EnsureAiCli(cli);
+            AnsiConsole.MarkupLine(r.Present
+                ? $"  [green]OK[/] {Markup.Escape(cli.Name)}{(r.Installed ? " (installed)" : "")}"
+                : $"  [yellow]Not installed[/] {Markup.Escape(cli.Name)} — {Markup.Escape(r.Error ?? "")}");
+        }
+    }
+
+    private static bool RestoreAppData(string? from)
+    {
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine("[bold]AppData[/]");
         if (from is null)
         {
             AnsiConsole.MarkupLine($"  [grey50]No backup folder reachable under {Markup.Escape(BackupService.DefaultBackupBase)} — starting empty.[/]");
+            return true;
         }
-        else
+        if (!Directory.Exists(from))
         {
-            AnsiConsole.MarkupLine($"  Restoring from {Markup.Escape(from)}");
-            var restoreExit = new RestoreCommand().Execute(context, new RestoreCommand.Settings { From = from });
-            ok &= restoreExit == 0;
+            AnsiConsole.MarkupLine($"  [red]--from folder not found: {Markup.Escape(from)}[/]");
+            return false;
+        }
+        AnsiConsole.MarkupLine($"  Restoring from {Markup.Escape(from)}");
+        return RestoreCommand.RestoreAppData(from);
+    }
+
+    private static bool CloneRepos(string workspaceRoot)
+    {
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine("[bold]Repos[/]");
+        var token = GitHubCredentials.GetToken();
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            AnsiConsole.MarkupLine("  [yellow]No GitHub token configured (none in the restored AppData either) — can't discover which repos to clone.[/]");
+            AnsiConsole.MarkupLine("  [grey50]Set one from the Settings menu once Launcher is up, then run 'bootstrap' again.[/]");
+            return false;
         }
 
-        return ok ? 0 : 1;
+        var tagged = TopicRepoSync.FetchOrNull();
+        if (tagged is null)
+        {
+            AnsiConsole.MarkupLine("  [yellow]Could not fetch the tagged repo list from GitHub.[/]");
+            return false;
+        }
+
+        var results = new WorkspaceCloneService().CloneAll(workspaceRoot, tagged, r =>
+        {
+            AnsiConsole.MarkupLine(r.Ok
+                ? $"  [green]{(r.AlreadyPresent ? "pulled" : "cloned")}[/] {Markup.Escape(r.RepoName)}{(r.AlreadyPresent && r.Message is not null ? $" [grey50]({Markup.Escape(r.Message)})[/]" : "")}"
+                : $"  [red]FAILED[/] {Markup.Escape(r.RepoName)}: {Markup.Escape(r.Message ?? "")}");
+        });
+        return results.All(r => r.Ok);
+    }
+
+    /// <summary>A fresh LocalDB install has no running instance; start (or create) the one restores target.</summary>
+    private static bool StartLocalDb(PrerequisiteService prereq, string server)
+    {
+        var instance = PrerequisiteService.LocalDbInstanceOf(server);
+        if (instance is null) return true;
+
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine("[bold]LocalDB[/]");
+        var (ok, message) = prereq.EnsureLocalDbRunning(instance);
+        AnsiConsole.MarkupLine(ok
+            ? $"  [green]OK[/] {Markup.Escape(server)} {Markup.Escape(message)}"
+            : $"  [red]FAILED[/] {Markup.Escape(server)}: {Markup.Escape(message)}");
+        return ok;
+    }
+
+    private static bool RestoreDatabases(string? from, string server)
+    {
+        if (from is null || !Directory.Exists(from)) return true; // already reported by the AppData phase
+
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine($"[bold]Databases[/] [grey50](into {Markup.Escape(server)})[/]");
+        var ok = RestoreCommand.RestoreSqlDatabases(from, server);
+        ok &= RestoreCommand.RestoreSqliteDatabases(from);
+        return ok;
     }
 
     private static string? FindNewestBackupFolder()

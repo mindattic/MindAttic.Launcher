@@ -121,12 +121,13 @@ call stateless/injectable services; the services own all external-process and fi
   above: `RESTORE DATABASE ... WITH REPLACE, RECOVERY, MOVE ...` (deriving data/log paths from
   `SERVERPROPERTY`, dropping an existing database to `SINGLE_USER` first) and replaying a `.sql`
   dump into a fresh SQLite file, respectively. See `restore` under §4.
-- **PrerequisiteService** — installs what `bootstrap` needs (`sqlcmd`, SQL Server LocalDB) via
-  `winget`, plus the same optional dev tools Bob offered (VS Code, Visual Studio, SSMS,
-  Notepad++, Node, Claude desktop, Antigravity) — no offline installer cache, since that only
-  existed for the no-network bug-out scenario this app doesn't have.
+- **PrerequisiteService** — installs what `bootstrap` needs (`sqlcmd`, SQL Server LocalDB, which
+  it also creates/starts) via `winget`, refreshing the process PATH after each install, the AI
+  agent CLIs the tabs run (npm/winget), plus the same optional dev tools Bob offered (VS Code,
+  Visual Studio, SSMS, Notepad++, Node, Claude desktop, Antigravity) — no offline installer
+  cache, since that only existed for the no-network bug-out scenario this app doesn't have.
 - **WorkspaceCloneService** — clones every `wip`-tagged repo not already present under the
-  workspace root, reusing `TopicRepoSync`/`GitHubTopicRepos` (the same GitHub-topic discovery the
+  workspace root and pulls (`--ff-only`) every one that is, reusing `TopicRepoSync`/`GitHubTopicRepos` (the same GitHub-topic discovery the
   roster already uses) instead of a hand-maintained repo list.
 - **ScheduledTaskService** — status/enable/disable/run-now for the nightly backup Scheduled Task
   via `schtasks.exe`; registration itself shells to `tools/register-nightly-backup-task.ps1`.
