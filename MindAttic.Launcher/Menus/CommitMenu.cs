@@ -44,11 +44,11 @@ public sealed class CommitMenu(SettingsStore store, GitService git, IReadOnlySet
     private void CommitAll(IReadOnlyList<Project> projects)
     {
         Screen.Header("Commit and sync", "All Projects");
-        AnsiConsole.MarkupLine("  [yellow]Enter a commit message, or leave blank to auto-generate.[/]");
+        AnsiConsole.MarkupLine("  [yellow]Enter a commit message, leave blank to auto-generate, or Esc to cancel.[/]");
         AnsiConsole.WriteLine();
-        var userMessage = AnsiConsole.Prompt(
-            new TextPrompt<string>("  > ").AllowEmpty());
+        var userMessage = Prompt.TextOrCancel("  > ");
         AnsiConsole.WriteLine();
+        if (userMessage is null) return;
 
         Commit(projects, userMessage);
 
@@ -60,11 +60,11 @@ public sealed class CommitMenu(SettingsStore store, GitService git, IReadOnlySet
     private void CommitOne(Project project)
     {
         Screen.Header("Commit and sync", project.Name);
-        AnsiConsole.MarkupLine("  [yellow]Enter a commit message, or leave blank to auto-generate.[/]");
+        AnsiConsole.MarkupLine("  [yellow]Enter a commit message, leave blank to auto-generate, or Esc to cancel.[/]");
         AnsiConsole.WriteLine();
-        var userMessage = AnsiConsole.Prompt(
-            new TextPrompt<string>("  > ").AllowEmpty());
+        var userMessage = Prompt.TextOrCancel("  > ");
         AnsiConsole.WriteLine();
+        if (userMessage is null) return;
 
         Commit([project], userMessage);
 
