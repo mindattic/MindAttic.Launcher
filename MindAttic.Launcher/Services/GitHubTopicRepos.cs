@@ -98,6 +98,87 @@ public sealed class GitHubTopicRepos(HttpClient? http = null)
     }
 
     /// <summary>
+    /// Onboarding helper: adds <paramref name="topic"/> to every non-archived
+    /// repo the token can see that doesn't already carry it, so a brand-new
+    /// user's roster populates on the very first launch instead of requiring
+    /// each repo to be tagged by hand on GitHub first (see setup.ps1's
+    /// "example repo" question and <c>AdoptReposCommand</c>). Paginates the
+    /// same way as <see cref="FetchAsync"/>; a per-repo PUT failure is
+    /// recorded in <see cref="AdoptResult.Failed"/> rather than aborting the
+    /// rest of the run.
+    /// </summary>
+    public async Task<AdoptResult> AdoptAllAsync(string token, string topic, CancellationToken ct = default)
+    {
+        var tagged = 0;
+        var alreadyTagged = 0;
+        var failed = new List<string>();
+
+        for (var page = 1; ; page++)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"user/repos?per_page={PageSize}&page={page}");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+            using var response = await http.SendAsync(request, ct).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+                throw new InvalidOperationException(
+                    $"GitHub API returned {(int)response.StatusCode} fetching repos.");
+
+            await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
+
+            var count = 0;
+            foreach (var repo in doc.RootElement.EnumerateArray())
+            {
+                count++;
+                if (IsArchived(repo)) continue;
+                if (!repo.TryGetProperty("full_name", out var fullNameEl) || fullNameEl.GetString() is not { } fullName)
+                    continue;
+
+                if (HasTopic(repo, topic))
+                {
+                    alreadyTagged++;
+                    continue;
+                }
+
+                if (await AddTopicAsync(token, fullName, GetTopics(repo), topic, ct).ConfigureAwait(false))
+                    tagged++;
+                else
+                    failed.Add(fullName);
+            }
+
+            if (count < PageSize) break;
+        }
+
+        return new AdoptResult(tagged, alreadyTagged, failed);
+    }
+
+    /// <summary>Result of <see cref="AdoptAllAsync"/>.</summary>
+    public sealed record AdoptResult(int Tagged, int AlreadyTagged, IReadOnlyList<string> Failed);
+
+    /// <summary><c>PUT</c>s the repo's topics with <paramref name="topic"/> added. False on any failure.</summary>
+    private async Task<bool> AddTopicAsync(string token, string fullName, List<string> topics, string topic, CancellationToken ct)
+    {
+        var names = topics.Append(topic).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var body = JsonSerializer.Serialize(new { names });
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Put, $"repos/{fullName}/topics")
+            {
+                Content = new StringContent(body, Encoding.UTF8, "application/json")
+            };
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+            using var response = await http.SendAsync(request, ct).ConfigureAwait(false);
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
     /// GitHub keeps a repo's topics intact after archiving it, so an archived
     /// repo can still carry <see cref="TopicRepoSync.Topic"/> from before it
     /// was shelved. Archived is axiomatically not work-in-progress, so it's

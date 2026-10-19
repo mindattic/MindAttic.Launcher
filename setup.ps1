@@ -14,6 +14,12 @@
       3. Example repo          - an existing git repo to seed the roster with,
                                  so Open Project Tab has something to open on
                                  the very first run.
+      4. GitHub token          - optional; lets Launcher read your repos' topics.
+                                 If given, this script also tags every repo it
+                                 can see as 'wip' right away (the roster's
+                                 filter topic - see TopicRepoSync.cs), so the
+                                 full roster is there on the very first launch
+                                 instead of tagging each repo by hand first.
 
     Then it:
       - Writes a one-time settings.json seed next to this script (only if no
@@ -21,6 +27,8 @@
         %APPDATA%\MindAttic\MindAttic.Launcher\settings.json - an existing
         install is never touched).
       - Runs deploy.ps1 -Force to publish to C:\Apps\MindAttic.Launcher.
+      - If a GitHub token was given, runs 'adopt-repos' to save it and tag
+        every repo it can see as 'wip'.
       - Creates the Desktop shortcut, if asked for.
       - Offers to run 'bootstrap' (install sqlcmd/LocalDB, clone every other wip-tagged repo,
         restore the latest reachable backup) or just launch the app.
@@ -203,6 +211,16 @@ while ($true) {
     break
 }
 
+# ── Question 4: GitHub token ─────────────────────────────────────────────────
+Write-Step "GitHub token (optional)"
+Write-Info "A personal access token lets Launcher read your repos' topics - a repo tagged"
+Write-Info "'wip' on GitHub shows up in the roster. Give one now and this script tags every"
+Write-Info "repo it can see as 'wip' for you, so the roster is full on the very first launch"
+Write-Info "instead of tagging each repo by hand on GitHub first."
+Write-Info "Leave blank to skip - you can set this later from the app's Settings menu."
+
+$githubToken = (Read-Host "GitHub token (blank to skip)").Trim()
+
 # ── Seed settings (only if nothing real exists yet) ─────────────────────────
 Write-Step "Settings"
 
@@ -242,6 +260,19 @@ if ($LASTEXITCODE -ne 0) {
 
 $exe = Join-Path $deployDir $exeName
 $bat = Join-Path $deployDir 'deploy.bat'
+
+# ── Adopt repos as 'wip' (only if a GitHub token was given) ─────────────────
+if ($githubToken) {
+    Write-Step "Tagging your repos as 'wip'"
+    # Passed via env var, not a CLI arg, so the token doesn't land in process-list logging.
+    $env:MINDATTIC_GITHUB_TOKEN = $githubToken
+    try {
+        & $exe adopt-repos
+    }
+    finally {
+        Remove-Item Env:\MINDATTIC_GITHUB_TOKEN -ErrorAction SilentlyContinue
+    }
+}
 
 # ── Desktop shortcut ─────────────────────────────────────────────────────────
 if ($wantsIcon) {

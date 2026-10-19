@@ -67,6 +67,9 @@ app.Configure(config =>
         .WithDescription("New-machine setup: install prerequisites, clone every tagged repo, restore the latest reachable backup.")
         .WithExample("bootstrap")
         .WithExample("bootstrap", "--workspace-root", @"D:\Projects\MindAttic");
+    config.AddCommand<AdoptReposCommand>("adopt-repos")
+        .WithDescription("Onboarding: tag every GitHub repo the token can see with 'wip' so the roster populates immediately (used once by setup.ps1).")
+        .WithExample("adopt-repos");
     config.AddCommand<VersionCommand>("version")
         .WithAlias("--version")
         .WithDescription("Print the MindAttic.Launcher version and exe path.");

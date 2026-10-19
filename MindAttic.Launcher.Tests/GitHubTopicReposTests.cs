@@ -171,4 +171,81 @@ public sealed class GitHubTopicReposTests
 
         Assert.ThrowsAsync<InvalidOperationException>(() => client.FetchAsync("bad-token", "work-in-progress"));
     }
+
+    [Test]
+    public async Task AdoptAllAsync_tags_every_non_archived_repo_missing_the_topic()
+    {
+        var putRequests = new List<(string Url, string Body)>();
+        using var handler = new FakeHandler(req =>
+        {
+            if (req.Method == HttpMethod.Put)
+            {
+                putRequests.Add((req.RequestUri!.ToString(), req.Content!.ReadAsStringAsync().GetAwaiter().GetResult()));
+                return new HttpResponseMessage(HttpStatusCode.OK);
+            }
+
+            return JsonPage(
+                ("mindattic/Already", new[] { "wip" }),
+                ("mindattic/New", new[] { "dotnet" }));
+        });
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.github.com/") };
+        var client = new GitHubTopicRepos(http);
+
+        var result = await client.AdoptAllAsync("test-token", "wip");
+
+        Assert.That(result.Tagged, Is.EqualTo(1));
+        Assert.That(result.AlreadyTagged, Is.EqualTo(1));
+        Assert.That(result.Failed, Is.Empty);
+        Assert.That(putRequests, Has.Count.EqualTo(1));
+        Assert.That(putRequests[0].Url, Is.EqualTo("https://api.github.com/repos/mindattic/New/topics"));
+        Assert.That(putRequests[0].Body, Does.Contain("dotnet"));
+        Assert.That(putRequests[0].Body, Does.Contain("wip"));
+    }
+
+    [Test]
+    public async Task AdoptAllAsync_excludes_archived_repos()
+    {
+        var putCalled = false;
+        using var handler = new FakeHandler(req =>
+        {
+            if (req.Method == HttpMethod.Put)
+            {
+                putCalled = true;
+                return new HttpResponseMessage(HttpStatusCode.OK);
+            }
+
+            return JsonPage(("mindattic/Shelved", new[] { "dotnet" }, Archived: true));
+        });
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.github.com/") };
+        var client = new GitHubTopicRepos(http);
+
+        var result = await client.AdoptAllAsync("test-token", "wip");
+
+        Assert.That(putCalled, Is.False);
+        Assert.That(result.Tagged, Is.EqualTo(0));
+        Assert.That(result.AlreadyTagged, Is.EqualTo(0));
+    }
+
+    [Test]
+    public async Task AdoptAllAsync_records_a_failed_tag_without_aborting_the_rest()
+    {
+        using var handler = new FakeHandler(req =>
+        {
+            if (req.Method == HttpMethod.Put)
+                return req.RequestUri!.ToString().Contains("Fails")
+                    ? new HttpResponseMessage(HttpStatusCode.Forbidden)
+                    : new HttpResponseMessage(HttpStatusCode.OK);
+
+            return JsonPage(
+                ("mindattic/Fails", new[] { "dotnet" }),
+                ("mindattic/Succeeds", new[] { "dotnet" }));
+        });
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.github.com/") };
+        var client = new GitHubTopicRepos(http);
+
+        var result = await client.AdoptAllAsync("test-token", "wip");
+
+        Assert.That(result.Tagged, Is.EqualTo(1));
+        Assert.That(result.Failed, Is.EquivalentTo(new[] { "mindattic/Fails" }));
+    }
 }
