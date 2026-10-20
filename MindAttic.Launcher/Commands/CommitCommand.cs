@@ -11,7 +11,7 @@ namespace MindAttic.Launcher.Commands;
 /// Out-of-menu commit subcommand. <c>mindattic commit</c> commits + pushes
 /// every project; <c>mindattic commit --project Name</c> targets one project;
 /// <c>--message "..."</c> overrides the auto-generated message. Each commit is
-/// aligned to a workflow ticket (see <see cref="WorkspaceCommitter"/>).
+/// aligned to a tickets ticket (see <see cref="WorkspaceCommitter"/>).
 /// </summary>
 [SuppressMessage("Performance", "CA1812", Justification = "Instantiated by Spectre.Console.Cli")]
 public sealed class CommitCommand : Command<CommitCommand.Settings>

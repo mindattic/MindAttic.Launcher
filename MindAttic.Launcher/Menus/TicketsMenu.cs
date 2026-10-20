@@ -1,19 +1,19 @@
 using MindAttic.Launcher.Services;
 using MindAttic.Launcher.Ui;
-using MindAttic.Workflow;
-using MindAttic.Workflow.Repos;
-using MindAttic.Workflow.Tickets;
+using MindAttic.Tickets;
+using MindAttic.Tickets.Repos;
+using MindAttic.Tickets.Log;
 using Spectre.Console;
 
 namespace MindAttic.Launcher.Menus;
 
 /// <summary>
-/// The Launcher's front door to MindAttic.Workflow (HOUSE-LAW-6): open tickets across the
+/// The Launcher's front door to MindAttic.Tickets (HOUSE-LAW-6): open tickets across the
 /// workspace, each repo's local-only work, and the ticket-log checks. Read-only on purpose —
-/// deleting folders (<c>workflow repos prune</c>) stays in the CLI, where it has a preview and a
+/// deleting folders (<c>tickets repos prune</c>) stays in the CLI, where it has a preview and a
 /// typed confirmation.
 /// </summary>
-public sealed class WorkflowMenu(string workspaceRoot)
+public sealed class TicketsMenu(string workspaceRoot)
 {
     public void Run()
     {
@@ -27,7 +27,7 @@ public sealed class WorkflowMenu(string workspaceRoot)
         var resumeIndex = 0;
         while (true)
         {
-            Screen.Header("Workflow");
+            Screen.Header("Tickets");
             var result = Menu.PromptWithKeys("Choose a view:", items, customKeys: null, initialIndex: resumeIndex);
             resumeIndex = result.Index;
             if (result.Selected is null) return;
@@ -45,7 +45,7 @@ public sealed class WorkflowMenu(string workspaceRoot)
 
     private static void ShowOpenTickets(IReadOnlyList<Repo> repos)
     {
-        Screen.Header("Workflow", "Open tickets");
+        Screen.Header("Tickets", "Open tickets");
         var open = WorkspaceTickets.All(repos).Where(x => x.Ticket.Status == TicketRules.Open).ToList();
         if (open.Count == 0) { AnsiConsole.MarkupLine("  [green]No open tickets.[/]"); return; }
 
@@ -58,7 +58,7 @@ public sealed class WorkflowMenu(string workspaceRoot)
 
     private static void ShowStatus(IReadOnlyList<Repo> repos)
     {
-        Screen.Header("Workflow", "Repo status");
+        Screen.Header("Tickets", "Repo status");
         AnsiConsole.MarkupLine("  [grey]Reading git state…[/]");
         var statuses = repos.Select(RepoStatus.Read).ToList();
 
@@ -84,12 +84,12 @@ public sealed class WorkflowMenu(string workspaceRoot)
                 Count(s.Uncommitted), Count(s.Unpushed), Count(s.Stashes),
                 s.LocalOnlyIgnored.Count == 0 ? "[grey]—[/]" : $"[yellow]{s.LocalOnlyIgnored.Count}[/]");
         AnsiConsole.Write(table);
-        AnsiConsole.MarkupLine("  [grey]To remove archived or untagged repos: workflow repos prune (preview), then --apply.[/]");
+        AnsiConsole.MarkupLine("  [grey]To remove archived or untagged repos: tickets repos prune (preview), then --apply.[/]");
     }
 
     private static void ShowChecks(IReadOnlyList<Repo> repos)
     {
-        Screen.Header("Workflow", "Ticket checks");
+        Screen.Header("Tickets", "Ticket checks");
         var problems = WorkspaceTickets.Check(repos);
         if (problems.Count == 0) { AnsiConsole.MarkupLine("  [green]No problems.[/]"); return; }
         foreach (var p in problems)

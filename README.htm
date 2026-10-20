@@ -6,7 +6,7 @@
 <title>MindAttic.Launcher</title>
 <meta name="description" content="One Windows console for a whole workspace of repos: open any project in a colored Windows Terminal tab running Claude, Codex, Gemini or Kimi, commit and push everything at once, and back up files plus SQL databases.">
 <meta name="generator" content="MindAttic Codex build-readme.ps1">
-<meta name="generated" content="2026-10-18">
+<meta name="generated" content="2026-10-20">
 <style>:root{
   --bg:#0d1117;--bg2:#161b22;--bg3:#21262d;
   --border:#30363d;
@@ -117,7 +117,7 @@ pre:hover .cpbtn{opacity:1}
 
  &gt; Open Project Tab              select a project, then pick which agent CLI to open it with
    Commit and sync               commit and push changes per project or across all
-   Workflow                      open tickets, repo status and ticket-log checks across the workspace
+   Tickets                       open tickets, repo status and ticket-log checks across the workspace
    Backup                        back up MindAttic to R:\Backup\MindAttic
    Settings                      CLI development: the model each agent CLI runs with
    Open Command Prompt (Admin)   open cmd as Administrator at the workspace root
@@ -247,7 +247,7 @@ MindAttic.Launcher.exe commit --project MindAttic.Vault --message "Fix readme"</
 <li><code>-m</code>, <code>--message &lt;MESSAGE&gt;</code>: commit message (defaults to an auto-generated summary of <code>git status --porcelain</code>).</li>
 </ul>
 <p>For each target it reads git status, skips clean repos, auto-generates a message from added, modified, deleted and renamed files (capped to 200 characters, falling back to counts) when none is given, then runs <code>git add -A</code>, <code>git commit -m &lt;msg&gt;</code> and <code>git push --quiet</code>. Prose's local agent state (<code>.prose/agent-session.json*</code>, <code>agent-queue.json*</code>, <code>quicksave.md</code>, <code>archive/</code>) is never staged, and a repo whose only changes are that state reads as clean; <code>.prose/commands</code> is committed like any other file. When a push is rejected because the remote moved ahead, the local commit is rebased onto it (<code>git pull --rebase --autostash</code>) and pushed again; a conflicting rebase is aborted, leaving the local commit as it was, and reported so it can be resolved by hand. A clean repo still ahead of its upstream (an earlier push failed) is pushed the same way instead of being skipped. A push GitHub refuses because the repo is archived is reported in yellow as "archived on GitHub (read-only); kept local" rather than as a failure, so it doesn't fail every run or the exit code. Exit <code>1</code> means at least one project had a missing path, an invalid git status, no ticket alignment, or a failed add, commit or push.</p>
-<p>Every commit is aligned to a <a href="https://github.com/mindattic/MindAttic.Workflow">MindAttic.Workflow</a> ticket, through the Workflow library rather than its CLI. A message that names one of the repo's tickets (e.g. <code>M.LNCH-T21</code>) is used as-is. Otherwise a closed ticket is created from the message (type <code>docs</code> when only documentation changed, else read from the message's first word, <code>chore</code> for an auto-generated message), its ID is appended as <code>(CODE-Tn)</code>, and the repo's generated <code>docs/USER_STORIES.md</code> view is rewritten so the new row lands in the same commit. If the commit itself then fails, that ticket is marked <code>wont-do</code>. A repo missing from the workflow database, or no database at all, fails that project without committing. The MindAttic.Workflow repo is committed last, with its database dump refreshed, so it carries every ticket the run created; when it isn't part of the run, only its <code>data/workflow.db</code> and <code>data/workflow.sql</code> are committed and pushed as "Sync the workflow database (CODE-Tn)", citing a ticket the run created (every workspace repo's commit-msg hook refuses a subject without one). A database-only change the run didn't make gets a ticket of its own like any other commit. The Commit and sync menu runs the same engine.</p>
+<p>Every commit is aligned to a <a href="https://github.com/mindattic/MindAttic.Tickets">MindAttic.Tickets</a> ticket, through the Tickets library rather than its CLI. A message that names one of the repo's tickets (e.g. <code>M.LNCH-T21</code>) is used as-is. Otherwise a closed ticket is created from the message (type <code>docs</code> when only documentation changed, else read from the message's first word, <code>chore</code> for an auto-generated message), its ID is appended as <code>(CODE-Tn)</code>, and the repo's generated <code>docs/USER_STORIES.md</code> view is rewritten so the new row lands in the same commit. If the commit itself then fails, that ticket is marked <code>wont-do</code>. A repo missing from the ticket database, or no database at all, fails that project without committing. The MindAttic.Tickets repo is committed last, with its database dump refreshed, so it carries every ticket the run created; when it isn't part of the run, only its <code>data/Tickets.db</code> and <code>data/Tickets.sql</code> are committed and pushed as "Sync the ticket database (CODE-Tn)", citing a ticket the run created (every workspace repo's commit-msg hook refuses a subject without one). A database-only change the run didn't make gets a ticket of its own like any other commit. The Commit and sync menu runs the same engine.</p>
 <h3 id="backup">backup</h3>
 <pre><code class="language-powershell">MindAttic.Launcher.exe backup
 MindAttic.Launcher.exe backup --keep 30</code></pre>
@@ -290,9 +290,9 @@ MindAttic.Launcher.exe bootstrap --workspace-root D:\Projects\MindAttic --skip-o
 <td>Opens <code>CommitMenu</code>: commit and push one project or all, prompting for an optional message (blank means auto-generated).</td>
 </tr>
 <tr>
-<td>Workflow</td>
-<td><code>workflow</code></td>
-<td>Opens <code>WorkflowMenu</code>, the Launcher's view of <a href="https://github.com/mindattic/MindAttic.Workflow">MindAttic.Workflow</a>: open tickets across every repo, each repo's uncommitted, unpushed and local-only work with its GitHub state, and the ticket-log checks. Read-only; deleting folders stays in the <code>workflow repos prune</code> CLI.</td>
+<td>Tickets</td>
+<td><code>tickets</code></td>
+<td>Opens <code>TicketsMenu</code>, the Launcher's view of <a href="https://github.com/mindattic/MindAttic.Tickets">MindAttic.Tickets</a>: open tickets across every repo, each repo's uncommitted, unpushed and local-only work with its GitHub state, and the ticket-log checks. Read-only; deleting folders stays in the <code>tickets repos prune</code> CLI.</td>
 </tr>
 <tr>
 <td>Open Project Tab</td>
@@ -602,7 +602,7 @@ NuGet.config, global.json            package source + SDK roll-forward</code></p
 <hr>
 <p>Part of <a href="https://mindattic.com">MindAttic</a> — see more projects at <a href="https://github.com/mindattic">github.com/mindattic</a>. Related: <a href="https://github.com/mindattic/MindAttic.Vault">MindAttic.Vault</a> (settings and credential store) and <a href="https://github.com/mindattic/MindAttic.Deploy">MindAttic.Deploy</a> (deploy engine).</p>
 
-    <p class="codex-footer">Generated 2026-10-18 by the shared MindAttic Codex engine (<code>codex-standard/build-readme.ps1</code>) from <code>README.md</code>. Edit the Markdown source, not this file.</p>
+    <p class="codex-footer">Generated 2026-10-20 by the shared MindAttic Codex engine (<code>codex-standard/build-readme.ps1</code>) from <code>README.md</code>. Edit the Markdown source, not this file.</p>
   </main>
 </div>
 <script>(function(){

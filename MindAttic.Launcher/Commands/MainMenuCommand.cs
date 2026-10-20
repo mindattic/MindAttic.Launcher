@@ -56,7 +56,7 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
         var backup   = new BackupMenu(new BackupService(), store, new SqlBackupService(), new SqliteBackupService(), new AppDataBackupService(), tagged);
         var scheduledBackup = new ScheduledBackupMenu();
         var settingsMenu = new SettingsMenu(providers, store);
-        var workflow = new WorkflowMenu(Directory.Exists(ExePath.WorkspaceRoot) ? ExePath.WorkspaceRoot : MindAtticRoot());
+        var tickets = new TicketsMenu(Directory.Exists(ExePath.WorkspaceRoot) ? ExePath.WorkspaceRoot : MindAtticRoot());
 
         // Checked once at launch: running git every menu redraw would be wasteful,
         // and the build can't change underneath a running process anyway.
@@ -77,7 +77,7 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
             // First row = the highlighted default on launch (resumeIndex starts at 0).
             new() { Name = "Open Project Tab",              Description = "select a project, then pick which agent CLI to open it with", Tag = "open" },
             new() { Name = "Commit and sync",               Description = "commit and push changes per project or across all", Tag = "commit" },
-            new() { Name = "Workflow",                      Description = "open tickets, repo status and ticket-log checks across the workspace", Tag = "workflow" },
+            new() { Name = "Tickets",                       Description = "open tickets, repo status and ticket-log checks across the workspace", Tag = "tickets" },
             new() { Name = "Backup",                        Description = "back up MindAttic to R:\\Backup\\MindAttic", Tag = "backup" },
             new() { Name = "Scheduled Backup",              Description = "status and toggle for the nightly backup task", Tag = "schedule" },
             new() { Name = "Orchestrator",                  Description = "the dashboard: every session, the token budget and pace, the ticket queue", Tag = "orchestrator" },
@@ -114,7 +114,7 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
             switch (result.Selected.Tag)
             {
                 case "commit":   commit.Run(); break;
-                case "workflow": workflow.Run(); break;
+                case "tickets": tickets.Run(); break;
                 case "open":     open.Run(); break;
                 case "backup":   backup.Run(); break;
                 case "schedule": scheduledBackup.Run(); break;

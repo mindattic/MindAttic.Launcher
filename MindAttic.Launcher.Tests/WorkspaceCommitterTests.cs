@@ -1,9 +1,9 @@
 using System.Diagnostics;
 using MindAttic.Launcher.Models;
 using MindAttic.Launcher.Services;
-using MindAttic.Workflow;
-using MindAttic.Workflow.Data;
-using MindAttic.Workflow.Tickets;
+using MindAttic.Tickets;
+using MindAttic.Tickets.Data;
+using MindAttic.Tickets.Log;
 using NUnit.Framework;
 
 namespace MindAttic.Launcher.Tests;
@@ -19,7 +19,7 @@ public sealed class WorkspaceCommitterTests
     {
         root = Path.Combine(Path.GetTempPath(), "mco-commit-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
-        dbPath = Path.Combine(root, WorkspaceCommitter.WorkflowRepoName, "data", "workflow.db");
+        dbPath = Path.Combine(root, WorkspaceCommitter.TicketsRepoName, "data", "Tickets.db");
     }
 
     [TearDown]
@@ -66,7 +66,7 @@ public sealed class WorkspaceCommitterTests
     public void Commit_without_a_ticket_creates_a_closed_one_and_commits_its_view_with_the_change()
     {
         var alpha = NewRepo("Alpha");
-        NewRepo(WorkspaceCommitter.WorkflowRepoName);
+        NewRepo(WorkspaceCommitter.TicketsRepoName);
         Register(alpha, "ALP");
         File.WriteAllText(Path.Combine(alpha, "a.cs"), "class A {}");
 
@@ -80,7 +80,7 @@ public sealed class WorkspaceCommitterTests
         Assert.That(Git(alpha, "status", "--porcelain"), Is.Empty, "the rewritten USER_STORIES.md view went into the same commit");
         Assert.That(File.ReadAllText(Path.Combine(alpha, "docs", "USER_STORIES.md")), Does.Contain("ALP-T1"));
 
-        using (var db = WorkflowDb.Open(dbPath))
+        using (var db = TicketsDb.Open(dbPath))
         {
             var t = db.Ticket("ALP-T1")!.Value.Ticket;
             Assert.That(t.Status, Is.EqualTo(TicketRules.Closed));
@@ -88,18 +88,18 @@ public sealed class WorkspaceCommitterTests
             Assert.That(t.Summary, Is.EqualTo("Add the A class"));
         }
 
-        var sync = results.Single(r => r.Project == WorkspaceCommitter.WorkflowRepoName);
+        var sync = results.Single(r => r.Project == WorkspaceCommitter.TicketsRepoName);
         Assert.That(sync.CommitMessage, Is.EqualTo(WorkspaceCommitter.SyncMessageFor("ALP-T1")), "the database itself is committed after a single-repo run, citing the ticket it carries");
-        Assert.That(Git(Path.Combine(root, WorkspaceCommitter.WorkflowRepoName), "log", "-1", "--format=%s"), Is.EqualTo("Sync the workflow database (ALP-T1)"));
+        Assert.That(Git(Path.Combine(root, WorkspaceCommitter.TicketsRepoName), "log", "-1", "--format=%s"), Is.EqualTo("Sync the ticket database (ALP-T1)"));
     }
 
     [Test]
     public void Commit_naming_an_existing_ticket_of_the_repo_creates_none()
     {
         var alpha = NewRepo("Alpha");
-        NewRepo(WorkspaceCommitter.WorkflowRepoName);
+        NewRepo(WorkspaceCommitter.TicketsRepoName);
         Register(alpha, "ALP");
-        using (var db = WorkflowDb.Open(dbPath)) db.Add("Alpha", "feature", TicketRules.Open, "Build A", "");
+        using (var db = TicketsDb.Open(dbPath)) db.Add("Alpha", "feature", TicketRules.Open, "Build A", "");
         Git(alpha, "add", "-A"); Git(alpha, "commit", "-q", "-m", "seed");
         File.WriteAllText(Path.Combine(alpha, "a.cs"), "class A {}");
 
@@ -108,7 +108,7 @@ public sealed class WorkspaceCommitterTests
         Assert.That(results, Has.Count.EqualTo(1), "nothing new in the database, so no sync commit");
         Assert.That(results[0].TicketCreated, Is.False);
         Assert.That(results[0].TicketId, Is.EqualTo("ALP-T1"));
-        using var check = WorkflowDb.Open(dbPath);
+        using var check = TicketsDb.Open(dbPath);
         Assert.That(check.Tickets("Alpha"), Has.Count.EqualTo(1));
     }
 
@@ -117,56 +117,56 @@ public sealed class WorkspaceCommitterTests
     {
         var alpha = NewRepo("Alpha");
         var beta = NewRepo("Beta");
-        NewRepo(WorkspaceCommitter.WorkflowRepoName);
+        NewRepo(WorkspaceCommitter.TicketsRepoName);
         Register(alpha, "ALP");
         File.WriteAllText(Path.Combine(beta, "b.cs"), "class B {}");
 
         var r = Committer().Run([Project("Beta", beta)], "Add B").Single();
 
         Assert.That(r.Ok, Is.False);
-        Assert.That(r.Detail, Does.Contain("isn't in the workflow database"));
+        Assert.That(r.Detail, Does.Contain("isn't in the ticket database"));
         Assert.That(Git(beta, "status", "--porcelain"), Is.Not.Empty);
     }
 
     [Test]
-    public void The_workflow_repo_is_committed_last_so_it_carries_the_run_s_new_tickets()
+    public void The_tickets_repo_is_committed_last_so_it_carries_the_run_s_new_tickets()
     {
         var alpha = NewRepo("Alpha");
-        var wf = NewRepo(WorkspaceCommitter.WorkflowRepoName);
+        var wf = NewRepo(WorkspaceCommitter.TicketsRepoName);
         Register(alpha, "ALP");
         File.WriteAllText(Path.Combine(alpha, "a.cs"), "class A {}");
 
-        var results = Committer().Run([Project(WorkspaceCommitter.WorkflowRepoName, wf), Project("Alpha", alpha)], null);
+        var results = Committer().Run([Project(WorkspaceCommitter.TicketsRepoName, wf), Project("Alpha", alpha)], null);
 
-        Assert.That(results.Select(r => r.Project), Is.EqualTo(new[] { "Alpha", WorkspaceCommitter.WorkflowRepoName }));
+        Assert.That(results.Select(r => r.Project), Is.EqualTo(new[] { "Alpha", WorkspaceCommitter.TicketsRepoName }));
         Assert.That(results[1].CommitMessage, Is.EqualTo(WorkspaceCommitter.SyncMessageFor("ALP-T1")), "only database files changed there, so it cites the run's ticket instead of making its own");
         Assert.That(Git(wf, "status", "--porcelain"), Is.Empty);
-        Assert.That(File.ReadAllText(Path.Combine(wf, "data", "workflow.sql")), Does.Contain("ALP-T1"));
+        Assert.That(File.ReadAllText(Path.Combine(wf, "data", "Tickets.sql")), Does.Contain("ALP-T1"));
     }
 
     [Test]
-    public void A_database_change_made_outside_the_run_gets_a_workflow_ticket_of_its_own()
+    public void A_database_change_made_outside_the_run_gets_a_ticket_of_its_own()
     {
         var alpha = NewRepo("Alpha");
-        var wf = NewRepo(WorkspaceCommitter.WorkflowRepoName);
+        var wf = NewRepo(WorkspaceCommitter.TicketsRepoName);
         Register(alpha, "ALP");
-        Register(wf, "FLOW");
-        using (var db = WorkflowDb.Open(dbPath)) db.Add("Alpha", "fix", TicketRules.Open, "Filed from elsewhere", "");
+        Register(wf, "TIX");
+        using (var db = TicketsDb.Open(dbPath)) db.Add("Alpha", "fix", TicketRules.Open, "Filed from elsewhere", "");
 
-        var r = Committer().Run([Project(WorkspaceCommitter.WorkflowRepoName, wf)], null).Single();
+        var r = Committer().Run([Project(WorkspaceCommitter.TicketsRepoName, wf)], null).Single();
 
         Assert.That(r.TicketCreated, Is.True);
-        Assert.That(r.TicketId, Is.EqualTo("FLOW-T1"));
-        Assert.That(Git(wf, "log", "-1", "--format=%s"), Does.EndWith("(FLOW-T1)"), "the commit-msg hook refuses a subject without a ticket");
+        Assert.That(r.TicketId, Is.EqualTo("TIX-T1"));
+        Assert.That(Git(wf, "log", "-1", "--format=%s"), Does.EndWith("(TIX-T1)"), "the commit-msg hook refuses a subject without a ticket");
         Assert.That(Git(wf, "status", "--porcelain"), Is.Empty);
-        Assert.That(File.ReadAllText(Path.Combine(wf, "data", "workflow.sql")), Does.Contain("FLOW-T1"), "the dump was rewritten after the repo's own ticket");
+        Assert.That(File.ReadAllText(Path.Combine(wf, "data", "Tickets.sql")), Does.Contain("TIX-T1"), "the dump was rewritten after the repo's own ticket");
     }
 
     [Test]
     public void Prose_local_agent_state_is_never_committed_and_alone_reads_as_clean()
     {
         var alpha = NewRepo("Alpha");
-        NewRepo(WorkspaceCommitter.WorkflowRepoName);
+        NewRepo(WorkspaceCommitter.TicketsRepoName);
         Register(alpha, "ALP");
         var prose = Path.Combine(alpha, ".prose");
         Directory.CreateDirectory(Path.Combine(prose, "commands"));
@@ -188,7 +188,7 @@ public sealed class WorkspaceCommitterTests
     public void A_repo_that_already_gitignores_prose_state_still_commits()
     {
         var alpha = NewRepo("Alpha");
-        NewRepo(WorkspaceCommitter.WorkflowRepoName);
+        NewRepo(WorkspaceCommitter.TicketsRepoName);
         Register(alpha, "ALP");
         File.WriteAllText(Path.Combine(alpha, ".gitignore"), ".prose/agent-session.json\n.prose/archive/\n");
         Git(alpha, "add", "-A"); Git(alpha, "commit", "-q", "-m", "seed");
@@ -233,7 +233,7 @@ public sealed class WorkspaceCommitterTests
         Assert.That(Directory.Exists(Path.Combine(alpha, ".git", "rebase-merge")) || Directory.Exists(Path.Combine(alpha, ".git", "rebase-apply")), Is.False, "no rebase left half-done");
         Assert.That(Git(alpha, "log", "-1", "--format=%s"), Is.EqualTo("Fix the shared line (ALP-T1)"));
         Assert.That(File.ReadAllText(Path.Combine(alpha, "shared.txt")), Is.EqualTo("our line"));
-        using var db = WorkflowDb.Open(dbPath);
+        using var db = TicketsDb.Open(dbPath);
         Assert.That(db.Ticket("ALP-T1")!.Value.Ticket.Status, Is.EqualTo(TicketRules.Closed), "the commit landed locally, so the ticket stays closed");
     }
 
@@ -289,7 +289,7 @@ public sealed class WorkspaceCommitterTests
     private (string Alpha, string Other) WithRemote(string seedFile)
     {
         var alpha = NewRepo("Alpha");
-        NewRepo(WorkspaceCommitter.WorkflowRepoName);
+        NewRepo(WorkspaceCommitter.TicketsRepoName);
         Register(alpha, "ALP");
         var remote = Path.Combine(root, "remote.git");
         Git(root, "init", "--bare", "-q", "-b", "main", remote);
@@ -314,13 +314,13 @@ public sealed class WorkspaceCommitterTests
 
     private void Register(string repoPath, string code)
     {
-        using (var db = WorkflowDb.Open(dbPath))
+        using (var db = TicketsDb.Open(dbPath))
         {
             db.AddRepo(new Repo(Path.GetFileName(repoPath), repoPath), code);
-            File.WriteAllText(Path.Combine(Path.GetDirectoryName(dbPath)!, "workflow.sql"), db.Dump());
+            File.WriteAllText(Path.Combine(Path.GetDirectoryName(dbPath)!, "Tickets.sql"), db.Dump());
         }
         // Like the real repo, the database files are tracked before any run touches them.
-        var wf = Path.Combine(root, WorkspaceCommitter.WorkflowRepoName);
+        var wf = Path.Combine(root, WorkspaceCommitter.TicketsRepoName);
         Git(wf, "add", "-A");
         Git(wf, "commit", "-q", "-m", "seed");
     }

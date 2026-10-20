@@ -1,9 +1,9 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using MindAttic.Launcher.Models;
-using MindAttic.Workflow;
-using MindAttic.Workflow.Data;
-using MindAttic.Workflow.Tickets;
+using MindAttic.Tickets;
+using MindAttic.Tickets.Data;
+using MindAttic.Tickets.Log;
 
 namespace MindAttic.Launcher.Services;
 
@@ -13,40 +13,40 @@ public sealed record ProjectCommitResult(
 
 /// <summary>
 /// The one commit engine behind the Commit menu and <c>mindattic commit</c> (HOUSE-LAW-6). Every commit is
-/// aligned to a MindAttic.Workflow ticket: a message naming one of the repo's tickets is kept as-is, otherwise a
+/// aligned to a MindAttic.Tickets ticket: a message naming one of the repo's tickets is kept as-is, otherwise a
 /// closed ticket is created from the message and its ID appended, and the repo's generated USER_STORIES.md view
-/// is rewritten before staging so the new row lands in the same commit. The MindAttic.Workflow repo, which
+/// is rewritten before staging so the new row lands in the same commit. The MindAttic.Tickets repo, which
 /// holds the database, is committed last so it carries every ticket the run created.
 /// </summary>
 public sealed partial class WorkspaceCommitter(GitService git, string workspaceRoot, string? dbPath = null)
 {
-    public const string WorkflowRepoName = "MindAttic.Workflow";
-    public const string SyncMessage = "Sync the workflow database";
+    public const string TicketsRepoName = "MindAttic.Tickets";
+    public const string SyncMessage = "Sync the ticket database";
 
     private static readonly HashSet<string> DocExtensions = new(StringComparer.OrdinalIgnoreCase) { ".md", ".htm", ".html", ".txt" };
 
-    private readonly string dbPath = dbPath ?? WorkflowDb.DefaultPath(workspaceRoot);
+    private readonly string dbPath = dbPath ?? TicketsDb.DefaultPath(workspaceRoot);
 
-    private string WorkflowRepoPath => Path.Combine(workspaceRoot, WorkflowRepoName);
+    private string TicketsRepoPath => Path.Combine(workspaceRoot, TicketsDb.HomeFolder(workspaceRoot));
 
     public IReadOnlyList<ProjectCommitResult> Run(IEnumerable<Project> projects, string? userMessage, Action<ProjectCommitResult>? report = null)
     {
         var results = new List<ProjectCommitResult>();
         void Add(ProjectCommitResult r) { results.Add(r); report?.Invoke(r); }
 
-        var ordered = projects.OrderBy(p => IsWorkflowRepo(p.Path) ? 1 : 0).ToList();
+        var ordered = projects.OrderBy(p => IsTicketsRepo(p.Path) ? 1 : 0).ToList();
         string? lastCreated = null;
-        var workflowCommitted = false;
+        var ticketsCommitted = false;
         foreach (var p in ordered)
         {
             var r = CommitProject(p, userMessage, lastCreated);
             if (r.TicketCreated) lastCreated = r.TicketId;
-            workflowCommitted |= IsWorkflowRepo(p.Path);
+            ticketsCommitted |= IsTicketsRepo(p.Path);
             Add(r);
         }
 
         // A single-repo commit still created a ticket in the shared database; push it so other machines see it.
-        if (lastCreated is not null && !workflowCommitted) Add(SyncWorkflowDb(lastCreated));
+        if (lastCreated is not null && !ticketsCommitted) Add(SyncTicketsDb(lastCreated));
         return results;
     }
 
@@ -57,8 +57,8 @@ public sealed partial class WorkspaceCommitter(GitService git, string workspaceR
     {
         if (!Directory.Exists(p.Path)) return new(p.Name, false, "path not found");
 
-        var isWorkflow = IsWorkflowRepo(p.Path);
-        if (isWorkflow) WriteDump();
+        var isTickets = IsTicketsRepo(p.Path);
+        if (isTickets) WriteDump();
 
         var status = git.Status(p.Path);
         if (!status.IsValid) return new(p.Name, false, status.Error ?? "");
@@ -71,7 +71,7 @@ public sealed partial class WorkspaceCommitter(GitService git, string workspaceR
             return new(p.Name, pushed, pushed && pushDetail != GitService.ArchivedNotice ? $"pushed {unpushed} earlier commit(s)" : pushDetail);
         }
 
-        if (isWorkflow && carriedTicket is not null && status.Changes.All(c => IsDatabaseFile(c.FileName)))
+        if (isTickets && carriedTicket is not null && status.Changes.All(c => IsDatabaseFile(c.FileName)))
         {
             var (synced, syncDetail, syncMessage) = git.Commit(p.Path, SyncMessageFor(carriedTicket));
             return new(p.Name, synced, syncDetail, syncMessage, carriedTicket);
@@ -83,9 +83,9 @@ public sealed partial class WorkspaceCommitter(GitService git, string workspaceR
 
         using var db = OpenDb();
         if (db is null)
-            return new(p.Name, false, $"no workflow database at {dbPath}; can't align the commit to a ticket", message);
+            return new(p.Name, false, $"no ticket database at {dbPath}; can't align the commit to a ticket", message);
         if (!db.Repos().Any(r => r.Name.Equals(repoName, StringComparison.OrdinalIgnoreCase)))
-            return new(p.Name, false, $"{repoName} isn't in the workflow database; run 'workflow repos rollout tickets --apply'", message);
+            return new(p.Name, false, $"{repoName} isn't in the ticket database; run 'tickets repos rollout tickets --apply'", message);
 
         var existing = TicketIds(message).FirstOrDefault(id => db.Ticket(id) is { } t && t.Repo.Equals(repoName, StringComparison.OrdinalIgnoreCase));
         if (existing is not null)
@@ -96,7 +96,7 @@ public sealed partial class WorkspaceCommitter(GitService git, string workspaceR
 
         var ticket = db.Add(repoName, InferType(message, auto, status.Changes), TicketRules.Closed, Summary(message), "");
         db.Render(new Workspace(workspaceRoot), [repoName]);
-        if (isWorkflow) WriteDump(); // the dump must carry this repo's own new ticket
+        if (isTickets) WriteDump(); // the dump must carry this repo's own new ticket
         message = WithTicket(message, ticket.Id);
 
         var (done, result, commitMessage) = git.Commit(p.Path, message);
@@ -110,44 +110,44 @@ public sealed partial class WorkspaceCommitter(GitService git, string workspaceR
         return new(p.Name, done, result, commitMessage, ticket.Id, TicketCreated: true);
     }
 
-    private ProjectCommitResult SyncWorkflowDb(string ticketId)
+    private ProjectCommitResult SyncTicketsDb(string ticketId)
     {
-        if (!Directory.Exists(WorkflowRepoPath)) return new(WorkflowRepoName, false, "repo not found; run 'workflow db sync' to push the new tickets");
+        if (!Directory.Exists(TicketsRepoPath)) return new(TicketsRepoName, false, "repo not found; run 'tickets db sync' to push the new tickets");
         WriteDump();
         var message = SyncMessageFor(ticketId);
-        var (ok, detail) = git.CommitPaths(WorkflowRepoPath, message,
-            [WorkflowDb.RelativePath, WorkflowDb.DumpRelativePath]);
+        var (ok, detail) = git.CommitPaths(TicketsRepoPath, message,
+            [TicketsDb.RelativePath, TicketsDb.DumpRelativePath]);
         var landed = ok || detail.StartsWith(GitService.PushFailedPrefix, StringComparison.Ordinal);
-        return new(WorkflowRepoName, ok, detail, landed ? message : "", ticketId);
+        return new(TicketsRepoName, ok, detail, landed ? message : "", ticketId);
     }
 
-    /// <summary>The readable dump committed beside the database, the same file <c>workflow db sync</c> writes.</summary>
+    /// <summary>The readable dump committed beside the database, the same file <c>tickets db sync</c> writes.</summary>
     private void WriteDump()
     {
-        if (!Directory.Exists(WorkflowRepoPath)) return;
+        if (!Directory.Exists(TicketsRepoPath)) return;
         using var db = OpenDb();
         if (db is null) return;
-        var path = Path.Combine(WorkflowRepoPath, WorkflowDb.DumpRelativePath.Replace('/', Path.DirectorySeparatorChar));
+        var path = Path.Combine(TicketsRepoPath, TicketsDb.DumpRelativePath.Replace('/', Path.DirectorySeparatorChar));
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, db.Dump(), new UTF8Encoding(false));
     }
 
-    /// <summary>The database once it holds any repo; null before migration (same rule as <see cref="WorkflowDb.OpenIfMigrated"/>).</summary>
-    private WorkflowDb? OpenDb()
+    /// <summary>The database once it holds any repo; null before migration (same rule as <see cref="TicketsDb.OpenIfMigrated"/>).</summary>
+    private TicketsDb? OpenDb()
     {
         if (!File.Exists(dbPath)) return null;
-        var db = WorkflowDb.Open(dbPath);
+        var db = TicketsDb.Open(dbPath);
         if (db.Repos().Count > 0) return db;
         db.Dispose();
         return null;
     }
 
-    private bool IsWorkflowRepo(string path) =>
-        string.Equals(Path.GetFullPath(path).TrimEnd('\\', '/'), Path.GetFullPath(WorkflowRepoPath).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
+    private bool IsTicketsRepo(string path) =>
+        string.Equals(Path.GetFullPath(path).TrimEnd('\\', '/'), Path.GetFullPath(TicketsRepoPath).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
 
     private static bool IsDatabaseFile(string fileName) =>
-        fileName.Equals(Path.GetFileName(WorkflowDb.RelativePath), StringComparison.OrdinalIgnoreCase)
-        || fileName.Equals(Path.GetFileName(WorkflowDb.DumpRelativePath), StringComparison.OrdinalIgnoreCase);
+        fileName.Equals(Path.GetFileName(TicketsDb.RelativePath), StringComparison.OrdinalIgnoreCase)
+        || fileName.Equals(Path.GetFileName(TicketsDb.DumpRelativePath), StringComparison.OrdinalIgnoreCase);
 
     private static string RepoName(string path) => Path.GetFileName(Path.GetFullPath(path).TrimEnd('\\', '/'));
 
