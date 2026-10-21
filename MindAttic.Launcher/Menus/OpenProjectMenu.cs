@@ -9,27 +9,32 @@ public sealed class OpenProjectMenu(SettingsStore store, AgentProviderRegistry p
 {
     private const string GeneralPromptTag = "general";
 
+    /// <summary>Tags a row that descends into a sub-level rather than opening a project.</summary>
+    private sealed record GroupTag(string Segment);
+
     public void Run()
     {
+        // Dot-named projects (MindAttic.*, GTFO.*) collapse into a group row;
+        // picking one pushes its segment onto the path and redraws one level
+        // deeper. Esc pops the path before it falls back to exiting the menu.
+        var path = new List<string>();
+        var indexStack = new Stack<int>();
         var resumeIndex = 0;
+
         while (true)
         {
             var settings = store.Load();
             var sortedProjects = ProjectRoster.Sorted(settings, tagged);
+            var entries = ProjectTree.Level(sortedProjects, path);
 
-            var items = new List<MenuItem>
+            var items = new List<MenuItem>();
+            if (path.Count == 0)
             {
-                new() { Name = "General Prompt", Description = "open a CLI at the MindAttic workspace root (every project in context)", Tag = GeneralPromptTag },
-            };
-            items.AddRange(sortedProjects.Select((p, i) => new MenuItem
-            {
-                Name = p.Name,
-                Description = p.Description ?? "",
-                Tag = p,
-                SpacerBefore = i == 0
-            }));
+                items.Add(new MenuItem { Name = "General Prompt", Description = "open a CLI at the MindAttic workspace root (every project in context)", Tag = GeneralPromptTag });
+            }
+            items.AddRange(entries.Select((e, i) => ToMenuItem(e, spacerBefore: path.Count == 0 && i == 0)));
 
-            Screen.Header("Open Project Tab");
+            Screen.Header(new[] { "Open Project Tab" }.Concat(path).ToArray());
 
             var result = Menu.PromptWithKeys(
                 "Choose a project to open:",
@@ -37,15 +42,29 @@ public sealed class OpenProjectMenu(SettingsStore store, AgentProviderRegistry p
                 customKeys: null,
                 initialIndex: resumeIndex);
 
-            resumeIndex = result.Index;
+            if (result.Back)
+            {
+                if (path.Count == 0) return;
+                path.RemoveAt(path.Count - 1);
+                resumeIndex = indexStack.Count > 0 ? indexStack.Pop() : 0;
+                continue;
+            }
 
-            if (result.Back) return;
+            resumeIndex = result.Index;
 
             if (result.Selected is { } sel)
             {
                 if (sel.Tag is string tag && tag == GeneralPromptTag)
                 {
                     OpenGeneralPrompt();
+                    continue;
+                }
+
+                if (sel.Tag is GroupTag group)
+                {
+                    indexStack.Push(result.Index);
+                    path.Add(group.Segment);
+                    resumeIndex = 0;
                     continue;
                 }
 
@@ -60,6 +79,26 @@ public sealed class OpenProjectMenu(SettingsStore store, AgentProviderRegistry p
             }
         }
     }
+
+    /// <summary>A trailing disclosure marker (▸) is the only thing that tells a group row apart from a project row.</summary>
+    private static MenuItem ToMenuItem(ProjectTree.Entry entry, bool spacerBefore) => entry switch
+    {
+        ProjectTree.GroupEntry g => new MenuItem
+        {
+            Name = $"{g.Name} ▸",
+            Description = $"{g.Count} project{(g.Count == 1 ? "" : "s")}",
+            Tag = new GroupTag(g.Name),
+            SpacerBefore = spacerBefore
+        },
+        ProjectTree.ProjectEntry p => new MenuItem
+        {
+            Name = p.Name,
+            Description = p.Project.Description ?? "",
+            Tag = p.Project,
+            SpacerBefore = spacerBefore
+        },
+        _ => throw new InvalidOperationException($"Unknown entry type: {entry.GetType()}")
+    };
 
     /// <summary>
     /// Opens a host tab rooted at the MindAttic workspace root (not any single
