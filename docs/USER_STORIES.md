@@ -6,7 +6,7 @@ layer: stories
 status: living
 updated: 2026-10-14
 ---
-<!-- GENERATED from MindAttic.Workflow/data/workflow.db by `workflow db render`. Do not edit: this file is rewritten from the database; change stories and tickets with the workflow CLI. -->
+<!-- GENERATED from MindAttic.Tickets/data/Tickets.db by `tickets db render`. Do not edit: this file is rewritten from the database; change stories and tickets with the tickets CLI. -->
 
 # MindAttic.Launcher — User Stories
 > ✅ done (shipped & tested) · 🟡 partial · ⬜ planned. Every ✅ cites the test.
@@ -252,3 +252,8 @@ Dependency-ordered toward the headline goal (a frictionless single-binary worksp
 | M.LNCH-T39 | 2026-10-18 | fix | closed | bootstrap installs the Claude Code, Codex and Antigravity CLIs but not the Kimi Code CLI (kimi) that the default Kimi provider runs, so a Kimi tab fails on a freshly bootstrapped machine; needs a confirmed unattended install source (uv tool / pip / winget) before adding it to PrerequisiteService.AiClis | ff1504c |
 | M.LNCH-T40 | 2026-10-18 | feature | closed | Onboarding: setup.ps1 and a new adopt-repos command tag every GitHub repo the token can see as wip so the roster is full on first launch | — |
 | M.LNCH-T41 | 2026-10-18 | feature | closed | A new Prompt.TextOrCancel UI helper lets Esc cancel the commit-message prompt in CommitMenu instead of being silently ignored | — |
+| M.LNCH-T42 | 2026-10-18 | chore | open | Stop registering MindAtticLauncherNightlyBackup (Services/ScheduledTaskService, Menus/ScheduledBackupMenu, tools/register-nightly-backup-task.ps1); the backup menu points at the WatchDog job (job now in MindAttic.WatchDog M.WD-T6) | scheduled-task consolidation 2026-10-18 |
+| M.LNCH-T43 | 2026-10-19 | chore | open | Convert tracked source files to LF line endings via .gitattributes, per HOUSE-LAW-13 (low priority) | — |
+| M.LNCH-T44 | 2026-10-20 | feature | open | Read the orchestrator's pace status from its database: MindAttic.Orchestrator now keeps it as the rl-status row of data/orchestrator.db's state table (M.ORCH-T526), found as OrchestratorDb.StatePath finds it (MINDATTIC_ORCHESTRATOR_DB, else <workspace>\MindAttic.Orchestrator\data\orchestrator.db, else %APPDATA%\MindAttic\MindAttic.Orchestrator\orchestrator.db); ClaudeStatusService should read that row (read-only, short busy timeout, newer timestamp of row and file wins) and fall back to ~/.claude/rl-status.json, which the orchestrator keeps exporting until every outside reader has switched | — |
+| M.LNCH-T45 | 2026-10-20 | docs | open | Publish MindAttic.Launcher docs to GitHub Pages via the shared Toolkit DocFX pipeline: run adopt-docs-site.ps1 (README.md as home page, docs/*.md as articles, API reference only where the code builds in CI), enable Pages with build_type=workflow, set the repo homepage URL, retire tools/build-readme.ps1 and README.htm, confirm the docs Actions run is green and https://mindattic.github.io/MindAttic.Launcher/ returns 200. Depends on MAT-T8. | — |
+| M.LNCH-T46 | 2026-10-20 | chore | open | Follow MindAttic.Workflow's rename to MindAttic.Tickets (M.FLOW-T120): MindAttic.Tickets package and namespaces, the tickets CLI, the Tickets menu, data/Tickets.db, docs and tests | — |
