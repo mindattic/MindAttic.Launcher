@@ -37,13 +37,21 @@ public sealed class SqliteRestoreService
             return new SqliteRestoreResult(project, dbFile, false, -1, sw.Elapsed, dumpFile, $"Dump file not found: {dumpFile}");
         }
 
+        // The existing database is moved aside, not deleted, so a restore that fails (sqlite3 missing,
+        // a bad dump, a cancel) puts the live file back instead of leaving the user with neither.
+        var aside = dbFile + ".pre-restore";
+        var movedAside = false;
         try
         {
-            if (File.Exists(dbFile)) File.Delete(dbFile);
+            var sql = File.ReadAllText(dumpFile);
+            if (File.Exists(dbFile))
+            {
+                File.Move(dbFile, aside, overwrite: true);
+                movedAside = true;
+            }
             var dir = Path.GetDirectoryName(dbFile);
             if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
 
-            var sql = File.ReadAllText(dumpFile);
             var (code, output) = run(dbFile, sql, ct);
             sw.Stop();
 
@@ -53,14 +61,27 @@ public sealed class SqliteRestoreService
                 // A failed restore can leave a partially-applied file behind; remove it so it
                 // doesn't masquerade as a successfully-restored database.
                 try { if (File.Exists(dbFile)) File.Delete(dbFile); } catch { /* best-effort */ }
+                RestoreAside(aside, dbFile, ref movedAside);
+            }
+            else if (movedAside)
+            {
+                try { File.Delete(aside); } catch { /* best-effort */ }
             }
             return new SqliteRestoreResult(project, dbFile, ok, code, sw.Elapsed, dumpFile, ok ? "" : Tail(output, 2000));
         }
         catch (Exception ex)
         {
             sw.Stop();
+            try { if (movedAside && File.Exists(dbFile)) File.Delete(dbFile); } catch { /* best-effort */ }
+            RestoreAside(aside, dbFile, ref movedAside);
             return new SqliteRestoreResult(project, dbFile, false, -1, sw.Elapsed, dumpFile, ex.Message);
         }
+    }
+
+    private static void RestoreAside(string aside, string dbFile, ref bool movedAside)
+    {
+        if (!movedAside) return;
+        try { File.Move(aside, dbFile, overwrite: true); movedAside = false; } catch { /* best-effort */ }
     }
 
     private (int, string) DefaultRun(string dbFile, string sql, CancellationToken ct)

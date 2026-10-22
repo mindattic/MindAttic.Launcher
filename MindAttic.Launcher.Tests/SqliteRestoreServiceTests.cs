@@ -122,4 +122,23 @@ public sealed class SqliteRestoreServiceTests
             Assert.That(result.Output, Does.Contain("sqlite3 missing"));
         });
     }
+
+    [Test]
+    public void RestoreOne_puts_the_existing_database_back_when_the_restore_fails()
+    {
+        var dbFile = Path.Combine(tempFolder, "app.db");
+        var dumpFile = Path.Combine(tempFolder, "app.sql");
+        File.WriteAllText(dbFile, "live data");
+        File.WriteAllText(dumpFile, "CREATE TABLE t(x);");
+        var subject = new SqliteRestoreService("sqlite3", (_, _, _) => throw new InvalidOperationException("sqlite3 missing"));
+
+        var result = subject.RestoreOne("Alpha", dbFile, dumpFile);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Ok, Is.False);
+            Assert.That(File.ReadAllText(dbFile), Is.EqualTo("live data"));
+            Assert.That(File.Exists(dbFile + ".pre-restore"), Is.False);
+        });
+    }
 }
