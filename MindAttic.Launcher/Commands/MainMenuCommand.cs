@@ -223,7 +223,7 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
         // run deploy.ps1 -WaitPid in a fresh tab; it waits for THIS process to exit,
         // force-rebuilds, then runs the fresh exe (and refuses to launch a stale one
         // if the build fails). We return 0 right after, so this tab closes.
-        // A scoped Launcher (M.LNCH-T54) restarts scoped to the same login.
+        // A scoped Launcher (M.LNCH-T54) restarts scoped to the same login, in that person's window (M.LNCH-T55).
         var root = ExePath.RepoRoot;
         var restartScript = root is null ? null : Path.Combine(root, "deploy.ps1");
         var title = scope?.Stamp("MindAttic.Launcher") ?? "MindAttic.Launcher";
@@ -235,6 +235,7 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
             // whatever exe currently exists; there's nothing to rebuild against.
             wt.Open(new WindowsTerminalLauncher.Tab
             {
+                Window = wt.ScopeWindow,
                 Title = title,
                 WorkingDirectory = MindAtticRoot(),
                 Command = [ExePath.Release, .. launchArgs]
@@ -244,6 +245,7 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
 
         wt.Open(new WindowsTerminalLauncher.Tab
         {
+            Window = wt.ScopeWindow,
             Title = title,
             WorkingDirectory = MindAtticRoot(),
             Command =

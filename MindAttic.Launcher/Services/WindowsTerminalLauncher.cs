@@ -8,14 +8,38 @@ namespace MindAttic.Launcher.Services;
 /// scheme handling so menu code never quotes <c>wt</c> args by hand.
 /// <para>With an <see cref="AccountScope"/> (a Launcher run with <c>--account</c>, M.LNCH-T54) every Claude agent tab it
 /// builds passes that login's folder to the host as <c>--config-dir</c> in the tab's own command (a wt tab doesn't inherit
-/// this process's environment) and carries the login's alias in its title.</para>
+/// this process's environment).</para>
+/// <para>Every Claude agent tab whose login is known when it opens goes in that person's own window (M.LNCH-T55, the
+/// Orchestrator's rule, M.ORCH-T616): <c>wt -w &lt;alias&gt;</c>, its title badged with the login's initials
+/// ("[RD] Repo [Claude]") and its tab colored as the login, all read from <c>mindattic-account.json</c> in the login's
+/// folder (<see cref="LoginLook"/>). A scoped Launcher's login is its scope's; an unscoped one's is the global login while
+/// that's the only one signed in. With per-CLI logins around, an unscoped tab asks which login it runs on (M.LNCH-T53)
+/// only after it has opened, so it opens in the current window as before.</para>
 /// </summary>
-public sealed class WindowsTerminalLauncher(AccountScope? scope = null)
+public sealed class WindowsTerminalLauncher(AccountScope? scope = null, Func<LoginLook?>? claudeLook = null)
 {
     public AccountScope? Scope { get; } = scope;
 
+    /// <summary>The window, badge and color of the login a Claude tab opened now runs on; null when that isn't known until
+    /// the tab asks. Tests pass their own rather than read the real ~/.claude.</summary>
+    private readonly Func<LoginLook?> claudeLook = claudeLook ?? (() => DefaultClaudeLook(scope));
+
+    /// <summary>The login a Claude tab of this Launcher runs on, as it opens: the scope's, else the global login when no
+    /// per-CLI login exists (the tab won't ask), else unknown.</summary>
+    public static LoginLook? DefaultClaudeLook(AccountScope? scope, string? accountsRoot = null, string? userProfile = null)
+    {
+        if (scope is not null) return LoginLook.ForConfigDir(scope.ConfigDir);
+        if (ClaudeAccountCatalog.PerCliLogins(accountsRoot).Count > 0) return null;
+        return LoginLook.ForConfigDir(null, userProfile);
+    }
+
+    /// <summary>The window a scoped Launcher's own tabs (its restart) go in: its login's; null (the current one) unscoped.</summary>
+    public string? ScopeWindow => Scope is null ? null : claudeLook()?.Window;
+
     public sealed class Tab
     {
+        /// <summary>The Windows Terminal window the tab opens in (<c>wt -w</c>); null or blank: the current one ("0").</summary>
+        public string? Window { get; init; }
         public string? Title { get; init; }
         public string? WorkingDirectory { get; init; }
         public string? TabColor { get; init; }
@@ -62,9 +86,9 @@ public sealed class WindowsTerminalLauncher(AccountScope? scope = null)
         catch (System.ComponentModel.Win32Exception) { /* user cancelled UAC */ }
     }
 
-    private static IEnumerable<string> BuildArgList(Tab tab)
+    public static IEnumerable<string> BuildArgList(Tab tab)
     {
-        yield return "-w"; yield return "0"; yield return "new-tab";
+        yield return "-w"; yield return string.IsNullOrWhiteSpace(tab.Window) ? "0" : tab.Window; yield return "new-tab";
         if (!string.IsNullOrWhiteSpace(tab.Title))
             { yield return "--title"; yield return tab.Title; }
         if (tab.SuppressApplicationTitle)
@@ -86,7 +110,8 @@ public sealed class WindowsTerminalLauncher(AccountScope? scope = null)
     /// </summary>
     public Tab BuildAgentTab(Project project, AgentProvider provider, string hostExePath, string? prompt = null)
     {
-        var agentTitle = ScopedTitle($"{project.TabTitle} [{provider.Key}]", provider);
+        var look = LookFor(provider);
+        var agentTitle = look?.Badge($"{project.TabTitle} [{provider.Key}]") ?? $"{project.TabTitle} [{provider.Key}]";
         var command = new List<string>
         {
             hostExePath,
@@ -99,9 +124,10 @@ public sealed class WindowsTerminalLauncher(AccountScope? scope = null)
 
         return new Tab
         {
+            Window = look?.Window,
             Title = agentTitle,
             WorkingDirectory = project.Path,
-            TabColor = project.TabColor,
+            TabColor = look?.TabColor ?? project.TabColor,
             ColorScheme = project.ColorScheme,
             // TitlePinner toggles "Paused" into the tab title when the agent
             // isn't running; --suppressApplicationTitle would block those writes.
@@ -121,7 +147,8 @@ public sealed class WindowsTerminalLauncher(AccountScope? scope = null)
         string title, string workingDirectory, AgentProvider provider, string hostExePath,
         string? tabColor = null, string? colorScheme = null, string? prompt = null)
     {
-        title = ScopedTitle(title, provider);
+        var look = LookFor(provider);
+        title = look?.Badge(title) ?? title;
         var command = new List<string>
         {
             hostExePath,
@@ -134,9 +161,10 @@ public sealed class WindowsTerminalLauncher(AccountScope? scope = null)
 
         return new Tab
         {
+            Window = look?.Window,
             Title = title,
             WorkingDirectory = workingDirectory,
-            TabColor = tabColor,
+            TabColor = look?.TabColor ?? tabColor,
             ColorScheme = colorScheme,
             // Match BuildAgentTab: let TitlePinner write "Paused" into the title.
             SuppressApplicationTitle = false,
@@ -147,9 +175,9 @@ public sealed class WindowsTerminalLauncher(AccountScope? scope = null)
     private static bool IsClaude(AgentProvider provider) =>
         string.Equals(provider.Key, "Claude", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary><paramref name="title"/>, stamped with the scope's alias for a Claude tab of a scoped Launcher.</summary>
-    private string ScopedTitle(string title, AgentProvider provider) =>
-        Scope is { } s && IsClaude(provider) ? s.Stamp(title) : title;
+    /// <summary>The look of a Claude tab's login (read afresh, so a rename shows at once); null for other providers, which
+    /// have no login, and while the login isn't known yet.</summary>
+    private LoginLook? LookFor(AgentProvider provider) => IsClaude(provider) ? claudeLook() : null;
 
     /// <summary>Adds the scope's <c>--config-dir</c> (Claude tabs of a scoped Launcher), then the prompt, which must stay
     /// the host's last argument.</summary>

@@ -139,7 +139,7 @@ public sealed class AccountScopeTests
     }
 
     [Test]
-    public void A_scoped_launcher_puts_the_login_folder_in_every_claude_tabs_command_and_the_alias_in_its_title()
+    public void A_scoped_launcher_puts_the_login_folder_in_every_claude_tabs_command_and_its_tabs_in_the_logins_window()
     {
         var scope = new AccountScope("jordan@mindattic.com", @"C:\Users\x\.claude-accounts\jordan@mindattic.com", "Jordan");
         var wt = new WindowsTerminalLauncher(scope);
@@ -156,7 +156,8 @@ public sealed class AccountScopeTests
             var at = args.IndexOf("--config-dir");
             Assert.That(at, Is.GreaterThan(0));
             Assert.That(args[at + 1], Is.EqualTo(scope.ConfigDir));
-            Assert.That(tab.Title, Does.EndWith("— Jordan"));
+            Assert.That(tab.Window, Is.EqualTo("jordan"), "the login's own window (M.LNCH-T55)");
+            Assert.That(tab.Title, Does.StartWith("[JO] "), "the login's initials badge (M.LNCH-T55)");
             Assert.That(args[args.IndexOf("--title") + 1], Is.EqualTo(tab.Title));
             Assert.That(args[^2], Is.EqualTo("--prompt"), "the prompt stays the host's last argument");
         }
@@ -171,7 +172,8 @@ public sealed class AccountScopeTests
         var tab = wt.BuildAgentTab(new Project { Name = "Repo", Path = @"D:\Projects\Repo" }, codex, "mindattic.exe");
 
         Assert.That(tab.Command, Does.Not.Contain("--config-dir"));
-        Assert.That(tab.Title, Does.Not.Contain("Jordan"));
+        Assert.That(tab.Title, Does.Not.Contain("JO"));
+        Assert.That(tab.Window, Is.Null);
     }
 
     [Test]

@@ -7,7 +7,8 @@ namespace MindAttic.Launcher.Services;
 /// A Launcher scoped to one person (M.LNCH-T54): <c>MindAttic.Launcher --account &lt;email&gt;</c> runs the whole Launcher as
 /// that Claude login. Every Claude tab it opens names the login's folder (<see cref="ConfigDir"/>, the per-CLI login under
 /// <c>%USERPROFILE%\.claude-accounts\&lt;email&gt;</c>) in its own command, since Windows Terminal tabs don't inherit the
-/// Launcher's environment, so every CLI it starts bills that person. Its window and tab titles carry <see cref="Alias"/>.
+/// Launcher's environment, so every CLI it starts bills that person. Its own window title carries <see cref="Alias"/>; its
+/// Claude tabs (and its restart) go in that login's own terminal window, badged and colored as it (<see cref="LoginLook"/>, M.LNCH-T55).
 /// </summary>
 public sealed record AccountScope(string Email, string ConfigDir, string Alias)
 {
