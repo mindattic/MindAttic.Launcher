@@ -5,9 +5,9 @@ namespace MindAttic.Launcher.Interop;
 /// <summary>
 /// Injects synthetic keystrokes into the current console's input buffer via
 /// WriteConsoleInputW. Child processes (Claude, Codex) that inherit stdio read
-/// the injected events as if the user had typed them, which is how the
-/// "Remote Control" menu types `/remote-control` into every open agent tab
-/// without having to focus each wt tab.
+/// the injected events as if the user had typed them, which is how text
+/// such as `/remote-control` reaches every open agent tab without having to
+/// focus each wt tab.
 /// </summary>
 public static partial class ConsoleInputInjector
 {
@@ -42,7 +42,7 @@ public static partial class ConsoleInputInjector
         // with a zero-length array.
         if (buffer.Length == 0) return;
         // Surface failures so the pipe server / broadcaster don't report
-        // "Sent /remote-control to N tabs" when the input handle is closed or
+        // a delivery when the input handle is closed or
         // the call failed for some other reason.
         if (!WriteConsoleInputW(handle, buffer, (uint)buffer.Length, out _))
         {

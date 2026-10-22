@@ -5,9 +5,9 @@ namespace MindAttic.Launcher.Services;
 
 /// <summary>
 /// Discovers every running <c>mindattic host</c> tab whose pipe matches the
-/// configured provider prefix and writes a single payload to each. Used by the
-/// "Remote Control" menu to type <c>/remote-control</c> into every open Claude
-/// tab at once so the user can hand off to their phone/iPad.
+/// configured provider prefix and writes a single payload to each. Intended to type
+/// <c>/remote-control</c> into every open Claude tab at once; not yet wired
+/// to a menu item or command.
 /// </summary>
 public sealed class RemoteControlBroadcaster
 {
