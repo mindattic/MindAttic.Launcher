@@ -43,6 +43,10 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
         [CommandOption("--config-dir <DIR>")]
         [Description("Run a Claude tab's CLI under this login folder (CLAUDE_CONFIG_DIR). A Launcher scoped to one account (--account) puts it in every Claude tab's command, since Windows Terminal tabs don't inherit the Launcher's environment.")]
         public string? ConfigDir { get; init; }
+
+        [CommandOption("--account <EMAIL>")]
+        [Description("Run a Claude tab's CLI under this signed-in login (a ~/.claude-accounts/<email> folder). Skips the account question; an email that isn't a signed-in per-CLI login is an error.")]
+        public string? Account { get; init; }
     }
 
     public override int Execute(CommandContext context, Settings settings)
@@ -110,6 +114,48 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
             return 2;
         }
 
+        // Claude tabs also take the Orchestrator's restart-resume requests on a
+        // control pipe of their own (its billing switch, M.LNCH-T38): the CLI is
+        // restarted with --resume at its next idle point, billing the new mode.
+        var isClaude = string.Equals(provider.Key, "Claude", StringComparison.OrdinalIgnoreCase);
+
+        // The login this tab's Claude runs under (CLAUDE_CONFIG_DIR, "" = global). A restart-resume
+        // with a configDir moves it (M.LNCH-T52), and every later start keeps the moved one. Before
+        // that, a Claude tab asks which signed-in login to start on when more than one is around
+        // (M.LNCH-T53): --account names one outright, a single login skips the question, and an
+        // interactive tab offers the full catalog with the Orchestrator's Auto pick preselected.
+        // An explicit --config-dir (a Launcher scoped to one account, M.LNCH-T54) wins over whatever
+        // was inherited, and being non-empty it also skips the question.
+        var claudeConfigDir = ClaudeLogin.Initial(!string.IsNullOrWhiteSpace(settings.ConfigDir)
+            ? settings.ConfigDir
+            : Environment.GetEnvironmentVariable(ClaudeLogin.ConfigDirVariable));
+        var showAccountInTitle = false;
+        if (isClaude)
+        {
+            if (!string.IsNullOrWhiteSpace(settings.Account))
+            {
+                var picked = ClaudeAccountResolver.Resolve(settings.Account, interactive: false);
+                if (picked.Error is not null)
+                {
+                    System.Console.Error.WriteLine(picked.Error);
+                    return 5;
+                }
+                claudeConfigDir = picked.ConfigDir;
+                showAccountInTitle = picked.ShowInTitle;
+            }
+            else if (string.IsNullOrWhiteSpace(claudeConfigDir))
+            {
+                var picked = ClaudeAccountResolver.Resolve(
+                    requestedEmail: null,
+                    interactive: !System.Console.IsInputRedirected,
+                    choose: (options, auto) => ClaudeAccountPrompt.Ask(options, auto));
+                claudeConfigDir = picked.ConfigDir;
+                showAccountInTitle = picked.ShowInTitle;
+            }
+            if (showAccountInTitle)
+                title = $"{title} — {ClaudeLogin.Describe(claudeConfigDir)}";
+        }
+
         PullBeforeLaunch(workingDir, title);
 
         using var pinner = new TitlePinner(title);
@@ -119,21 +165,14 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
         // landing during agent startup isn't missed.
         using var inputPipe = new HostInputPipeServer(provider.Key);
 
-        // Claude tabs also take the Orchestrator's restart-resume requests on a
-        // control pipe of their own (its billing switch, M.LNCH-T38): the CLI is
-        // restarted with --resume at its next idle point, billing the new mode.
-        var isClaude = string.Equals(provider.Key, "Claude", StringComparison.OrdinalIgnoreCase);
         RestartResumeRequest? pending = null;
         var pendingLock = new object();
         using var controlPipe = isClaude
             ? HostControlPipeServer.ForProvider(provider.Key, r => { lock (pendingLock) pending = r; })
             : null;
-        // The login this tab's Claude runs under (CLAUDE_CONFIG_DIR, "" = global). A restart-resume
-        // with a configDir moves it (M.LNCH-T52), and every later start keeps the moved one. An explicit
-        // --config-dir (a Launcher scoped to one account, M.LNCH-T54) wins over whatever was inherited.
-        var claudeConfigDir = ClaudeLogin.Initial(!string.IsNullOrWhiteSpace(settings.ConfigDir)
-            ? settings.ConfigDir
-            : Environment.GetEnvironmentVariable(ClaudeLogin.ConfigDirVariable));
+        // Marks this login as "has a CLI" for any later account picker in another tab
+        // (M.LNCH-T53); best-effort only — never blocks the launch when it can't be claimed.
+        using var loginMarker = isClaude ? new ClaudeLoginMarker(claudeConfigDir) : null;
 
         ProcessStartInfo BuildStartInfo(string? resumeSession)
         {
