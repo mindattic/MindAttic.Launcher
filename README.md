@@ -400,7 +400,6 @@ docs/
 deploy.ps1                           publish to C:\Apps\MindAttic.Launcher\ (+ deploy.bat, repo.path); -Launch, -WaitPid
 tools/
   codex.ps1                          docs doctor/digest tooling
-  build-readme.ps1                   thin wrapper -> workspace-shared README->HTML engine
   register-nightly-backup-task.ps1   installs the \MindAttic\Launcher\ nightly `backup` task
 setup.ps1, setup.bat                 first-time checkout setup: prereqs, workspace root, deploy,
                                      desktop shortcut, then offers to run `bootstrap`
