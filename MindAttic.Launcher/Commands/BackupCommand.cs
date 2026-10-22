@@ -89,7 +89,12 @@ public sealed class BackupCommand : Command<BackupCommand.Settings>
         }
 
         var pruned = 0;
-        if (settings.Keep is { } keep)
+        if (settings.Keep is not null && !ok)
+        {
+            // A failed run must never delete older backups: they may be the only good ones left.
+            AnsiConsole.MarkupLine("[yellow]Backup had failures; skipping prune of older backup folders.[/]");
+        }
+        else if (settings.Keep is { } keep)
         {
             var existing = Directory.Exists(backup.BackupBase)
                 ? Directory.GetDirectories(backup.BackupBase)
