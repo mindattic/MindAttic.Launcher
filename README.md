@@ -195,7 +195,7 @@ Launching the exe with no arguments runs `MainMenuCommand`, which loads settings
 | Tickets | `tickets` | Opens `TicketsMenu`, the Launcher's view of [MindAttic.Tickets](https://github.com/mindattic/MindAttic.Tickets): open tickets across every repo, each repo's uncommitted, unpushed and local-only work with its GitHub state, and the ticket-log checks. Read-only; deleting folders stays in the `tickets repos prune` CLI. |
 | Open Project Tab | `open` | Opens `OpenProjectMenu`: pick a project, then which agent CLI to launch it with, then `ProjectActionMenu`. |
 | Backup | `backup` | Runs `BackupMenu` directly: confirms source, target and database list, then runs the file, AppData, SQL Server and SQLite backup. |
-| Scheduled Backup | `schedule` | Opens `ScheduledBackupMenu`: status (registered/enabled, last run, next run) and Enable/Disable/Run now/Re-register/Remove for the nightly `backup` Scheduled Task. |
+| Scheduled Backup | `schedule` | Opens `ScheduledBackupMenu`: a pointer to the nightly backup job, which now lives in MindAttic.WatchDog (M.WD-T6). Launcher no longer registers a Scheduled Task. |
 | Settings | `settings` | Opens `SettingsMenu`: the model each agent CLI runs with (only). |
 | Open Command Prompt (Admin) | `cmd` | Opens an elevated `cmd` tab at the workspace root via UAC (`wt … -- cmd`, `Verb=runas`). |
 | Open PowerShell (Admin) | `ps` | Same, but `powershell`. |
@@ -304,15 +304,7 @@ This exists because a `robocopy` snapshot of a live `.mdf` or `.db` file is not 
 
 ## Scheduled Backup
 
-The Scheduled Backup menu item (`Services/ScheduledTaskService.cs` + `Menus/ScheduledBackupMenu.cs`) is status/toggle for the nightly backup Windows Scheduled Task, so what's going to fire and when is visible inside Launcher instead of only in Task Scheduler's own UI:
-
-- **Status**: registered?, enabled?, last run time + result, next run time — read via `schtasks /Query /FO CSV /V /NH`.
-- **Enable / Disable**: `schtasks /Change /Enable|/Disable`, keeping the task registered either way.
-- **Run now**: `schtasks /Run`, for testing without waiting for the schedule.
-- **Register / Re-register**: prompts for a daily time and a retention count, then shells to `tools/register-nightly-backup-task.ps1` — the same `S4U`/trigger/principal composition every other MindAttic nightly task uses, kept in one `.ps1` instead of duplicated in C#. The task's action is `MindAttic.Launcher.exe backup --keep <N>` directly; no wrapper script, no separate log file (it already logs through `MindAttic.Log`).
-- **Remove**: `Unregister-ScheduledTask` after a confirm prompt.
-
-The task lives at `\MindAttic\Launcher\MindAtticLauncherNightlyBackup` — every MindAttic scheduled task lives under `\MindAttic\<Project>\`, never the Task Scheduler root, per [`MindAttic.HouseRules.md#HOUSE-LAW-11`](../MindAttic.HouseRules.md#house-law-11--scheduled-tasks-live-under-mindatticproject). This supersedes MindAttic.Bob's `MindAtticBobNightlyBackup` task (archived; see Bob's README).
+The Scheduled Backup menu item (`Menus/ScheduledBackupMenu.cs`) is a pointer screen only. Launcher no longer registers or manages the `MindAtticLauncherNightlyBackup` Scheduled Task; the nightly backup job now lives in MindAttic.WatchDog (M.WD-T6), which owns its schedule, status and run-now. Use the Backup menu for a manual backup.
 
 ## Windows Terminal color schemes
 
@@ -400,7 +392,6 @@ docs/
 deploy.ps1                           publish to C:\Apps\MindAttic.Launcher\ (+ deploy.bat, repo.path); -Launch, -WaitPid
 tools/
   codex.ps1                          docs doctor/digest tooling
-  register-nightly-backup-task.ps1   installs the \MindAttic\Launcher\ nightly `backup` task
 setup.ps1, setup.bat                 first-time checkout setup: prereqs, workspace root, deploy,
                                      desktop shortcut, then offers to run `bootstrap`
 Directory.Build.props                shared MSBuild settings (Nullable, TreatWarningsAsErrors, ...)

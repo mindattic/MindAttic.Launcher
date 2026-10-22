@@ -129,9 +129,6 @@ call stateless/injectable services; the services own all external-process and fi
 - **WorkspaceCloneService** — clones every `wip`-tagged repo not already present under the
   workspace root and pulls (`--ff-only`) every one that is, reusing `TopicRepoSync`/`GitHubTopicRepos` (the same GitHub-topic discovery the
   roster already uses) instead of a hand-maintained repo list.
-- **ScheduledTaskService** — status/enable/disable/run-now for the nightly backup Scheduled Task
-  via `schtasks.exe`; registration itself shells to `tools/register-nightly-backup-task.ps1`.
-  Every task lives under `\MindAttic\Launcher\`, per `MindAttic.HouseRules.md#HOUSE-LAW-11`.
 - **ProviderModel** — read/rewrite the `--model`/`-m` token inside a provider's `RunCommand`.
 - **ProviderCredentials** / **KimiConfigSync** / **LlmCredentials** / **ClaudeAuthStatus** — push each
   provider's Vault-held API key (edited via `Menus/SettingsMenu.cs`, stored in the shared
