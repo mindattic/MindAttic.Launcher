@@ -114,30 +114,37 @@ public sealed class ClaudeStatusService
                 if (!line.Contains("\"type\":\"assistant\"", StringComparison.Ordinal)) continue;
                 if (!line.Contains("\"usage\"", StringComparison.Ordinal)) continue;
 
-                using var doc = JsonDocument.Parse(line);
-                var root = doc.RootElement;
-                if (!root.TryGetProperty("message", out var msg)) continue;
-                if (!msg.TryGetProperty("usage", out var u)) continue;
-
-                if (msg.TryGetProperty("id", out var idProp))
-                {
-                    var id = idProp.GetString() ?? "";
-                    if (!string.IsNullOrEmpty(id) && !seen.Add(id)) continue;
-                }
-
-                var model = msg.TryGetProperty("model", out var mp) ? mp.GetString() ?? "" : "";
-                if (string.IsNullOrEmpty(model)) continue;
-
-                long total =
-                    (u.TryGetProperty("input_tokens",               out var inp)  ? inp.GetInt64()  : 0) +
-                    (u.TryGetProperty("output_tokens",              out var outp) ? outp.GetInt64() : 0) +
-                    (u.TryGetProperty("cache_creation_input_tokens",out var cc)   ? cc.GetInt64()   : 0) +
-                    (u.TryGetProperty("cache_read_input_tokens",    out var cr)   ? cr.GetInt64()   : 0);
-
-                usage[model] = usage.GetValueOrDefault(model) + total;
+                // One malformed or odd-typed line skips only itself, not the rest of the file.
+                try { AddLineUsage(line, seen, usage); }
+                catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException) { }
             }
         }
-        catch { /* skip malformed or locked files */ }
+        catch { /* skip locked or unreadable files */ }
+    }
+
+    private static void AddLineUsage(string line, HashSet<string> seen, Dictionary<string, long> usage)
+    {
+        using var doc = JsonDocument.Parse(line);
+        var root = doc.RootElement;
+        if (!root.TryGetProperty("message", out var msg)) return;
+        if (!msg.TryGetProperty("usage", out var u)) return;
+
+        if (msg.TryGetProperty("id", out var idProp))
+        {
+            var id = idProp.GetString() ?? "";
+            if (!string.IsNullOrEmpty(id) && !seen.Add(id)) return;
+        }
+
+        var model = msg.TryGetProperty("model", out var mp) ? mp.GetString() ?? "" : "";
+        if (string.IsNullOrEmpty(model)) return;
+
+        long total =
+            (u.TryGetProperty("input_tokens",               out var inp)  ? inp.GetInt64()  : 0) +
+            (u.TryGetProperty("output_tokens",              out var outp) ? outp.GetInt64() : 0) +
+            (u.TryGetProperty("cache_creation_input_tokens",out var cc)   ? cc.GetInt64()   : 0) +
+            (u.TryGetProperty("cache_read_input_tokens",    out var cr)   ? cr.GetInt64()   : 0);
+
+        usage[model] = usage.GetValueOrDefault(model) + total;
     }
 
     private static Dictionary<string, long> ReadFromStatsCache(out string? cacheDate)
