@@ -57,6 +57,8 @@ public sealed class AppDataBackupService
         catch (Exception ex)
         {
             sw.Stop();
+            // A zip that died midway (locked file, full disk) is a corrupt archive; don't leave it looking like a backup.
+            try { if (File.Exists(zipPath)) File.Delete(zipPath); } catch { /* best-effort */ }
             return new AppDataBackupResult(false, zipPath, 0, sw.Elapsed, ex.Message);
         }
     }
