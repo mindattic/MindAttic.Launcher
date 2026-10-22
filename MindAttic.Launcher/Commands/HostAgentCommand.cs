@@ -124,6 +124,9 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
         using var controlPipe = isClaude
             ? HostControlPipeServer.ForProvider(provider.Key, r => { lock (pendingLock) pending = r; })
             : null;
+        // The login this tab's Claude runs under (CLAUDE_CONFIG_DIR, "" = global). A restart-resume
+        // with a configDir moves it (M.LNCH-T52), and every later start keeps the moved one.
+        var claudeConfigDir = ClaudeLogin.Initial(Environment.GetEnvironmentVariable(ClaudeLogin.ConfigDirVariable));
 
         ProcessStartInfo BuildStartInfo(string? resumeSession)
         {
@@ -160,6 +163,7 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
             // Vault entry is a no-op; the CLI falls back to its own configured auth.
             // Claude follows the Orchestrator's billing mode (ClaudeBillingMode).
             ProviderCredentials.Apply(psi, provider.Key);
+            if (isClaude) ClaudeLogin.Apply(psi, claudeConfigDir);
             return psi;
         }
 
@@ -195,9 +199,12 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
                 lock (pendingLock) if (ReferenceEquals(pending, request)) pending = null;
 
                 System.Console.WriteLine();
-                System.Console.WriteLine(request.Billing == ClaudeBillingMode.Api
-                    ? "Restarting Claude to bill the API key, resuming this conversation..."
-                    : "Restarting Claude to bill your Claude Team login, resuming this conversation...");
+                claudeConfigDir = ClaudeLogin.Next(claudeConfigDir, request);
+                System.Console.WriteLine(request.ConfigDir is not null
+                    ? $"Restarting Claude under {ClaudeLogin.Describe(claudeConfigDir)}, resuming this conversation..."
+                    : request.Billing == ClaudeBillingMode.Api
+                        ? "Restarting Claude to bill the API key, resuming this conversation..."
+                        : "Restarting Claude to bill your Claude Team login, resuming this conversation...");
                 try { p.Kill(entireProcessTree: true); }
                 catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or AggregateException) { }
                 p.WaitForExit();

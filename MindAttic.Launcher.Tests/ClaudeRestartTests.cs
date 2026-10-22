@@ -39,6 +39,29 @@ public sealed class ClaudeRestartTests
         Assert.That(r, Is.EqualTo(new RestartResumeRequest("api", "abc", 4242, @"D:\Projects\Prose")));
     }
 
+    [Test]
+    public void Parse_reads_a_login_move_with_billing()
+    {
+        var r = HostControlPipeServer.Parse("""{"type":"restart-resume","billing":"team","configDir":"C:\\Users\\me\\.claude-accounts\\a@b.com","session":"abc","cliPid":7}""");
+
+        Assert.That(r, Is.EqualTo(new RestartResumeRequest("team", "abc", 7, null, @"C:\Users\me\.claude-accounts\a@b.com")));
+    }
+
+    [Test]
+    public void Parse_allows_a_login_move_without_billing()
+    {
+        var r = HostControlPipeServer.Parse("""{"type":"restart-resume","configDir":"","session":"abc","cliPid":7}""");
+
+        Assert.That(r, Is.EqualTo(new RestartResumeRequest(null, "abc", 7, null, "")));
+    }
+
+    [Test]
+    public void Parse_without_configDir_keeps_the_current_login() =>
+        Assert.That(HostControlPipeServer.Parse("""{"type":"restart-resume","billing":"api","session":"abc","cliPid":7}""")!.ConfigDir, Is.Null);
+
+    [TestCase("""{"type":"restart-resume","session":"abc","cliPid":1}""")]
+    [TestCase("""{"type":"restart-resume","configDir":5,"session":"abc","cliPid":1}""")]
+    [TestCase("""{"type":"restart-resume","billing":"bitcoin","configDir":"","session":"abc","cliPid":1}""")]
     [TestCase("""{"type":"something-new","billing":"api","session":"abc","cliPid":1}""")]
     [TestCase("""{"type":"restart-resume","billing":"bitcoin","session":"abc","cliPid":1}""")]
     [TestCase("""{"type":"restart-resume","billing":"team","cliPid":1}""")]
@@ -87,6 +110,38 @@ public sealed class ClaudeRestartTests
         Assert.That(ClaudeRestartGate.StillWanted(Request("team"), billing), Is.True);
         Assert.That(ClaudeRestartGate.StillWanted(Request("api"), billing), Is.False);
         Assert.That(ClaudeRestartGate.StillWanted(Request("team"), Path.Combine(dir, "missing.json")), Is.False);
+    }
+
+    [Test]
+    public void A_login_move_alone_does_not_wait_on_the_billing_mode() =>
+        Assert.That(ClaudeRestartGate.StillWanted(new RestartResumeRequest(null, "s", 1, null, ""), Path.Combine(dir, "missing.json")), Is.True);
+
+    [Test]
+    public void The_restart_environment_follows_the_requested_login()
+    {
+        var account = @"C:\Users\me\.claude-accounts\a@b.com";
+        var psi = new System.Diagnostics.ProcessStartInfo("claude");
+
+        // A path sets CLAUDE_CONFIG_DIR, and the host remembers it for later restarts.
+        var current = ClaudeLogin.Next(ClaudeLogin.Initial(null), Request() with { ConfigDir = account });
+        ClaudeLogin.Apply(psi, current);
+        Assert.That(psi.EnvironmentVariables[ClaudeLogin.ConfigDirVariable], Is.EqualTo(account));
+
+        // A later billing-only restart (no configDir) keeps the moved login.
+        current = ClaudeLogin.Next(current, Request("api"));
+        Assert.That(current, Is.EqualTo(account));
+
+        // "" is the global login: CLAUDE_CONFIG_DIR is removed.
+        current = ClaudeLogin.Next(current, Request() with { ConfigDir = "" });
+        ClaudeLogin.Apply(psi, current);
+        Assert.That(psi.EnvironmentVariables.ContainsKey(ClaudeLogin.ConfigDirVariable), Is.False);
+    }
+
+    [Test]
+    public void The_host_starts_on_the_login_it_inherited()
+    {
+        Assert.That(ClaudeLogin.Initial(null), Is.EqualTo(""));
+        Assert.That(ClaudeLogin.Initial(@" D:\acct "), Is.EqualTo(@"D:\acct"));
     }
 
     [Test]

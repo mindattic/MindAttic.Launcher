@@ -17,8 +17,9 @@ public static class ClaudeRestartGate
 
     public static bool IsFor(RestartResumeRequest request, int runningCliPid) => request.CliPid == runningCliPid;
 
+    /// <summary>A request that only moves the login (no billing) is always still wanted.</summary>
     public static bool StillWanted(RestartResumeRequest request, string? billingModePath = null) =>
-        ClaudeBillingMode.Read(billingModePath) == request.Billing;
+        request.Billing is null || ClaudeBillingMode.Read(billingModePath) == request.Billing;
 
     public static bool IsIdle(RestartResumeRequest request, string? sessionContextDirectory = null, DateTime? nowUtc = null)
     {
