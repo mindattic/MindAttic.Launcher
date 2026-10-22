@@ -110,19 +110,26 @@ public sealed class SqliteBackupService
         CancellationToken ct = default)
     {
         var results = new List<SqliteBackupResult>();
+        var usedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var t in targets)
         {
             if (ct.IsCancellationRequested) break;
-            var r = BackupOne(t, targetFolder, ct);
+            // Two databases of one project can share a file stem (a/app.db, b/app.db, or app.db +
+            // app.sqlite) and so map to the same .sql; number the later ones rather than letting
+            // them silently overwrite the earlier dump.
+            var file = ResolveBackupFilePath(targetFolder, t.Project, t.DatabaseFile);
+            for (var n = 2; !usedFiles.Add(file); n++)
+                file = System.IO.Path.ChangeExtension(ResolveBackupFilePath(targetFolder, t.Project, t.DatabaseFile), null) + $"-{n}.sql";
+            var r = BackupOne(t, targetFolder, ct, file);
             results.Add(r);
             onDone?.Invoke(r);
         }
         return results;
     }
 
-    public SqliteBackupResult BackupOne(SqliteBackupTarget target, string targetFolder, CancellationToken ct = default)
+    public SqliteBackupResult BackupOne(SqliteBackupTarget target, string targetFolder, CancellationToken ct = default, string? backupFile = null)
     {
-        var file = ResolveBackupFilePath(targetFolder, target.Project, target.DatabaseFile);
+        var file = backupFile ?? ResolveBackupFilePath(targetFolder, target.Project, target.DatabaseFile);
 
         if (!File.Exists(target.DatabaseFile))
         {

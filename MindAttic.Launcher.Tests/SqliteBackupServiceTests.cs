@@ -210,4 +210,25 @@ public sealed class SqliteBackupServiceTests
 
         Assert.That(results, Is.Empty);
     }
+
+    [Test]
+    public void Backup_numbers_a_dump_whose_file_stem_collides_with_an_earlier_one()
+    {
+        var a = Path.Combine(tempFolder, "a", "app.db");
+        var b = Path.Combine(tempFolder, "b", "app.db");
+        Directory.CreateDirectory(Path.GetDirectoryName(a)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(b)!);
+        File.WriteAllText(a, "x");
+        File.WriteAllText(b, "y");
+        var subject = new SqliteBackupService("sqlite3", (args, _) => (0, "dump of " + args[1]));
+
+        var results = subject.Backup([new("Alpha", a), new("Alpha", b)], Path.Combine(tempFolder, "out"));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(results.Select(r => r.BackupFile).Distinct().Count(), Is.EqualTo(2));
+            Assert.That(File.ReadAllText(results[0].BackupFile), Does.Contain("a"));
+            Assert.That(File.ReadAllText(results[1].BackupFile), Does.Contain("b"));
+        });
+    }
 }
