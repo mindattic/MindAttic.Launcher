@@ -39,6 +39,10 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
         [CommandOption("--prompt <PROMPT>")]
         [Description("Seed the agent's first turn with this text (e.g. /status). Pre-fills the input; the CLI does not auto-submit.")]
         public string? Prompt { get; init; }
+
+        [CommandOption("--config-dir <DIR>")]
+        [Description("Run a Claude tab's CLI under this login folder (CLAUDE_CONFIG_DIR). A Launcher scoped to one account (--account) puts it in every Claude tab's command, since Windows Terminal tabs don't inherit the Launcher's environment.")]
+        public string? ConfigDir { get; init; }
     }
 
     public override int Execute(CommandContext context, Settings settings)
@@ -125,8 +129,11 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
             ? HostControlPipeServer.ForProvider(provider.Key, r => { lock (pendingLock) pending = r; })
             : null;
         // The login this tab's Claude runs under (CLAUDE_CONFIG_DIR, "" = global). A restart-resume
-        // with a configDir moves it (M.LNCH-T52), and every later start keeps the moved one.
-        var claudeConfigDir = ClaudeLogin.Initial(Environment.GetEnvironmentVariable(ClaudeLogin.ConfigDirVariable));
+        // with a configDir moves it (M.LNCH-T52), and every later start keeps the moved one. An explicit
+        // --config-dir (a Launcher scoped to one account, M.LNCH-T54) wins over whatever was inherited.
+        var claudeConfigDir = ClaudeLogin.Initial(!string.IsNullOrWhiteSpace(settings.ConfigDir)
+            ? settings.ConfigDir
+            : Environment.GetEnvironmentVariable(ClaudeLogin.ConfigDirVariable));
 
         ProcessStartInfo BuildStartInfo(string? resumeSession)
         {

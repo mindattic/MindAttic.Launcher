@@ -89,7 +89,7 @@ All sub-commands are declared in `MindAttic.Launcher/Program.cs` and implemented
 
 | Command | Behavior | Exit codes |
 |---|---|---|
-| (none) | Runs `MainMenuCommand`, the interactive Spectre.Console menu. | `0` |
+| (none) | Runs `MainMenuCommand`, the interactive Spectre.Console menu. `--account <email>` scopes the whole Launcher to that Claude login: it is signed in first (`orchestrator login --account`) when it isn't yet, every Claude tab it opens passes the login's folder (`%USERPROFILE%\.claude-accounts\<email>`) to `host --config-dir` so every CLI bills that person, and its window and tab titles show the login's alias (from `mindattic-account.json` in that folder, else the email's part before the @). | `0`; `1` bad or unsigned `--account` |
 | `host` | Runs an agent provider inside the current tab. Options below. | see below |
 | `commit` | Commits and pushes one project or every roster project. Options below. | `0` all clean or pushed; `1` at least one failure |
 | `backup` | Non-interactive backup (files, AppData, SQL Server, SQLite) — what a scheduled task calls instead of the Backup menu. Options below. | `0` ok; `1` partial failure |
@@ -110,6 +110,7 @@ Options:
 - `--title <TITLE>`: tab title (defaults to `--name`, or the directory's leaf name).
 - `--provider <PROVIDER>`: provider key (`Claude`, `Codex`, `Gemini` or `Kimi` by default). Omit it to resolve to the first-listed provider.
 - `--prompt <PROMPT>`: seeds the agent's first turn (pre-fills input; does not auto-submit).
+- `--config-dir <DIR>`: run a Claude tab's CLI under this login folder (`CLAUDE_CONFIG_DIR`), overriding any inherited one. A Launcher started with `--account` puts it in every Claude tab's command, since Windows Terminal tabs don't inherit the Launcher's environment.
 
 Behavior: if the tab's directory is a git repo, runs `git pull --ff-only` first so every agent starts on the newest code (a failed pull is shown in the tab and the agent still starts on the local code; repos with no remote are skipped quietly). Then splits the resolved provider's `RunCommand` into argv (`CommandLineParser.Split`), pushes any Vault-stored credential for that provider (see [Agent providers and host tabs](#agent-providers-and-host-tabs)), starts `TitlePinner` (busy/idle tab-title watchdog) and `HostInputPipeServer` (per-tab named pipe for input injection), then starts the provider exe with inherited stdio and waits for exit.
 

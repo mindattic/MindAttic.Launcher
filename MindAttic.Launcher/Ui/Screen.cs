@@ -12,13 +12,17 @@ public static class Screen
     // draw callbacks so Redraw() can repaint it at a new window size.
     private static readonly List<Action> HeaderParts = [];
 
+    /// <summary>The alias of the login a scoped Launcher runs as (M.LNCH-T54), shown in every header; null unscoped.</summary>
+    public static string? Scope { get; set; }
+
     public static void Header(params string[] breadcrumbs)
     {
         HeaderParts.Clear();
         AnsiConsole.Clear();
         Add(() =>
         {
-            var trail = string.Join(" > ", new[] { "MindAttic Launcher" }.Concat(breadcrumbs));
+            var root = Scope is { } alias ? $"MindAttic Launcher — {alias}" : "MindAttic Launcher";
+            var trail = string.Join(" > ", new[] { root }.Concat(breadcrumbs));
             AnsiConsole.Write(new Rule($"[cyan1]{Markup.Escape(trail)}[/]")
             {
                 Style = Theme.AccentStyle,

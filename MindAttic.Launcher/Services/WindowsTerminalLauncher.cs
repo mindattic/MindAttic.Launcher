@@ -6,9 +6,14 @@ namespace MindAttic.Launcher.Services;
 /// <summary>
 /// Builds and invokes <c>wt</c> command lines. Centralises tab title / color /
 /// scheme handling so menu code never quotes <c>wt</c> args by hand.
+/// <para>With an <see cref="AccountScope"/> (a Launcher run with <c>--account</c>, M.LNCH-T54) every Claude agent tab it
+/// builds passes that login's folder to the host as <c>--config-dir</c> in the tab's own command (a wt tab doesn't inherit
+/// this process's environment) and carries the login's alias in its title.</para>
 /// </summary>
-public sealed class WindowsTerminalLauncher
+public sealed class WindowsTerminalLauncher(AccountScope? scope = null)
 {
+    public AccountScope? Scope { get; } = scope;
+
     public sealed class Tab
     {
         public string? Title { get; init; }
@@ -81,7 +86,7 @@ public sealed class WindowsTerminalLauncher
     /// </summary>
     public Tab BuildAgentTab(Project project, AgentProvider provider, string hostExePath, string? prompt = null)
     {
-        var agentTitle = $"{project.TabTitle} [{provider.Key}]";
+        var agentTitle = ScopedTitle($"{project.TabTitle} [{provider.Key}]", provider);
         var command = new List<string>
         {
             hostExePath,
@@ -90,11 +95,7 @@ public sealed class WindowsTerminalLauncher
             "--title", agentTitle,
             "--provider", provider.Key
         };
-        if (!string.IsNullOrWhiteSpace(prompt))
-        {
-            command.Add("--prompt");
-            command.Add(prompt);
-        }
+        AddScopeAndPrompt(command, provider, prompt);
 
         return new Tab
         {
@@ -120,6 +121,7 @@ public sealed class WindowsTerminalLauncher
         string title, string workingDirectory, AgentProvider provider, string hostExePath,
         string? tabColor = null, string? colorScheme = null, string? prompt = null)
     {
+        title = ScopedTitle(title, provider);
         var command = new List<string>
         {
             hostExePath,
@@ -128,11 +130,7 @@ public sealed class WindowsTerminalLauncher
             "--title", title,
             "--provider", provider.Key
         };
-        if (!string.IsNullOrWhiteSpace(prompt))
-        {
-            command.Add("--prompt");
-            command.Add(prompt);
-        }
+        AddScopeAndPrompt(command, provider, prompt);
 
         return new Tab
         {
@@ -144,6 +142,29 @@ public sealed class WindowsTerminalLauncher
             SuppressApplicationTitle = false,
             Command = command
         };
+    }
+
+    private static bool IsClaude(AgentProvider provider) =>
+        string.Equals(provider.Key, "Claude", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary><paramref name="title"/>, stamped with the scope's alias for a Claude tab of a scoped Launcher.</summary>
+    private string ScopedTitle(string title, AgentProvider provider) =>
+        Scope is { } s && IsClaude(provider) ? s.Stamp(title) : title;
+
+    /// <summary>Adds the scope's <c>--config-dir</c> (Claude tabs of a scoped Launcher), then the prompt, which must stay
+    /// the host's last argument.</summary>
+    private void AddScopeAndPrompt(List<string> command, AgentProvider provider, string? prompt)
+    {
+        if (Scope is { } s && IsClaude(provider))
+        {
+            command.Add("--config-dir");
+            command.Add(s.ConfigDir);
+        }
+        if (!string.IsNullOrWhiteSpace(prompt))
+        {
+            command.Add("--prompt");
+            command.Add(prompt);
+        }
     }
 
     public Tab BuildRunCommandTab(Project project)

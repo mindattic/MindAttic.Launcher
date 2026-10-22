@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using MindAttic.Launcher.Menus;
 using MindAttic.Launcher.Services;
@@ -10,10 +11,34 @@ namespace MindAttic.Launcher.Commands;
 [SuppressMessage("Performance", "CA1812", Justification = "Instantiated by Spectre.Console.Cli")]
 public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
 {
-    public sealed class Settings : CommandSettings { }
+    public sealed class Settings : CommandSettings
+    {
+        [CommandOption("--account <EMAIL>")]
+        [Description("Run the whole Launcher as this Claude login: every Claude tab it opens runs under that account's own folder (signed in first when it isn't yet), and its window and tab titles show the login's alias.")]
+        public string? Account { get; init; }
+    }
 
     public override Task<int> ExecuteAsync(CommandContext context, Settings settings)
     {
+        // A Launcher scoped to one person (M.LNCH-T54): resolved, and signed in when it isn't yet, before
+        // anything else opens, so no tab ever starts on a login nobody is in. Unscoped, nothing changes.
+        AccountScope? scope = null;
+        if (!string.IsNullOrWhiteSpace(settings.Account))
+        {
+            var (resolved, error) = AccountScope.Ensure(settings.Account);
+            if (resolved is null)
+            {
+                System.Console.Error.WriteLine(error);
+                return Task.FromResult(1);
+            }
+            scope = resolved;
+            Screen.Scope = scope.Alias;
+        }
+        if (scope is not null)
+        {
+            try { System.Console.Title = scope.Stamp("MindAttic.Launcher"); } catch { /* no console */ }
+        }
+
         // The console starts on the OEM code page, where the menu's rounded box
         // corners, scrollbar thumb (┃) and ellipsis (…) print as '?'. Switch the
         // menu to UTF-8 (not `host`: agent tabs keep whatever the agent expects).
@@ -33,7 +58,7 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
         _ = store.Load(); // surface legacy-seed migration on launch
 
         var providers = new AgentProviderRegistry(store);
-        var wt = new WindowsTerminalLauncher();
+        var wt = new WindowsTerminalLauncher(scope);
         var git = new GitService();
 
         // A project registered before the topic filter existed has a null
@@ -139,7 +164,7 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
                 }
                 case "restart":
                     Screen.Working("Rebuilding and restarting…  Please wait.");
-                    RestartInNewTab(wt);
+                    RestartInNewTab(wt, scope);
                     Thread.Sleep(1000);
                     return Task.FromResult(0);
                 case "exit":     return Task.FromResult(0);
@@ -191,15 +216,18 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
         return Directory.Exists(root) ? root! : Environment.CurrentDirectory;
     }
 
-    private static void RestartInNewTab(WindowsTerminalLauncher wt)
+    private static void RestartInNewTab(WindowsTerminalLauncher wt, AccountScope? scope)
     {
         // We don't republish in-process: this menu usually runs from the deployed exe
         // in C:\Apps\MindAttic.Launcher, which Windows locks while it runs. Instead
         // run deploy.ps1 -WaitPid in a fresh tab; it waits for THIS process to exit,
         // force-rebuilds, then runs the fresh exe (and refuses to launch a stale one
         // if the build fails). We return 0 right after, so this tab closes.
+        // A scoped Launcher (M.LNCH-T54) restarts scoped to the same login.
         var root = ExePath.RepoRoot;
         var restartScript = root is null ? null : Path.Combine(root, "deploy.ps1");
+        var title = scope?.Stamp("MindAttic.Launcher") ?? "MindAttic.Launcher";
+        string[] launchArgs = scope is null ? [] : ["--account", scope.Email];
 
         if (restartScript is null || !File.Exists(restartScript))
         {
@@ -207,22 +235,23 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
             // whatever exe currently exists; there's nothing to rebuild against.
             wt.Open(new WindowsTerminalLauncher.Tab
             {
-                Title = "MindAttic.Launcher",
+                Title = title,
                 WorkingDirectory = MindAtticRoot(),
-                Command = [ExePath.Release]
+                Command = [ExePath.Release, .. launchArgs]
             });
             return;
         }
 
         wt.Open(new WindowsTerminalLauncher.Tab
         {
-            Title = "MindAttic.Launcher",
+            Title = title,
             WorkingDirectory = MindAtticRoot(),
             Command =
             [
                 "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
                 "-File", restartScript,
-                "-WaitPid", Environment.ProcessId.ToString()
+                "-WaitPid", Environment.ProcessId.ToString(),
+                .. launchArgs
             ]
         });
     }
