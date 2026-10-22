@@ -15,6 +15,10 @@ public sealed record LoginLook(string Window, string Initials, string TabColor)
     /// <summary>The login's name as people read it ("Jordan", "Amy Reed"); <see cref="Window"/> is it made safe for <c>wt -w</c>.</summary>
     public string Alias { get; init; } = Window;
 
+    /// <summary>The login's email when known: what keeps its Windows Terminal profile the same profile across a rename
+    /// (<see cref="LoginTerminalProfiles"/>, M.LNCH-T56).</summary>
+    public string? Email { get; init; }
+
     private static readonly string[] Palette = ["#2E7D32", "#1565C0", "#AD1457", "#EF6C00", "#6A1B9A", "#00838F", "#C62828", "#558B2F"];
 
     /// <summary>The look of the login a tab runs under: <paramref name="configDir"/>'s per-CLI login (its folder is named for
@@ -53,7 +57,7 @@ public sealed record LoginLook(string Window, string Initials, string TabColor)
         var name = alias ?? local ?? "claude";
         var badge = Clean(initials, 3) ?? Clean(Words(alias), 3) ?? Clean(alias, 2) ?? Clean(local, 2) ?? "CL";
         var tab = color is { Length: 7 } c && c[0] == '#' && c[1..].All(Uri.IsHexDigit) ? c.ToUpperInvariant() : Palette[Hash(email ?? folder) % Palette.Length];
-        return new LoginLook(WindowName(name), badge, tab) { Alias = name };
+        return new LoginLook(WindowName(name), badge, tab) { Alias = name, Email = email };
 
         // "Amy Reed" -> "AR"; one word ("Jordan") gives its own first two letters instead.
         static string? Words(string? text) =>

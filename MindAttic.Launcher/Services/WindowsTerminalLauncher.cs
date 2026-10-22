@@ -15,10 +15,18 @@ namespace MindAttic.Launcher.Services;
 /// folder (<see cref="LoginLook"/>). A scoped Launcher's login is its scope's; an unscoped one's is the global login while
 /// that's the only one signed in. With per-CLI logins around, an unscoped tab asks which login it runs on (M.LNCH-T53)
 /// only after it has opened, so it opens in the current window as before.</para>
+/// <para>Such a tab also opens with the login's own Terminal profile (M.LNCH-T56, <see cref="LoginTerminalProfiles"/>), whose
+/// icon is the login's initials on its tab color, so whose tab it is shows as an icon too. Building a tab only names the
+/// profile; <see cref="Open"/> writes its fragment and icon, so tests that build tabs never touch the fragments folder.</para>
 /// </summary>
-public sealed class WindowsTerminalLauncher(AccountScope? scope = null, Func<LoginLook?>? claudeLook = null)
+public sealed class WindowsTerminalLauncher(AccountScope? scope = null, Func<LoginLook?>? claudeLook = null, LoginTerminalProfiles? profiles = null)
 {
     public AccountScope? Scope { get; } = scope;
+
+    /// <summary>Where Claude logins' Terminal profiles are written as their tabs open; tests pass a temp folder's.</summary>
+    private readonly LoginTerminalProfiles? profiles = profiles;
+    private LoginTerminalProfiles Profiles => profiles ?? (defaultProfiles ??= new LoginTerminalProfiles());
+    private LoginTerminalProfiles? defaultProfiles;
 
     /// <summary>The window, badge and color of the login a Claude tab opened now runs on; null when that isn't known until
     /// the tab asks. Tests pass their own rather than read the real ~/.claude.</summary>
@@ -36,10 +44,14 @@ public sealed class WindowsTerminalLauncher(AccountScope? scope = null, Func<Log
     /// <summary>The window a scoped Launcher's own tabs (its restart) go in: its login's; null (the current one) unscoped.</summary>
     public string? ScopeWindow => Scope is null ? null : claudeLook()?.Window;
 
-    public sealed class Tab
+    public sealed record Tab
     {
         /// <summary>The Windows Terminal window the tab opens in (<c>wt -w</c>); null or blank: the current one ("0").</summary>
         public string? Window { get; init; }
+        /// <summary>The Terminal profile the tab opens with (<c>wt new-tab -p</c>); null: Terminal's default.</summary>
+        public string? Profile { get; init; }
+        /// <summary>The login whose profile <see cref="Profile"/> is; <see cref="Open"/> writes that profile first.</summary>
+        public LoginLook? ProfileLook { get; init; }
         public string? Title { get; init; }
         public string? WorkingDirectory { get; init; }
         public string? TabColor { get; init; }
@@ -53,6 +65,7 @@ public sealed class WindowsTerminalLauncher(AccountScope? scope = null, Func<Log
         if (tab.Command.Count == 0)
             throw new ArgumentException("Tab.Command must contain at least the executable.", nameof(tab));
 
+        tab = WithProfileWritten(tab);
         var psi = new ProcessStartInfo("wt")
         {
             UseShellExecute = false,
@@ -75,6 +88,7 @@ public sealed class WindowsTerminalLauncher(AccountScope? scope = null, Func<Log
         if (tab.Command.Count == 0)
             throw new ArgumentException("Tab.Command must contain at least the executable.", nameof(tab));
 
+        tab = WithProfileWritten(tab);
         var psi = new ProcessStartInfo("wt")
         {
             UseShellExecute = true,
@@ -86,9 +100,19 @@ public sealed class WindowsTerminalLauncher(AccountScope? scope = null, Func<Log
         catch (System.ComponentModel.Win32Exception) { /* user cancelled UAC */ }
     }
 
+    /// <summary><paramref name="tab"/> once its login's profile is written (or rewritten after a rename); without its
+    /// profile, as Terminal's default, when that can't be written.</summary>
+    public Tab WithProfileWritten(Tab tab)
+    {
+        if (tab.ProfileLook is not { } look) return tab;
+        return Profiles.Ensure(look) is { } guid ? tab with { Profile = guid } : tab with { Profile = null, ProfileLook = null };
+    }
+
     public static IEnumerable<string> BuildArgList(Tab tab)
     {
         yield return "-w"; yield return string.IsNullOrWhiteSpace(tab.Window) ? "0" : tab.Window; yield return "new-tab";
+        if (!string.IsNullOrWhiteSpace(tab.Profile))
+            { yield return "-p"; yield return tab.Profile; }
         if (!string.IsNullOrWhiteSpace(tab.Title))
             { yield return "--title"; yield return tab.Title; }
         if (tab.SuppressApplicationTitle)
@@ -125,6 +149,8 @@ public sealed class WindowsTerminalLauncher(AccountScope? scope = null, Func<Log
         return new Tab
         {
             Window = look?.Window,
+            Profile = look is null ? null : LoginTerminalProfiles.ProfileGuid(look),
+            ProfileLook = look,
             Title = agentTitle,
             WorkingDirectory = project.Path,
             TabColor = look?.TabColor ?? project.TabColor,
@@ -162,6 +188,8 @@ public sealed class WindowsTerminalLauncher(AccountScope? scope = null, Func<Log
         return new Tab
         {
             Window = look?.Window,
+            Profile = look is null ? null : LoginTerminalProfiles.ProfileGuid(look),
+            ProfileLook = look,
             Title = title,
             WorkingDirectory = workingDirectory,
             TabColor = look?.TabColor ?? tabColor,
