@@ -16,6 +16,21 @@ public static class ClaudeLogin
     /// <summary>The login the host starts with: whatever CLAUDE_CONFIG_DIR it inherited ("" when none).</summary>
     public static string Initial(string? inherited) => inherited?.Trim() ?? "";
 
+    /// <summary>The login a host's explicit <c>--config-dir</c> names: "" when it's the global login's own folder
+    /// (<c>~/.claude</c>, how a Launcher that asked passes the global login, M.LNCH-T65), else the folder as given.</summary>
+    public static string FromOption(string configDir, string? globalConfigDir = null)
+    {
+        var dir = configDir.Trim();
+        var global = globalConfigDir ?? ClaudeResume.GlobalConfigDir;
+        return string.Equals(Full(dir), Full(global), StringComparison.OrdinalIgnoreCase) ? "" : dir;
+
+        static string Full(string path)
+        {
+            try { return Path.TrimEndingDirectorySeparator(Path.GetFullPath(path)); }
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException) { return path; }
+        }
+    }
+
     /// <summary>The login after <paramref name="request"/>: its <c>ConfigDir</c> when given, else <paramref name="current"/>.</summary>
     public static string Next(string current, RestartResumeRequest request) => request.ConfigDir ?? current;
 

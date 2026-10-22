@@ -21,20 +21,24 @@ public static class ClaudeAccountPrompt
 
         outp.WriteLine("Choose a Claude account for this tab:");
         for (var i = 0; i < options.Count; i++)
-        {
-            var o = options[i];
-            var usage = o.HasUsageData
-                ? $" — 5h left {Pct(o.FiveHourLeftPercent)}, week left {Pct(o.WeekLeftPercent)}"
-                : " — usage not read yet";
-            var busy = o.HasCli ? ", already has a CLI" : "";
-            var mark = i == autoIndex ? " (Auto)" : "";
-            outp.WriteLine($"  {i + 1}) {o.Describe()}{usage}{busy}{mark}");
-        }
+            outp.WriteLine($"  {i + 1}) {options[i].Describe()} — {Details(options[i], i == autoIndex)}");
         outp.Write($"Account [{autoIndex + 1}]: ");
 
         var line = inp.ReadLine();
         if (string.IsNullOrWhiteSpace(line)) return auto;
         return int.TryParse(line.Trim(), out var n) && n >= 1 && n <= options.Count ? options[n - 1] : auto;
+    }
+
+    /// <summary>What the question says about <paramref name="o"/> after its name: its usage left, whether it already has a
+    /// CLI and whether it's the Auto pick. Shared with the Launcher's own question (M.LNCH-T65), so both read the same.</summary>
+    public static string Details(ClaudeAccountOption o, bool isAuto)
+    {
+        var usage = o.HasUsageData
+            ? $"5h left {Pct(o.FiveHourLeftPercent)}, week left {Pct(o.WeekLeftPercent)}"
+            : "usage not read yet";
+        var busy = o.HasCli ? ", already has a CLI" : "";
+        var mark = isAuto ? " (Auto)" : "";
+        return $"{usage}{busy}{mark}";
     }
 
     private static string Pct(double? p) => p is { } v ? $"{v:0}%" : "—";

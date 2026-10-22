@@ -41,7 +41,7 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
         public string? Prompt { get; init; }
 
         [CommandOption("--config-dir <DIR>")]
-        [Description("Run a Claude tab's CLI under this login folder (CLAUDE_CONFIG_DIR). A Launcher scoped to one account (--account) puts it in every Claude tab's command, since Windows Terminal tabs don't inherit the Launcher's environment.")]
+        [Description("Run a Claude tab's CLI under this login folder (CLAUDE_CONFIG_DIR). A Launcher scoped to one account (--account) puts it in every Claude tab's command, since Windows Terminal tabs don't inherit the Launcher's environment, and an unscoped one puts the login it asked for there; the global login's own folder (~/.claude) names the global login. Skips the account question.")]
         public string? ConfigDir { get; init; }
 
         [CommandOption("--account <EMAIL>")]
@@ -137,11 +137,13 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
         // that, a Claude tab asks which signed-in login to start on when more than one is around
         // (M.LNCH-T53): --account names one outright, a single login skips the question, and an
         // interactive tab offers the full catalog with the Orchestrator's Auto pick preselected.
-        // An explicit --config-dir (a Launcher scoped to one account, M.LNCH-T54) wins over whatever
-        // was inherited, and being non-empty it also skips the question.
-        var claudeConfigDir = ClaudeLogin.Initial(!string.IsNullOrWhiteSpace(settings.ConfigDir)
-            ? settings.ConfigDir
-            : Environment.GetEnvironmentVariable(ClaudeLogin.ConfigDirVariable));
+        // An explicit --config-dir (a Launcher scoped to one account, M.LNCH-T54, or one that asked which
+        // account before opening the tab, M.LNCH-T65) wins over whatever was inherited and skips the
+        // question; the global login's own folder (~/.claude) names the global login.
+        var loginGiven = !string.IsNullOrWhiteSpace(settings.ConfigDir);
+        var claudeConfigDir = loginGiven
+            ? ClaudeLogin.FromOption(settings.ConfigDir!)
+            : ClaudeLogin.Initial(Environment.GetEnvironmentVariable(ClaudeLogin.ConfigDirVariable));
         var showAccountInTitle = false;
         if (isClaude)
         {
@@ -156,7 +158,8 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
                 claudeConfigDir = picked.ConfigDir;
                 showAccountInTitle = picked.ShowInTitle;
             }
-            else if (string.IsNullOrWhiteSpace(claudeConfigDir)
+            else if (!loginGiven
+                     && string.IsNullOrWhiteSpace(claudeConfigDir)
                      && resumeSession is not null
                      && ClaudeResume.FindConfigDir(resumeSession, ClaudeResume.SignedInLogins()) is { } sessionLogin)
             {
@@ -165,7 +168,7 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
                 claudeConfigDir = sessionLogin;
                 showAccountInTitle = ClaudeAccountCatalog.PerCliLogins().Count > 0;
             }
-            else if (string.IsNullOrWhiteSpace(claudeConfigDir))
+            else if (!loginGiven && string.IsNullOrWhiteSpace(claudeConfigDir))
             {
                 var picked = ClaudeAccountResolver.Resolve(
                     requestedEmail: null,

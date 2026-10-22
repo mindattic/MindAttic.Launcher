@@ -42,9 +42,13 @@ public sealed class ProjectActionMenu(
                         Screen.PressAnyKey();
                         break;
                     }
+                    // More than one Claude login signed in: ask which here, so the tab opens in that person's
+                    // window (M.LNCH-T65); Esc comes back to this menu.
+                    var login = ClaudeAccountMenu.Choose(wt, provider, current.Name);
+                    if (login.Cancelled) break;
                     Screen.Working();
                     ExePath.EnsureFresh();
-                    wt.Open(wt.BuildAgentTab(current, provider, ExePath.Release));
+                    wt.Open(wt.BuildAgentTab(current, provider, ExePath.Release, login: login.Login));
                     Thread.Sleep(800);
                     return;
 

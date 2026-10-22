@@ -13,13 +13,16 @@ namespace MindAttic.Launcher.Services;
 /// Orchestrator's rule, M.ORCH-T616): <c>wt -w &lt;alias&gt;</c>, its title badged with the login's initials
 /// ("[RD] Repo [Claude]") and its tab colored as the login, all read from <c>mindattic-account.json</c> in the login's
 /// folder (<see cref="LoginLook"/>). A scoped Launcher's login is its scope's; an unscoped one's is the global login while
-/// that's the only one signed in. With per-CLI logins around, an unscoped tab asks which login it runs on (M.LNCH-T53)
-/// only after it has opened, so it opens in the current window as before.</para>
+/// that's the only one signed in. With per-CLI logins around, an unscoped Launcher asks which login first (M.LNCH-T65,
+/// <see cref="ClaudeTabLogin"/>) and passes the answer as the tab's <c>login</c>: the tab opens in that person's window,
+/// badged and colored as them, and its host gets the login as <c>--config-dir</c>, so it never asks again (M.LNCH-T53).</para>
 /// <para>Such a tab also opens with the login's own Terminal profile (M.LNCH-T56, <see cref="LoginTerminalProfiles"/>), whose
 /// icon is the login's initials on its tab color, so whose tab it is shows as an icon too. Building a tab only names the
 /// profile; <see cref="Open"/> writes its fragment and icon, so tests that build tabs never touch the fragments folder.</para>
 /// </summary>
-public sealed class WindowsTerminalLauncher(AccountScope? scope = null, Func<LoginLook?>? claudeLook = null, LoginTerminalProfiles? profiles = null)
+public sealed class WindowsTerminalLauncher(
+    AccountScope? scope = null, Func<LoginLook?>? claudeLook = null, LoginTerminalProfiles? profiles = null,
+    Func<string, LoginLook>? loginLook = null)
 {
     public AccountScope? Scope { get; } = scope;
 
@@ -27,6 +30,9 @@ public sealed class WindowsTerminalLauncher(AccountScope? scope = null, Func<Log
     private readonly LoginTerminalProfiles? profiles = profiles;
     private LoginTerminalProfiles Profiles => profiles ?? (defaultProfiles ??= new LoginTerminalProfiles());
     private LoginTerminalProfiles? defaultProfiles;
+
+    /// <summary>The look of a login chosen in the Launcher (a config dir, "" = the global login). Tests pass their own.</summary>
+    private readonly Func<string, LoginLook> loginLook = loginLook ?? (dir => LoginLook.ForConfigDir(dir));
 
     /// <summary>The window, badge and color of the login a Claude tab opened now runs on; null when that isn't known until
     /// the tab asks. Tests pass their own rather than read the real ~/.claude.</summary>
@@ -131,10 +137,12 @@ public sealed class WindowsTerminalLauncher(AccountScope? scope = null, Func<Log
     /// Builds an "agent host" tab — invokes `mindattic host …` for the given
     /// project + provider. When <paramref name="prompt"/> is set it's passed
     /// through as <c>--prompt</c> so the agent opens with that text pre-loaded.
+    /// <paramref name="login"/> is the login an unscoped Launcher asked for (M.LNCH-T65): a config dir, "" for the
+    /// global login, null when it didn't ask. A scope wins over it; other providers ignore it.
     /// </summary>
-    public Tab BuildAgentTab(Project project, AgentProvider provider, string hostExePath, string? prompt = null)
+    public Tab BuildAgentTab(Project project, AgentProvider provider, string hostExePath, string? prompt = null, string? login = null)
     {
-        var look = LookFor(provider);
+        var look = LookFor(provider, login);
         var agentTitle = look?.Badge($"{project.TabTitle} [{provider.Key}]") ?? $"{project.TabTitle} [{provider.Key}]";
         var command = new List<string>
         {
@@ -144,7 +152,7 @@ public sealed class WindowsTerminalLauncher(AccountScope? scope = null, Func<Log
             "--title", agentTitle,
             "--provider", provider.Key
         };
-        AddScopeAndPrompt(command, provider, prompt);
+        AddLoginAndPrompt(command, provider, prompt, login);
 
         return new Tab
         {
@@ -167,13 +175,13 @@ public sealed class WindowsTerminalLauncher(AccountScope? scope = null, Func<Log
     /// registered project — invokes `mindattic host --path …` (e.g. the Status
     /// tab, rooted at the whole MindAttic workspace). When <paramref name="prompt"/>
     /// is set it's forwarded as <c>--prompt</c> so the session opens with that
-    /// text pre-loaded.
+    /// text pre-loaded. <paramref name="login"/> as for <see cref="BuildAgentTab"/>.
     /// </summary>
     public Tab BuildAgentTabAtPath(
         string title, string workingDirectory, AgentProvider provider, string hostExePath,
-        string? tabColor = null, string? colorScheme = null, string? prompt = null)
+        string? tabColor = null, string? colorScheme = null, string? prompt = null, string? login = null)
     {
-        var look = LookFor(provider);
+        var look = LookFor(provider, login);
         title = look?.Badge(title) ?? title;
         var command = new List<string>
         {
@@ -183,7 +191,7 @@ public sealed class WindowsTerminalLauncher(AccountScope? scope = null, Func<Log
             "--title", title,
             "--provider", provider.Key
         };
-        AddScopeAndPrompt(command, provider, prompt);
+        AddLoginAndPrompt(command, provider, prompt, login);
 
         return new Tab
         {
@@ -200,21 +208,33 @@ public sealed class WindowsTerminalLauncher(AccountScope? scope = null, Func<Log
         };
     }
 
-    private static bool IsClaude(AgentProvider provider) =>
+    internal static bool IsClaude(AgentProvider provider) =>
         string.Equals(provider.Key, "Claude", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>The look of a Claude tab's login (read afresh, so a rename shows at once); null for other providers, which
     /// have no login, and while the login isn't known yet.</summary>
-    private LoginLook? LookFor(AgentProvider provider) => IsClaude(provider) ? claudeLook() : null;
+    private LoginLook? LookFor(AgentProvider provider, string? login) =>
+        !IsClaude(provider) ? null
+        : Scope is null && login is not null ? loginLook(login)
+        : claudeLook();
 
-    /// <summary>Adds the scope's <c>--config-dir</c> (Claude tabs of a scoped Launcher), then the prompt, which must stay
-    /// the host's last argument.</summary>
-    private void AddScopeAndPrompt(List<string> command, AgentProvider provider, string? prompt)
+    /// <summary>The login folder a Claude tab's host is told to run under: the scope's, else the one asked for (the global
+    /// login as its own folder, <c>~/.claude</c>, which the host maps back to the global login), else none.</summary>
+    private string? ConfigDirFor(AgentProvider provider, string? login) =>
+        !IsClaude(provider) ? null
+        : Scope is { } s ? s.ConfigDir
+        : login is null ? null
+        : login.Length == 0 ? ClaudeResume.GlobalConfigDir
+        : login;
+
+    /// <summary>Adds the tab's <c>--config-dir</c> (a Claude tab whose login is decided before it opens), then the prompt,
+    /// which must stay the host's last argument.</summary>
+    private void AddLoginAndPrompt(List<string> command, AgentProvider provider, string? prompt, string? login)
     {
-        if (Scope is { } s && IsClaude(provider))
+        if (ConfigDirFor(provider, login) is { } dir)
         {
             command.Add("--config-dir");
-            command.Add(s.ConfigDir);
+            command.Add(dir);
         }
         if (!string.IsNullOrWhiteSpace(prompt))
         {
