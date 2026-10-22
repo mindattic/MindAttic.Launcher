@@ -4,7 +4,8 @@ using Spectre.Console;
 namespace MindAttic.Launcher.Services;
 
 /// <summary>
-/// Reads Claude Code usage data from ~/.claude/* and renders a status block
+/// Reads Claude Code usage data from ~/.claude/* (and the orchestrator's pace
+/// status from its database, see <see cref="ReadRateLimitStatus"/>) and renders a status block
 /// for the main menu. Results are cached for 60 seconds to avoid thrashing
 /// the filesystem on every redraw.
 /// </summary>
@@ -177,14 +178,100 @@ public sealed class ClaudeStatusService
 
     // ── Rate limit line ──────────────────────────────────────────────────────
 
+    /// <summary>The orchestrator's database, found as its <c>OrchestratorDb.StatePath</c> finds it (M.ORCH-T526):
+    /// <c>MINDATTIC_ORCHESTRATOR_DB</c> when set, else the main checkout's <c>MindAttic.Orchestrator\data\orchestrator.db</c>
+    /// under the default workspace when that checkout exists, else the machine-local one under <c>%APPDATA%</c>.</summary>
+    public static string OrchestratorDbPath(string? workspaceRoot = null)
+    {
+        if (Environment.GetEnvironmentVariable("MINDATTIC_ORCHESTRATOR_DB") is { Length: > 0 } env) return env;
+        var checkout = Path.Combine(workspaceRoot ?? MindAttic.Tickets.Workspace.DefaultRoot, "MindAttic.Orchestrator");
+        return Directory.Exists(checkout)
+            ? Path.Combine(checkout, "data", "orchestrator.db")
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "MindAttic", "MindAttic.Orchestrator", "orchestrator.db");
+    }
+
+    /// <summary>The <c>state</c> row the orchestrator keeps its pace status in.</summary>
+    public const string RateLimitStateName = "rl-status";
+
+    /// <summary>
+    /// The orchestrator's pace status as last written (M.LNCH-T44): the <c>rl-status</c> row of its database's <c>state</c>
+    /// table or <c>~/.claude/rl-status.json</c> (which it keeps exporting for readers that haven't switched), whichever has
+    /// the newer timestamp; null when neither can be read. The database is opened read-only with a short busy timeout, so
+    /// a write in progress costs at most a moment and never blocks the menu.
+    /// </summary>
+    public static string? ReadRateLimitStatus(string dbPath, string filePath)
+    {
+        var row = ReadStateRow(dbPath, RateLimitStateName);
+        (string Json, DateTime WrittenUtc)? file = null;
+        try
+        {
+            if (File.Exists(filePath))
+                file = (File.ReadAllText(filePath), File.GetLastWriteTimeUtc(filePath));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+
+        if (row is null || file is null) return row?.Json ?? file?.Json;
+        return Stamp(row.Value.Json, row.Value.WrittenUtc) >= Stamp(file.Value.Json, file.Value.WrittenUtc)
+            ? row.Value.Json : file.Value.Json;
+
+        // The status's own timestamp; when it has none, when its row or file was written.
+        static DateTime Stamp(string json, DateTime written)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("timestamp", out var t) && t.ValueKind == JsonValueKind.String &&
+                    DateTimeOffset.TryParse(t.GetString(), System.Globalization.CultureInfo.InvariantCulture,
+                        System.Globalization.DateTimeStyles.AssumeUniversal, out var parsed))
+                    return parsed.UtcDateTime;
+            }
+            catch (JsonException) { }
+            return written;
+        }
+    }
+
+    private static (string Json, DateTime WrittenUtc)? ReadStateRow(string dbPath, string name)
+    {
+        if (!File.Exists(dbPath)) return null;
+        try
+        {
+            using var connection = new Microsoft.Data.Sqlite.SqliteConnection(new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder
+            {
+                DataSource = dbPath,
+                Mode = Microsoft.Data.Sqlite.SqliteOpenMode.ReadOnly,
+                // Not pooled: a held handle would keep the orchestrator's sync from committing or replacing the file.
+                Pooling = false,
+                DefaultTimeout = 1,
+            }.ToString());
+            connection.Open();
+            using (var pragma = connection.CreateCommand())
+            {
+                pragma.CommandText = "PRAGMA busy_timeout = 250;";
+                pragma.ExecuteNonQuery();
+            }
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT value, written_at FROM state WHERE name = $name;";
+            command.Parameters.AddWithValue("$name", name);
+            using var r = command.ExecuteReader();
+            if (!r.Read() || r.IsDBNull(0)) return null;
+            var written = r.IsDBNull(1) ? DateTime.MinValue
+                : DateTime.UnixEpoch.AddTicks((long)(r.GetDouble(1) * TimeSpan.TicksPerSecond));
+            return (r.GetString(0), written);
+        }
+        // Busy, locked, an older schema without the table, or a file that isn't a database: fall back to the JSON file.
+        catch (Exception ex) when (ex is Microsoft.Data.Sqlite.SqliteException or IOException or UnauthorizedAccessException
+                                       or InvalidOperationException or InvalidCastException or FormatException) { return null; }
+    }
+
     private string? BuildRateLimitLine()
     {
-        var rlFile = Path.Combine(ClaudeDir, "rl-status.json");
-        if (!File.Exists(rlFile)) return null;
+        var json = ReadRateLimitStatus(OrchestratorDbPath(), Path.Combine(ClaudeDir, "rl-status.json"));
+        if (json is null) return null;
 
         try
         {
-            using var doc = JsonDocument.Parse(File.ReadAllText(rlFile));
+            using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
 
             double pct   = root.TryGetProperty("percent_used",      out var p)  ? p.GetDouble()    : 0;

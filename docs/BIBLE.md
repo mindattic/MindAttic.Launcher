@@ -140,7 +140,9 @@ call stateless/injectable services; the services own all external-process and fi
 - **ProjectCompanionService** — ensure a project's companion service (e.g. Prose.Hub) is running
   before an agent session starts.
 - **ClaudeStatusService** — read Claude Code usage data from `~/.claude/*` for the main-menu status
-  block (60 s cache).
+  block (60 s cache). The rate-limit line reads the orchestrator's pace status from the `rl-status` row of
+  its `orchestrator.db` `state` table (read-only, short busy timeout), or `~/.claude/rl-status.json`, whichever
+  is newer (M.LNCH-T44).
 - **TitlePinner** — per-tab watchdog that pins a busy/idle tab title.
 - **HostInputPipeServer** / **RemoteControlBroadcaster** — per-tab named-pipe input + broadcast.
 - **BuildFreshness** / **ExePath** — detect a stale running binary; resolve self/release exe paths.

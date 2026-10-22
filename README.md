@@ -39,7 +39,7 @@ A single `MindAttic.Launcher.exe` (`net10.0-windows`, published `win-x64`) built
 - Per-provider model picker that rewrites the `--model` flag inside the provider's run command.
 - Lossless settings: unknown keys written by other MindAttic tools survive every save ([MindAttic.Vault](https://github.com/mindattic/MindAttic.Vault) backs the store).
 - Self-refreshing exe: the in-app Restart waits out the Windows file lock, republishes and relaunches; a header notice warns when the running build is behind the latest commit.
-- A Claude usage and rate-limit block (`ClaudeStatusService`, read from `~/.claude/*`), currently hidden: commented out in `MainMenuCommand` because it gave no actionable insight.
+- A Claude usage and rate-limit block (`ClaudeStatusService`, read from `~/.claude/*`; the pace status from the orchestrator's `orchestrator.db` `rl-status` row, or `~/.claude/rl-status.json` when that is newer or the row can't be read), currently hidden: commented out in `MainMenuCommand` because it gave no actionable insight.
 
 It is not an agent: it execs a provider CLI with inherited stdio and never calls an LLM SDK or makes an LLM API call directly.
 
