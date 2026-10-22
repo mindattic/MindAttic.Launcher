@@ -304,7 +304,7 @@ This exists because a `robocopy` snapshot of a live `.mdf` or `.db` file is not 
 
 ## Scheduled Backup
 
-The Scheduled Backup menu item (`Menus/ScheduledBackupMenu.cs`) is a pointer screen only. Launcher no longer registers or manages the `MindAtticLauncherNightlyBackup` Scheduled Task; the nightly backup job now lives in MindAttic.WatchDog (M.WD-T6), which owns its schedule, status and run-now. Use the Backup menu for a manual backup.
+The Scheduled Backup menu item (`Menus/ScheduledBackupMenu.cs`) is a pointer screen only. Launcher no longer registers or manages the `MindAtticLauncherNightlyBackup` Scheduled Task; the nightly backup job now lives in MindAttic.WatchDog (M.WD-T6), which owns its schedule, status and run-now. If a legacy task from an earlier Launcher is still registered, the screen offers to delete it (or run `Unregister-ScheduledTask -TaskName MindAtticLauncherNightlyBackup -TaskPath '\MindAttic\Launcher'`), since it would double the nightly backup. Use the Backup menu for a manual backup.
 
 ## Windows Terminal color schemes
 
