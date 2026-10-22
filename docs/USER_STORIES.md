@@ -177,8 +177,8 @@ updated: 2026-10-14
   `FetchAsync_does_not_strip_the_topic_from_an_archived_repo_that_lacks_it`,
   `FetchAsync_stops_stripping_after_github_refuses_and_flags_it`.)*
 
-- **M.LNCH-US-E6 🟡** As a Dev, a Workflow menu item shows open tickets across the workspace, each
-  repo's local-only work and GitHub state, and the ticket-log checks, through the MindAttic.Workflow
+- **M.LNCH-US-E6 🟡** As a Dev, a Tickets menu item shows open tickets across the workspace, each
+  repo's local-only work and GitHub state, and the ticket-log checks, through the MindAttic.Tickets
   library. The library calls are tested there; the menu itself has no test yet.
 
 ## Epic F — Settings persistence
