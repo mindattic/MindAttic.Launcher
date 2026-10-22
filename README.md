@@ -111,6 +111,7 @@ Options:
 - `--provider <PROVIDER>`: provider key (`Claude`, `Codex`, `Gemini` or `Kimi` by default). Omit it to resolve to the first-listed provider.
 - `--prompt <PROMPT>`: seeds the agent's first turn (pre-fills input; does not auto-submit).
 - `--config-dir <DIR>`: run a Claude tab's CLI under this login folder (`CLAUDE_CONFIG_DIR`), overriding any inherited one. A Launcher started with `--account` puts it in every Claude tab's command, since Windows Terminal tabs don't inherit the Launcher's environment.
+- `--resume <SESSION>`: start a Claude tab by resuming that conversation (`claude --resume <SESSION>`) instead of a fresh one; `--prompt` is ignored. With no `--config-dir`/`--account` (and no inherited `CLAUDE_CONFIG_DIR`), it runs under the signed-in login whose folder holds the session's transcript (`<login>/projects/*/<SESSION>.jsonl`) without asking, falling back to the usual account question when none does. MindAttic.Orchestrator uses this to reopen its embedded panes after a dashboard restart, so they keep the host's input pipe, control pipe, restart-resume and account moves. Claude only.
 
 Behavior: if the tab's directory is a git repo, runs `git pull --ff-only` first so every agent starts on the newest code (a failed pull is shown in the tab and the agent still starts on the local code; repos with no remote are skipped quietly). Then splits the resolved provider's `RunCommand` into argv (`CommandLineParser.Split`), pushes any Vault-stored credential for that provider (see [Agent providers and host tabs](#agent-providers-and-host-tabs)), starts `TitlePinner` (busy/idle tab-title watchdog) and `HostInputPipeServer` (per-tab named pipe for input injection), then starts the provider exe with inherited stdio and waits for exit.
 
@@ -121,7 +122,8 @@ Exit codes:
 - `2`: provider resolved but its `RunCommand` is empty.
 - `3`: provider process failed to start.
 - `4`: an explicit `--provider` key does not resolve to a configured provider.
-- `64`: neither `--name` nor `--path` given.
+- `5`: `--account` isn't a signed-in per-CLI login.
+- `64`: neither `--name` nor `--path` given, or a `--resume` that is blank, not a session id, or on a non-Claude provider.
 
 `host` is what a Windows Terminal tab actually runs. The interactive menu never launches a provider directly; it always builds a `wt … -- MindAttic.Launcher.exe host …` command line via `WindowsTerminalLauncher` and lets `wt` fork the tab. The same `HostAgentCommand.Execute` path fires whether the tab was opened from the menu or by hand from a script.
 

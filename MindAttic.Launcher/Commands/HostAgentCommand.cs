@@ -47,6 +47,10 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
         [CommandOption("--account <EMAIL>")]
         [Description("Run a Claude tab's CLI under this signed-in login (a ~/.claude-accounts/<email> folder). Skips the account question; an email that isn't a signed-in per-CLI login is an error.")]
         public string? Account { get; init; }
+
+        [CommandOption("--resume <SESSION>")]
+        [Description("Start a Claude tab by resuming this conversation (claude --resume <SESSION>) instead of a fresh one; --prompt is ignored. Without --config-dir/--account it runs under the signed-in login whose folder holds the session.")]
+        public string? Resume { get; init; }
     }
 
     public override int Execute(CommandContext context, Settings settings)
@@ -119,6 +123,15 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
         // restarted with --resume at its next idle point, billing the new mode.
         var isClaude = string.Equals(provider.Key, "Claude", StringComparison.OrdinalIgnoreCase);
 
+        // --resume (M.LNCH-T64): the Orchestrator reopening an embedded pane after a dashboard restart starts
+        // the tab on that conversation rather than a fresh one, still inside this host.
+        var resumeSession = settings.Resume?.Trim();
+        if (ClaudeResume.Validate(provider.Key, settings.Resume) is { } resumeError)
+        {
+            System.Console.Error.WriteLine(resumeError);
+            return 64;
+        }
+
         // The login this tab's Claude runs under (CLAUDE_CONFIG_DIR, "" = global). A restart-resume
         // with a configDir moves it (M.LNCH-T52), and every later start keeps the moved one. Before
         // that, a Claude tab asks which signed-in login to start on when more than one is around
@@ -142,6 +155,15 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
                 }
                 claudeConfigDir = picked.ConfigDir;
                 showAccountInTitle = picked.ShowInTitle;
+            }
+            else if (string.IsNullOrWhiteSpace(claudeConfigDir)
+                     && resumeSession is not null
+                     && ClaudeResume.FindConfigDir(resumeSession, ClaudeResume.SignedInLogins()) is { } sessionLogin)
+            {
+                // A resumed conversation belongs to the login that wrote it; asking would only let the
+                // tab pick one where `claude --resume` can't find it.
+                claudeConfigDir = sessionLogin;
+                showAccountInTitle = ClaudeAccountCatalog.PerCliLogins().Count > 0;
             }
             else if (string.IsNullOrWhiteSpace(claudeConfigDir))
             {
@@ -220,7 +242,7 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
         Process? p = null;
         try
         {
-            p = Process.Start(BuildStartInfo(null))
+            p = Process.Start(BuildStartInfo(resumeSession))
                 ?? throw new InvalidOperationException($"Failed to start {parts[0]}");
             while (true)
             {
