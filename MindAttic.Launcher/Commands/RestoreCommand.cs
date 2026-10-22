@@ -106,9 +106,11 @@ public sealed class RestoreCommand : Command<RestoreCommand.Settings>
         var store = new SettingsStore();
         var settings = store.Load();
         var targets = SqliteBackupService.CollectTargets(settings);
+        // A project can list several SQLite files; each dump is named after its file's stem, so match on
+        // (project, stem) — keying on the project alone restored every dump over the project's first file.
         var byProject = targets
             .GroupBy(t => t.Project, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => g.First().DatabaseFile, StringComparer.OrdinalIgnoreCase);
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
 
         var restore = new SqliteRestoreService();
         var ok = true;
@@ -117,7 +119,14 @@ public sealed class RestoreCommand : Command<RestoreCommand.Settings>
             var projectName = Path.GetFileName(projectDir);
             foreach (var dump in Directory.GetFiles(projectDir, "*.sql"))
             {
-                if (!byProject.TryGetValue(projectName, out var dbFile))
+                string? dbFile = null;
+                if (byProject.TryGetValue(projectName, out var projectDbs))
+                {
+                    var stem = Path.GetFileNameWithoutExtension(dump);
+                    dbFile = projectDbs.FirstOrDefault(t => string.Equals(Path.GetFileNameWithoutExtension(t.DatabaseFile), stem, StringComparison.OrdinalIgnoreCase)).DatabaseFile
+                        ?? (projectDbs.Count == 1 ? projectDbs[0].DatabaseFile : null);
+                }
+                if (dbFile is null)
                 {
                     AnsiConsole.MarkupLine($"[white]{Markup.Escape(projectName)} ({Markup.Escape(Path.GetFileName(dump))}):[/] [yellow]no matching project in the current roster — skipped[/]");
                     continue;
