@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using MindAttic.Launcher.Menus;
+using MindAttic.Launcher.Models;
 using MindAttic.Launcher.Services;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -39,16 +40,26 @@ public sealed class CommitCommand : Command<CommitCommand.Settings>
 
         var app = store.Load();
 
-        // A specific --project always resolves by name, topic status aside —
-        // an explicit target that silently no-ops because it fell off the
-        // tagged list would violate M.LNCH-LAW-1 (fail loudly, not quietly). The
-        // "commit everything" default is where the topic decides the roster.
-        var targets = string.IsNullOrWhiteSpace(settings.Project)
-            ? ProjectRoster.Sorted(app, TopicRepoSync.FetchOrNull())
-            : new[] { ProjectRoster.FindByName(app, settings.Project!) ?? throw new InvalidOperationException($"Unknown project: {settings.Project}") };
+        var (exit, _) = Run(app, () => TopicRepoSync.FetchOrNull(), settings.Project, settings.Message,
+            new WorkspaceCommitter(git, ExePath.WorkspaceRoot), r => AnsiConsole.MarkupLine(CommitMenu.Format(r)));
+        return exit;
+    }
 
-        var results = new WorkspaceCommitter(git, ExePath.WorkspaceRoot)
-            .Run(targets, settings.Message, r => AnsiConsole.MarkupLine(CommitMenu.Format(r)));
-        return results.All(r => r.Ok) ? 0 : 1;
+    /// <summary>
+    /// The command's logic with its collaborators passed in. A specific --project always resolves by name, topic
+    /// status aside: an explicit target that silently no-ops because it fell off the tagged list would violate
+    /// M.LNCH-LAW-1 (fail loudly, not quietly), so an unknown name throws. The "commit everything" default is
+    /// where the topic decides the roster. A failing repo makes the exit code 1 but never stops the rest.
+    /// </summary>
+    public static (int ExitCode, IReadOnlyList<ProjectCommitResult> Results) Run(
+        AppSettings app, Func<IReadOnlySet<string>?> taggedFullNames, string? project, string? message,
+        WorkspaceCommitter committer, Action<ProjectCommitResult>? report = null)
+    {
+        var targets = string.IsNullOrWhiteSpace(project)
+            ? ProjectRoster.Sorted(app, taggedFullNames())
+            : new[] { ProjectRoster.FindByName(app, project!) ?? throw new InvalidOperationException($"Unknown project: {project}") };
+
+        var results = committer.Run(targets, message, report);
+        return (results.All(r => r.Ok) ? 0 : 1, results);
     }
 }
