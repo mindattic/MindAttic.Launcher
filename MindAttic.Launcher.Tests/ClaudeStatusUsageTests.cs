@@ -5,6 +5,7 @@ namespace MindAttic.Launcher.Tests;
 
 /// <summary>M.LNCH-T11: ClaudeStatusService's usage parsing, stats-cache fallback, rate-limit line and formatting.</summary>
 [TestFixture]
+[SetCulture("en-US")]
 [NonParallelizable] // sets MINDATTIC_ORCHESTRATOR_DB, which is process-wide
 public class ClaudeStatusUsageTests
 {
@@ -84,6 +85,7 @@ public class ClaudeStatusUsageTests
         Assert.That(line, Does.Contain("latest: 2026-01-02"));
         Assert.That(line, Does.Contain("Sonnet 4.6"));
         Assert.That(line, Does.Not.Contain("Opus"));
+        Assert.That(line, Does.Not.Contain("Haiku"));
     }
 
     [Test]
