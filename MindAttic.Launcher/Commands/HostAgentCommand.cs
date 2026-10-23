@@ -84,12 +84,13 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
 
         var title = ResolveTitle(settings.Title, settings.Name, workingDir);
 
-        var parts = CommandLineParser.Split(provider.RunCommand);
-        if (parts.Length == 0)
+        var command = ResolveCommand(provider);
+        if (command.Error is not null)
         {
-            System.Console.Error.WriteLine($"Provider {provider.Key} has an empty RunCommand.");
-            return 2;
+            System.Console.Error.WriteLine(command.Error);
+            return command.ExitCode;
         }
+        var parts = command.Parts!;
 
         // Claude tabs also take the Orchestrator's restart-resume requests on a
         // control pipe of their own (its billing switch, M.LNCH-T38): the CLI is
@@ -308,6 +309,17 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
             : new(project.Path, project, null, 0);
     }
 
+    public readonly record struct CommandResult(string[]? Parts, string? Error, int ExitCode);
+
+    /// <summary>Splits the provider's RunCommand into argv; an empty one is exit 2.</summary>
+    public static CommandResult ResolveCommand(AgentProvider provider)
+    {
+        var parts = CommandLineParser.Split(provider.RunCommand);
+        return parts.Length == 0
+            ? new(null, $"Provider {provider.Key} has an empty RunCommand.", 2)
+            : new(parts, null, 0);
+    }
+
     public readonly record struct ProviderResult(AgentProvider? Provider, string? Error, int ExitCode);
 
     /// <summary>An unknown explicit --provider is 4, never a fallback; none given is the first-listed provider.</summary>
@@ -331,6 +343,7 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
     {
         // Bare npm-shim names (codex, gemini, ...) have no .exe on PATH, and
         // CreateProcessW doesn't walk PATHEXT, so resolve to the real shim first.
+        if (parts.Length == 0) throw new ArgumentException("parts must hold the executable.", nameof(parts));
         var psi = new ProcessStartInfo(ExecutableResolver.Resolve(parts[0]))
         {
             UseShellExecute = false,

@@ -102,10 +102,15 @@ public sealed class HostAgentCommandTests
     }
 
     [Test]
-    public void Blank_RunCommand_splits_to_no_parts_which_Execute_reports_as_2()
+    public void Blank_RunCommand_returns_2()
     {
-        // Execute returns 2 exactly when the split yields nothing.
-        Assert.That(CommandLineParser.Split("   "), Is.Empty);
+        var r = HostAgentCommand.ResolveCommand(new AgentProvider { Key = "X", Name = "X", RunCommand = "   " });
+        Assert.Multiple(() =>
+        {
+            Assert.That(r.ExitCode, Is.EqualTo(2));
+            Assert.That(r.Parts, Is.Null);
+            Assert.That(r.Error, Does.Contain("empty RunCommand"));
+        });
     }
 
     [Test]
