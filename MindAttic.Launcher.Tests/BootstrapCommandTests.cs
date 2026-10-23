@@ -196,7 +196,7 @@ public sealed class BootstrapCommandTests
         {
             Assert.That(BootstrapCommand.FindNewestBackupFolder(missing), Is.Null);
             Assert.That(BootstrapCommand.FindNewestBackupFolder(file), Is.Null);
-            Assert.That(BootstrapCommand.FindNewestBackupFolder(@"\no-such-host-xyz\share"), Is.Null);
+            Assert.That(BootstrapCommand.FindNewestBackupFolder(@"\\no-such-host-xyz\share"), Is.Null);
         });
     }
 
