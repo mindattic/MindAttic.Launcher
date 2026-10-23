@@ -101,7 +101,7 @@ public sealed class ClaudeTabLoginTests
             var args = tab.Command.ToList();
             Assert.That(args[args.IndexOf("--config-dir") + 1], Is.EqualTo(jordan));
             Assert.That(tab.Window, Is.EqualTo("jordan"));
-            Assert.That(tab.Title, Does.StartWith("[JO] "));
+            Assert.That(tab.Title, Does.StartWith("JO: "));
             Assert.That(tab.TabColor, Is.EqualTo(look.TabColor));
             Assert.That(args[^2], Is.EqualTo("--prompt"), "the prompt stays the host's last argument");
         }

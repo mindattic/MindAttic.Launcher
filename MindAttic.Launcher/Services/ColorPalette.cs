@@ -13,8 +13,6 @@ public sealed record PaletteColor(string Name, string Hex);
 /// </summary>
 public static class ColorPalette
 {
-    private const string NamePrefix = "MindAttic.";
-
     /// <summary>
     /// Visually distinct named colors offered when adding a discovered project.
     /// Spread across the wheel so adjacent picks read differently on a tab strip.
@@ -41,15 +39,12 @@ public static class ColorPalette
 
     /// <summary>
     /// The WT scheme name for a project: <c>MindAttic-&lt;short name&gt;</c>, where
-    /// the shared "MindAttic." prefix is stripped (matching the existing
+    /// the shared "GTFO." / "MindAttic." / "Unity." prefix is stripped (matching the existing
     /// MindAttic-Vault / MindAttic-ChiMesh schemes and <see cref="Models.Project.TabTitle"/>).
     /// </summary>
     public static string SchemeName(string projectName)
     {
-        var shortName = projectName.StartsWith(NamePrefix, StringComparison.OrdinalIgnoreCase)
-            ? projectName[NamePrefix.Length..]
-            : projectName;
-        return $"MindAttic-{shortName}";
+        return $"MindAttic-{Models.Project.ShortName(projectName)}";
     }
 
     /// <summary>

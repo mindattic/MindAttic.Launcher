@@ -12,6 +12,8 @@ public sealed class ColorPaletteTests
     // The strip is case-insensitive (mirrors Project.TabTitle), so a lowercase
     // "mindattic." prefix is stripped too — "com" here, not "mindattic.com".
     [TestCase("mindattic.com", ExpectedResult = "MindAttic-com")]
+    [TestCase("GTFO.EZ", ExpectedResult = "MindAttic-EZ")]
+    [TestCase("Unity.Eve", ExpectedResult = "MindAttic-Eve")]
     public string SchemeName_strips_the_MindAttic_prefix(string projectName) =>
         ColorPalette.SchemeName(projectName);
 

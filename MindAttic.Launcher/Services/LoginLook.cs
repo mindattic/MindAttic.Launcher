@@ -5,7 +5,7 @@ namespace MindAttic.Launcher.Services;
 /// <summary>
 /// How a Claude login's terminal tabs look (M.LNCH-T55), the same rule as MindAttic.Orchestrator's <c>LoginLook</c>
 /// (M.ORCH-T616) so a person's tabs gather in one window whichever app opened them: the Windows Terminal window they go in
-/// (<c>wt -w &lt;Window&gt;</c>), the initials badge that starts their titles ("[RD] Repo [Claude]") and their tab color. Read
+/// (<c>wt -w &lt;Window&gt;</c>), the initials badge that starts their titles ("RD: Repo [Claude]") and their tab color. Read
 /// from <see cref="AccountScope.LookFileName"/> in the login's folder (<c>alias</c>, <c>initials</c>, <c>tabColor</c>) while
 /// that file is for the login's email; without one, the email's part before the @ names the window and its first two
 /// letters are the initials, and the color is picked from the email.
@@ -67,8 +67,9 @@ public sealed record LoginLook(string Window, string Initials, string TabColor)
             text is null ? null : new string(text.Where(char.IsLetterOrDigit).Take(max).ToArray()).ToUpperInvariant() is { Length: > 0 } s ? s : null;
     }
 
-    /// <summary><paramref name="title"/> with this login's initials badge in front, as the Orchestrator titles a login's tabs.</summary>
-    public string Badge(string title) => $"[{Initials}] {title}";
+    /// <summary><paramref name="title"/> with this login's initials badge in front, as the Orchestrator titles a login's tabs
+    /// (M.ORCH-T632, M.LNCH-T69): "JR: EZ [Claude]".</summary>
+    public string Badge(string title) => $"{Initials}: {title}";
 
     /// <summary>What a login is called until it's given a name: its email's part before the @; null without an email.</summary>
     public static string? DefaultAlias(string? email) => email is { } e && e.IndexOf('@') is > 0 and var at ? e[..at] : null;

@@ -11,7 +11,7 @@ namespace MindAttic.Launcher.Services;
 /// this process's environment).</para>
 /// <para>Every Claude agent tab whose login is known when it opens goes in that person's own window (M.LNCH-T55, the
 /// Orchestrator's rule, M.ORCH-T616): <c>wt -w &lt;alias&gt;</c>, its title badged with the login's initials
-/// ("[RD] Repo [Claude]") and its tab colored as the login, all read from <c>mindattic-account.json</c> in the login's
+/// ("RD: Repo [Claude]") and its tab colored as the login, all read from <c>mindattic-account.json</c> in the login's
 /// folder (<see cref="LoginLook"/>). A scoped Launcher's login is its scope's; an unscoped one's is the global login while
 /// that's the only one signed in. With per-CLI logins around, an unscoped Launcher asks which login first (M.LNCH-T65,
 /// <see cref="ClaudeTabLogin"/>) and passes the answer as the tab's <c>login</c>: the tab opens in that person's window,

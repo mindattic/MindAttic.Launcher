@@ -157,7 +157,7 @@ public sealed class AccountScopeTests
             Assert.That(at, Is.GreaterThan(0));
             Assert.That(args[at + 1], Is.EqualTo(scope.ConfigDir));
             Assert.That(tab.Window, Is.EqualTo("jordan"), "the login's own window (M.LNCH-T55)");
-            Assert.That(tab.Title, Does.StartWith("[JO] "), "the login's initials badge (M.LNCH-T55)");
+            Assert.That(tab.Title, Does.StartWith("JO: "), "the login's initials badge (M.LNCH-T55)");
             Assert.That(args[args.IndexOf("--title") + 1], Is.EqualTo(tab.Title));
             Assert.That(args[^2], Is.EqualTo("--prompt"), "the prompt stays the host's last argument");
         }

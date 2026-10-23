@@ -30,6 +30,16 @@ public sealed class ProjectTests
         Assert.That(project.TabTitle, Is.EqualTo("Standalone"));
     }
 
+    // M.LNCH-T69 (M.ORCH-T632): "JR: EZ [Claude]", so GTFO. and Unity. drop as well; only the exact prefix, dot and all.
+    [TestCase("GTFO.EZ", "EZ")]
+    [TestCase("Unity.Eve", "Eve")]
+    [TestCase("MindAttic.Tickets", "Tickets")]
+    [TestCase("UnityEve", "UnityEve")]
+    [TestCase("REA.Bloodlines", "REA.Bloodlines")]
+    [TestCase("GTFO.", "GTFO.")]
+    public void TabTitle_strips_each_shared_prefix(string name, string expected) =>
+        Assert.That(new Project { Name = name, Path = "" }.TabTitle, Is.EqualTo(expected));
+
     [Test]
     public void TabTitle_strips_the_prefix_case_insensitively()
     {

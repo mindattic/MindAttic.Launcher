@@ -107,7 +107,7 @@ public sealed class LoginLookTests
                  })
         {
             Assert.That(tab.Window, Is.EqualTo("Jordan"));
-            Assert.That(tab.Title, Does.StartWith("[JO] ").And.EndWith(" [Claude]"));
+            Assert.That(tab.Title, Does.StartWith("JO: ").And.EndWith(" [Claude]"));
             Assert.That(tab.TabColor, Is.EqualTo("#2E7D32"));
             var args = tab.Command.ToList();
             Assert.That(args[args.IndexOf("--title") + 1], Is.EqualTo(tab.Title), "the host pins the same badged title");
@@ -116,6 +116,17 @@ public sealed class LoginLookTests
             Assert.That(wtArgs.Take(3), Is.EqualTo(new[] { "-w", "Jordan", "new-tab" }));
             Assert.That(wtArgs[wtArgs.IndexOf("--tabColor") + 1], Is.EqualTo("#2E7D32"));
         }
+    }
+
+    [Test]
+    public void The_badge_is_the_initials_and_a_colon_as_the_Orchestrator_titles_tabs()
+    {
+        // M.LNCH-T69 (M.ORCH-T632): "JR: EZ [Claude]", no longer "[JR] GTFO.EZ [Claude]".
+        var look = new LoginLook("Jordan", "JR", "#2E7D32");
+        Assert.That(look.Badge("EZ [Claude]"), Is.EqualTo("JR: EZ [Claude]"));
+        var wt = new WindowsTerminalLauncher(claudeLook: () => look);
+        Assert.That(wt.BuildAgentTab(new Project { Name = "GTFO.EZ", Path = @"D:\Projects\GTFO.EZ" }, Claude, "mindattic.exe").Title,
+            Is.EqualTo("JR: EZ [Claude]"));
     }
 
     [Test]

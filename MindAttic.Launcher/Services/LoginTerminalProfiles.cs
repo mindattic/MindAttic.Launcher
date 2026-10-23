@@ -12,7 +12,7 @@ namespace MindAttic.Launcher.Services;
 
 /// <summary>
 /// Each Claude login's own Windows Terminal profile (M.LNCH-T56), so a tab shows whose it is as an icon as well as its
-/// "[JR]" title badge: a Terminal fragment in <see cref="FragmentsDir"/> (by default
+/// "JR:" title badge: a Terminal fragment in <see cref="FragmentsDir"/> (by default
 /// <c>%LOCALAPPDATA%\Microsoft\Windows Terminal\Fragments\MindAttic</c>, one <c>&lt;login&gt;.json</c> per login) whose
 /// profile's icon is a generated image of the login's initials on its tab color. A login's tabs open with it
 /// (<c>wt new-tab -p {guid}</c>). The profile is keyed by the login's email, so a new alias or initials rewrites the same

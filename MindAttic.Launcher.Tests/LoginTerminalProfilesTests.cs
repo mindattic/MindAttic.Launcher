@@ -130,7 +130,7 @@ public sealed class LoginTerminalProfilesTests
 
         var tab = wt.BuildAgentTab(Repo, Claude, "mindattic.exe");
         Assert.That(Directory.GetFiles(root), Is.Empty, "building a tab writes nothing");
-        Assert.That(tab.Title, Does.StartWith("[JR] "), "the title badge stays");
+        Assert.That(tab.Title, Does.StartWith("JR: "), "the title badge stays");
 
         var opened = wt.WithProfileWritten(tab);
 
