@@ -42,7 +42,8 @@ public static class ProviderCredentials
     /// <paramref name="billingModePath"/> defaults to the real
     /// <c>~/.claude/session-context/billing.json</c>. Tests pass the overrides
     /// so a run never touches real Vault data, the user's actual Kimi config,
-    /// their actual claude.ai login state or their billing mode.
+    /// their actual claude.ai login state or their billing mode. <paramref name="claudeBilling"/>, when set, is the
+    /// billing this one Claude CLI bills instead of the mode (an emergency failover's, M.LNCH-T67).
     /// </summary>
     public static void Apply(
         ProcessStartInfo psi,
@@ -50,11 +51,12 @@ public static class ProviderCredentials
         ICredentialStore? store = null,
         string? kimiConfigPath = null,
         string? claudeCredentialsPath = null,
-        string? billingModePath = null)
+        string? billingModePath = null,
+        string? claudeBilling = null)
     {
         if (string.Equals(providerKey, "Claude", StringComparison.OrdinalIgnoreCase))
         {
-            var mode = ClaudeBillingMode.Read(billingModePath);
+            var mode = claudeBilling ?? ClaudeBillingMode.Read(billingModePath);
             if (mode == ClaudeBillingMode.Team)
             {
                 // An inherited key (wt.exe's environment, a parent shell) would still bill it.

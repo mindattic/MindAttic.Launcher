@@ -17,9 +17,15 @@ public static class ClaudeRestartGate
 
     public static bool IsFor(RestartResumeRequest request, int runningCliPid) => request.CliPid == runningCliPid;
 
-    /// <summary>A request that only moves the login (no billing) is always still wanted.</summary>
+    /// <summary>A request that only moves the login (no billing) is always still wanted, and so is a failover: its
+    /// billing is the CLI's own, not the mode's (M.LNCH-T67).</summary>
     public static bool StillWanted(RestartResumeRequest request, string? billingModePath = null) =>
-        request.Billing is null || ClaudeBillingMode.Read(billingModePath) == request.Billing;
+        request.Billing is null || request.Failover || ClaudeBillingMode.Read(billingModePath) == request.Billing;
+
+    /// <summary>Whether the CLI may be restarted for <paramref name="request"/> now: at once for <c>"now":true</c> (its
+    /// turn already ended at a limit error), else only at its idle point (<see cref="IsIdle"/>).</summary>
+    public static bool IsReady(RestartResumeRequest request, string? sessionContextDirectory = null, DateTime? nowUtc = null) =>
+        request.Now || IsIdle(request, sessionContextDirectory, nowUtc);
 
     public static bool IsIdle(RestartResumeRequest request, string? sessionContextDirectory = null, DateTime? nowUtc = null)
     {

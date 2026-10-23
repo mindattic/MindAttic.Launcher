@@ -72,6 +72,66 @@ public sealed class ClaudeRestartTests
         Assert.That(HostControlPipeServer.Parse(text), Is.Null);
 
     [Test]
+    public void Parse_reads_the_orchestrators_failover_request()
+    {
+        // The exact line MindAttic.Orchestrator's AccountMove.FailoverMessage sends (M.ORCH-T664).
+        var r = HostControlPipeServer.Parse("""{"type":"restart-resume","reason":"failover","billing":"api","configDir":"","now":true,"session":"abc","cliPid":4242,"cwd":"D:\\Projects\\Prose","requestedAt":"2026-10-23T16:00:00Z"}""");
+
+        Assert.That(r, Is.EqualTo(new RestartResumeRequest("api", "abc", 4242, @"D:\Projects\Prose", "", Failover: true, Now: true)));
+    }
+
+    [Test]
+    public void Parse_reads_a_move_back_off_the_key_as_not_now() =>
+        Assert.That(HostControlPipeServer.Parse("""{"type":"restart-resume","reason":"failover","billing":"team","configDir":"C:\\a","now":false,"session":"abc","cliPid":7}"""),
+            Is.EqualTo(new RestartResumeRequest("team", "abc", 7, null, @"C:\a", Failover: true, Now: false)));
+
+    [Test]
+    public void Parse_needs_a_billing_on_a_failover() =>
+        Assert.That(HostControlPipeServer.Parse("""{"type":"restart-resume","reason":"failover","configDir":"","now":true,"session":"abc","cliPid":7}"""), Is.Null);
+
+    [Test]
+    public void A_failover_is_never_dropped_for_differing_from_the_mode()
+    {
+        var billing = Path.Combine(dir, "billing.json");
+        File.WriteAllText(billing, """{"mode": "team"}""");
+
+        Assert.That(ClaudeRestartGate.StillWanted(Request("api") with { Failover = true }, billing), Is.True);
+        Assert.That(ClaudeRestartGate.StillWanted(Request("api") with { Failover = true }, Path.Combine(dir, "missing.json")), Is.True);
+    }
+
+    [Test]
+    public void A_now_request_restarts_without_waiting_for_the_idle_point()
+    {
+        State("busy");
+
+        Assert.That(ClaudeRestartGate.IsReady(Request("api") with { Failover = true, Now = true }, dir), Is.True);
+        Assert.That(ClaudeRestartGate.IsReady(Request("api") with { Failover = true }, dir), Is.False);
+        State("idle");
+        Assert.That(ClaudeRestartGate.IsReady(Request("api") with { Failover = true }, dir), Is.True);
+    }
+
+    [Test]
+    public void A_failovers_billing_holds_until_another_request_says_otherwise()
+    {
+        string? billing = null;
+
+        billing = ClaudeBillingMode.Next(billing, Request("api") with { Failover = true, ConfigDir = "" });
+        Assert.That(billing, Is.EqualTo(ClaudeBillingMode.Api));
+
+        // A later login move (no billing) keeps it.
+        billing = ClaudeBillingMode.Next(billing, new RestartResumeRequest(null, "s", 1, null, @"C:\a"));
+        Assert.That(billing, Is.EqualTo(ClaudeBillingMode.Api));
+
+        // The move back off the key is its own billing too.
+        billing = ClaudeBillingMode.Next(billing, Request("team") with { Failover = true });
+        Assert.That(billing, Is.EqualTo(ClaudeBillingMode.Team));
+
+        // A billing-switch request puts the CLI back on the mode.
+        billing = ClaudeBillingMode.Next(billing, Request("api"));
+        Assert.That(billing, Is.Null);
+    }
+
+    [Test]
     public void The_control_pipe_is_outside_the_tab_prefix() =>
         Assert.That(HostControlPipeServer.PipeName("Claude", 77), Is.EqualTo("mindattic-control-claude-77")
             .And.Not.StartWith(HostInputPipeServer.PipeNamePrefix));

@@ -109,6 +109,26 @@ public sealed class ProviderCredentialsTests
     }
 
     [Test]
+    public void A_failover_bills_its_own_billing_whatever_the_mode_says()
+    {
+        // M.LNCH-T67: billing.json says team, but this one CLI failed over to the API key, and back.
+        var (dir, billing, credentials) = BillingFixture("team");
+        try
+        {
+            var store = new FakeCredentialStore(new() { ["claude"] = "sk-ant-failover" });
+            var psi = new ProcessStartInfo("claude");
+
+            ProviderCredentials.Apply(psi, "Claude", store, claudeCredentialsPath: credentials, billingModePath: billing, claudeBilling: ClaudeBillingMode.Api);
+            Assert.That(psi.Environment["ANTHROPIC_API_KEY"], Is.EqualTo("sk-ant-failover"));
+
+            File.WriteAllText(billing, """{ "mode": "api" }""");
+            ProviderCredentials.Apply(psi, "Claude", store, claudeCredentialsPath: credentials, billingModePath: billing, claudeBilling: ClaudeBillingMode.Team);
+            Assert.That(psi.Environment.ContainsKey("ANTHROPIC_API_KEY"), Is.False);
+        }
+        finally { Directory.Delete(dir, recursive: true); }
+    }
+
+    [Test]
     public void An_unknown_billing_mode_keeps_the_login_rule()
     {
         var (dir, billing, credentials) = BillingFixture("bitcoin");

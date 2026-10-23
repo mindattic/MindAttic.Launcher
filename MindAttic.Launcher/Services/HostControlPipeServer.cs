@@ -10,7 +10,13 @@ namespace MindAttic.Launcher.Services;
 /// <param name="Billing">The billing mode asked for, or null for a request that only moves the login.</param>
 /// <param name="ConfigDir">The login to restart under: null keeps the CLI's current one, "" is the global
 /// login (no <c>CLAUDE_CONFIG_DIR</c>), any other value becomes <c>CLAUDE_CONFIG_DIR</c>.</param>
-public sealed record RestartResumeRequest(string? Billing, string Session, int CliPid, string? Cwd, string? ConfigDir = null);
+/// <param name="Failover">An emergency failover (<c>"reason":"failover"</c>, M.LNCH-T67): <see cref="Billing"/> is this
+/// CLI's own, whatever <c>billing.json</c>'s mode says, so it is never dropped for differing from the mode and is kept for
+/// the CLI's later restarts until another request says otherwise.</param>
+/// <param name="Now">Restart at once rather than at the next idle point (<c>"now":true</c>: the CLI's turn already
+/// ended at a limit error).</param>
+public sealed record RestartResumeRequest(string? Billing, string Session, int CliPid, string? Cwd, string? ConfigDir = null,
+    bool Failover = false, bool Now = false);
 
 /// <summary>
 /// Background loop on the tab's control pipe, <c>mindattic-control-{provider}-{pid}</c>: the channel
@@ -25,6 +31,8 @@ public sealed record RestartResumeRequest(string? Billing, string Session, int C
 /// removed), a path sets CLAUDE_CONFIG_DIR. <c>billing</c>, when present, must be <c>team</c> or <c>api</c>;
 /// it may be left out only when <c>configDir</c> is given, so a request can move the login alone (such a
 /// request doesn't wait on the billing mode). A request with neither is not well formed.
+/// <c>"reason":"failover"</c> (M.LNCH-T67, the Orchestrator's emergency failover to the API key) must carry a
+/// <c>billing</c>, which then holds for this CLI alone; <c>"now":true</c> restarts at once instead of at the idle point.
 /// </summary>
 public sealed class HostControlPipeServer : IDisposable
 {
@@ -73,11 +81,14 @@ public sealed class HostControlPipeServer : IDisposable
                 if (billing is not (ClaudeBillingMode.Team or ClaudeBillingMode.Api)) return null;
             }
             if (billing is null && configDir is null) return null;
+            var failover = Str(root, "reason") == "failover";
+            if (failover && billing is null) return null;
+            var now = root.TryGetProperty("now", out var n) && n.ValueKind == JsonValueKind.True;
             var session = Str(root, "session");
             if (string.IsNullOrWhiteSpace(session)) return null;
             if (!root.TryGetProperty("cliPid", out var pid) || pid.ValueKind != JsonValueKind.Number || !pid.TryGetInt32(out var cliPid))
                 return null;
-            return new RestartResumeRequest(billing, session, cliPid, Str(root, "cwd"), configDir);
+            return new RestartResumeRequest(billing, session, cliPid, Str(root, "cwd"), configDir, failover, now);
         }
         catch (JsonException)
         {

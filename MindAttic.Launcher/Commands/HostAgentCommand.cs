@@ -190,6 +190,8 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
         // landing during agent startup isn't missed.
         using var inputPipe = new HostInputPipeServer(provider.Key);
 
+        // The billing this CLI keeps on top of the mode: an emergency failover's (M.LNCH-T67), until another request says otherwise.
+        string? claudeBilling = null;
         RestartResumeRequest? pending = null;
         var pendingLock = new object();
         using var controlPipe = isClaude
@@ -233,7 +235,7 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
             // expects it — an env var for Gemini, config.toml for Kimi. A missing
             // Vault entry is a no-op; the CLI falls back to its own configured auth.
             // Claude follows the Orchestrator's billing mode (ClaudeBillingMode).
-            ProviderCredentials.Apply(psi, provider.Key);
+            ProviderCredentials.Apply(psi, provider.Key, claudeBilling: isClaude ? claudeBilling : null);
             if (isClaude) ClaudeLogin.Apply(psi, claudeConfigDir);
             return psi;
         }
@@ -266,12 +268,17 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
                     lock (pendingLock) if (ReferenceEquals(pending, request)) pending = null;
                     continue;
                 }
-                if (!ClaudeRestartGate.IsIdle(request)) continue;
+                if (!ClaudeRestartGate.IsReady(request)) continue;
                 lock (pendingLock) if (ReferenceEquals(pending, request)) pending = null;
 
                 System.Console.WriteLine();
                 claudeConfigDir = ClaudeLogin.Next(claudeConfigDir, request);
-                System.Console.WriteLine(request.ConfigDir is not null
+                claudeBilling = ClaudeBillingMode.Next(claudeBilling, request);
+                System.Console.WriteLine(request.Failover
+                    ? request.Billing == ClaudeBillingMode.Api
+                        ? $"No login has room: restarting Claude on the API key under {ClaudeLogin.Describe(claudeConfigDir)}, resuming this conversation..."
+                        : $"Restarting Claude back on {ClaudeLogin.Describe(claudeConfigDir)} off the API key, resuming this conversation..."
+                    : request.ConfigDir is not null
                     ? $"Restarting Claude under {ClaudeLogin.Describe(claudeConfigDir)}, resuming this conversation..."
                     : request.Billing == ClaudeBillingMode.Api
                         ? "Restarting Claude to bill the API key, resuming this conversation..."

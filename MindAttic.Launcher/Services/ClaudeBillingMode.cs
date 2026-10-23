@@ -19,6 +19,14 @@ public static class ClaudeBillingMode
 
     public static string DefaultPath => Path.Combine(SessionContextDirectory, "billing.json");
 
+    /// <summary>
+    /// The billing a hosted CLI keeps after <paramref name="request"/> (M.LNCH-T67), on top of the mode: a failover's
+    /// <c>billing</c> is the CLI's own and holds for its later restarts; any other request with a <c>billing</c> puts it
+    /// back on the mode (null); a request without one (a login move) keeps <paramref name="current"/>.
+    /// </summary>
+    public static string? Next(string? current, RestartResumeRequest request) =>
+        request.Failover ? request.Billing : request.Billing is null ? current : null;
+
     /// <summary><see cref="Team"/>, <see cref="Api"/>, or null when no mode is set.</summary>
     public static string? Read(string? path = null)
     {
