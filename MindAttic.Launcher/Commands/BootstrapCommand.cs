@@ -65,30 +65,63 @@ public sealed class BootstrapCommand : Command<BootstrapCommand.Settings>
         return ok;
     }
 
+    /// <summary>
+    /// The outside world <see cref="Run"/> touches, so tests can swap each piece. The defaults are
+    /// the real services.
+    /// </summary>
+    public sealed record Seams(
+        PrerequisiteService Prerequisites,
+        WorkspaceCloneService Cloner,
+        Func<string, bool> Confirm,
+        Func<string?> GetToken,
+        Func<IReadOnlySet<string>?> FetchTagged,
+        Func<string, bool> RestoreAppData,
+        Func<string, string, bool> RestoreSqlDatabases,
+        Func<string, bool> RestoreSqliteDatabases,
+        string BackupBase)
+    {
+        public static Seams Real() => new(
+            new PrerequisiteService(),
+            new WorkspaceCloneService(),
+            question => AnsiConsole.Confirm(question, defaultValue: false),
+            () => GitHubCredentials.GetToken(),
+            () => TopicRepoSync.FetchOrNull(),
+            RestoreCommand.RestoreAppData,
+            RestoreCommand.RestoreSqlDatabases,
+            RestoreCommand.RestoreSqliteDatabases,
+            BackupService.DefaultBackupBase);
+    }
+
     public override int Execute(CommandContext context, Settings settings)
     {
         var workspaceRoot = settings.WorkspaceRoot;
         if (string.IsNullOrWhiteSpace(workspaceRoot))
             workspaceRoot = AnsiConsole.Ask("Workspace root?", @"D:\Projects\MindAttic");
+        return Run(workspaceRoot, settings, Seams.Real());
+    }
+
+    /// <summary>The whole pipeline against <paramref name="seams"/>; returns the process exit code.</summary>
+    public static int Run(string workspaceRoot, Settings settings, Seams seams)
+    {
         Directory.CreateDirectory(workspaceRoot);
 
         var server = string.IsNullOrWhiteSpace(settings.Server) ? PrerequisiteService.DefaultLocalDbServer : settings.Server.Trim();
-        var prereq = new PrerequisiteService();
-        var from = settings.From ?? FindNewestBackupFolder();
+        var prereq = seams.Prerequisites;
+        var from = settings.From ?? FindNewestBackupFolder(seams.BackupBase);
 
         var ok = RunPhases(new Phases(
             Prerequisites: () => EnsurePrerequisites(prereq),
-            OptionalTools: () => { if (!settings.SkipOptional) OfferOptionalTools(prereq); return true; },
+            OptionalTools: () => { if (!settings.SkipOptional) OfferOptionalTools(prereq, seams.Confirm); return true; },
             AiClis: () => { EnsureAiClis(prereq); return true; },
-            RestoreAppData: () => RestoreAppData(from),
-            Repos: () => CloneRepos(workspaceRoot),
+            RestoreAppData: () => RestoreAppData(from, seams.RestoreAppData),
+            Repos: () => CloneRepos(workspaceRoot, seams.GetToken, seams.FetchTagged, seams.Cloner),
             StartLocalDb: () => StartLocalDb(prereq, server),
-            RestoreDatabases: () => RestoreDatabases(from, server)));
+            RestoreDatabases: () => RestoreDatabases(from, server, seams.RestoreSqlDatabases, seams.RestoreSqliteDatabases)));
 
         return ok ? 0 : 1;
     }
 
-    private static bool EnsurePrerequisites(PrerequisiteService prereq)
+    internal static bool EnsurePrerequisites(PrerequisiteService prereq)
     {
         AnsiConsole.MarkupLine("[bold]Prerequisites[/]");
         var ok = true;
@@ -103,7 +136,7 @@ public sealed class BootstrapCommand : Command<BootstrapCommand.Settings>
         return ok;
     }
 
-    private static void OfferOptionalTools(PrerequisiteService prereq)
+    internal static void OfferOptionalTools(PrerequisiteService prereq, Func<string, bool> confirm)
     {
         AnsiConsole.WriteLine();
         AnsiConsole.MarkupLine("[bold]Optional tools[/]");
@@ -114,7 +147,7 @@ public sealed class BootstrapCommand : Command<BootstrapCommand.Settings>
                 AnsiConsole.MarkupLine($"  [grey50]{Markup.Escape(tool.Name)} already installed — skipped[/]");
                 continue;
             }
-            if (!AnsiConsole.Confirm($"  Install {tool.Name}?", defaultValue: false)) continue;
+            if (!confirm($"  Install {tool.Name}?")) continue;
 
             var (installOk, output) = prereq.InstallViaWinget(tool.WingetId);
             AnsiConsole.MarkupLine(installOk
@@ -137,7 +170,7 @@ public sealed class BootstrapCommand : Command<BootstrapCommand.Settings>
         }
     }
 
-    private static bool RestoreAppData(string? from)
+    private static bool RestoreAppData(string? from, Func<string, bool> restore)
     {
         AnsiConsole.WriteLine();
         AnsiConsole.MarkupLine("[bold]AppData[/]");
@@ -152,14 +185,14 @@ public sealed class BootstrapCommand : Command<BootstrapCommand.Settings>
             return false;
         }
         AnsiConsole.MarkupLine($"  Restoring from {Markup.Escape(from)}");
-        return RestoreCommand.RestoreAppData(from);
+        return restore(from);
     }
 
-    private static bool CloneRepos(string workspaceRoot)
+    internal static bool CloneRepos(string workspaceRoot, Func<string?> getToken, Func<IReadOnlySet<string>?> fetchTagged, WorkspaceCloneService cloner)
     {
         AnsiConsole.WriteLine();
         AnsiConsole.MarkupLine("[bold]Repos[/]");
-        var token = GitHubCredentials.GetToken();
+        var token = getToken();
         if (string.IsNullOrWhiteSpace(token))
         {
             AnsiConsole.MarkupLine("  [yellow]No GitHub token configured (none in the restored AppData either) — can't discover which repos to clone.[/]");
@@ -167,14 +200,14 @@ public sealed class BootstrapCommand : Command<BootstrapCommand.Settings>
             return false;
         }
 
-        var tagged = TopicRepoSync.FetchOrNull();
+        var tagged = fetchTagged();
         if (tagged is null)
         {
             AnsiConsole.MarkupLine("  [yellow]Could not fetch the tagged repo list from GitHub.[/]");
             return false;
         }
 
-        var results = new WorkspaceCloneService().CloneAll(workspaceRoot, tagged, r =>
+        var results = cloner.CloneAll(workspaceRoot, tagged, r =>
         {
             AnsiConsole.MarkupLine(r.Ok
                 ? $"  [green]{(r.AlreadyPresent ? "pulled" : "cloned")}[/] {Markup.Escape(r.RepoName)}{(r.AlreadyPresent && r.Message is not null ? $" [grey50]({Markup.Escape(r.Message)})[/]" : "")}"
@@ -198,23 +231,23 @@ public sealed class BootstrapCommand : Command<BootstrapCommand.Settings>
         return ok;
     }
 
-    private static bool RestoreDatabases(string? from, string server)
+    private static bool RestoreDatabases(string? from, string server, Func<string, string, bool> restoreSql, Func<string, bool> restoreSqlite)
     {
         if (from is null || !Directory.Exists(from)) return true; // already reported by the AppData phase
 
         AnsiConsole.WriteLine();
         AnsiConsole.MarkupLine($"[bold]Databases[/] [grey50](into {Markup.Escape(server)})[/]");
-        var ok = RestoreCommand.RestoreSqlDatabases(from, server);
-        ok &= RestoreCommand.RestoreSqliteDatabases(from);
+        var ok = restoreSql(from, server);
+        ok &= restoreSqlite(from);
         return ok;
     }
 
-    private static string? FindNewestBackupFolder()
+    internal static string? FindNewestBackupFolder(string backupBase)
     {
         try
         {
-            if (!Directory.Exists(BackupService.DefaultBackupBase)) return null;
-            return Directory.GetDirectories(BackupService.DefaultBackupBase)
+            if (!Directory.Exists(backupBase)) return null;
+            return Directory.GetDirectories(backupBase)
                 .OrderByDescending(d => d, StringComparer.OrdinalIgnoreCase)
                 .FirstOrDefault();
         }
