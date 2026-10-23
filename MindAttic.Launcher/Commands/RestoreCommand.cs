@@ -35,6 +35,7 @@ public sealed class RestoreCommand : Command<RestoreCommand.Settings>
 
     /// <summary>The restore services as delegates so tests never reach sqlcmd/sqlite3 or the real AppData.</summary>
     public sealed record Deps(
+        string AppDataTarget,
         Func<string, AppDataBackupResult> RestoreAppDataZip,
         Func<string, string, DatabaseRestoreResult> RestoreBak,
         Func<AppSettings> LoadSettings,
@@ -46,6 +47,7 @@ public sealed class RestoreCommand : Command<RestoreCommand.Settings>
             var sql = new SqlRestoreService();
             var sqlite = new SqliteRestoreService();
             return new Deps(
+                appData.Source,
                 zip => appData.Restore(zip, appData.Source),
                 (server, bak) => sql.RestoreOne(server, bak),
                 () => new SettingsStore().Load(),
@@ -80,7 +82,7 @@ public sealed class RestoreCommand : Command<RestoreCommand.Settings>
 
         var r = d.RestoreAppDataZip(zipPath);
         AnsiConsole.MarkupLine(r.Ok
-            ? $"[white]AppData:[/] [green]restored[/] -> {Markup.Escape(AppDataBackupService.DefaultSource)}"
+            ? $"[white]AppData:[/] [green]restored[/] -> {Markup.Escape(d.AppDataTarget)}"
             : $"[white]AppData:[/] [red]FAILED[/] {Markup.Escape(r.Output)}");
         return r.Ok;
     }

@@ -88,10 +88,10 @@ public sealed class BackupRestoreCommandTests
         var code = BackupCommand.Run(1, BackupDeps(folders: folders, delete: f =>
         {
             attempted.Add(f);
-            if (f.EndsWith("01-02")) throw new IOException("locked");
+            if (attempted.Count == 1) throw new IOException("locked");
         }));
         Assert.That(code, Is.EqualTo(0));
-        Assert.That(attempted, Has.Count.EqualTo(2));
+        Assert.That(attempted, Is.EquivalentTo(new[] { @"R:\Backup\2026-01-02", @"R:\Backup\2026-01-01" }));
     }
 
     [Test]
@@ -132,6 +132,7 @@ public sealed class BackupRestoreCommandTests
 
     private static RestoreCommand.Deps RestoreDeps(RestoreRecorder r, AppSettings? settings = null, bool ok = true) =>
         new(
+            @"C:\AppData",
             zip => { r.Zips.Add(zip); return new AppDataBackupResult(ok, zip, 0, TimeSpan.Zero); },
             (server, bak) => { r.Baks.Add((server, bak)); return new DatabaseRestoreResult(server, Path.GetFileNameWithoutExtension(bak), ok, ok ? 0 : 1, TimeSpan.Zero, bak); },
             () => settings ?? new AppSettings(),
