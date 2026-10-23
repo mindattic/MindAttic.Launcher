@@ -11,6 +11,8 @@ One Windows console for a whole workspace of repos: open any project in a colore
    Commit and sync               commit and push changes per project or across all
    Tickets                       open tickets, repo status and ticket-log checks across the workspace
    Backup                        back up MindAttic to R:\Backup\MindAttic
+   Scheduled Backup              status and toggle for the nightly backup task
+   Orchestrator                  the dashboard: every session, the token budget and pace, the ticket queue
    Settings                      CLI development: the model each agent CLI runs with
    Open Command Prompt (Admin)   open cmd as Administrator at the workspace root
    Open PowerShell (Admin)       open PowerShell as Administrator at the workspace root
@@ -19,7 +21,7 @@ One Windows console for a whole workspace of repos: open any project in a colore
    Quit                          close this menu (other tabs are untouched)
 ```
 
-A single `MindAttic.Launcher.exe` (`net10.0-windows`, published `win-x64`) built on [Spectre.Console](https://spectreconsole.net/): one interactive menu plus scriptable `host`, `commit` and `version` sub-commands. It is a console app, so the menu above is a text rendering of its items rather than a screenshot.
+A single `MindAttic.Launcher.exe` (`net10.0-windows`, published `win-x64`) built on [Spectre.Console](https://spectreconsole.net/): one interactive menu plus scriptable `host`, `commit`, `backup`, `restore`, `bootstrap`, `adopt-repos` and `version` sub-commands. It is a console app, so the menu above is a text rendering of its items rather than a screenshot.
 
 ## Why
 
@@ -59,7 +61,7 @@ You should see the menu above. On first run the launcher offers every git repo d
 
 ## How it works
 
-`Program.cs` wires a `Spectre.Console.Cli` `CommandApp<MainMenuCommand>` with the named sub-commands `host` and `commit` plus `version`/`--version`. Running the exe with no arguments drives the interactive menu; every named sub-command is a scriptable front door onto the same services. There is no separate code path for "menu mode" versus "CLI mode" (HOUSE-LAW-6, "one engine, many front doors").
+`Program.cs` wires a `Spectre.Console.Cli` `CommandApp<MainMenuCommand>` with the named sub-commands `host`, `commit`, `backup`, `restore`, `bootstrap` and `adopt-repos` plus `version`/`--version`. Running the exe with no arguments drives the interactive menu; every named sub-command is a scriptable front door onto the same services. There is no separate code path for "menu mode" versus "CLI mode" (HOUSE-LAW-6, "one engine, many front doors").
 
 ```text
                          args
@@ -68,7 +70,8 @@ You should see the menu above. On first run the launcher offers every git repo d
                           |
         +-----------------+------------------+--------------+
         |                 |                  |              |
-   (default)          host              commit          version
+   (default)    host, adopt-repos     commit, backup,   version
+                                      restore, bootstrap
         |                 |                  |
   MainMenuCommand   HostAgentCommand   CommitCommand
         |                 |                  |
@@ -95,6 +98,7 @@ All sub-commands are declared in `MindAttic.Launcher/Program.cs` and implemented
 | `backup` | Non-interactive backup (files, AppData, SQL Server, SQLite) — what a scheduled task calls instead of the Backup menu. Options below. | `0` ok; `1` partial failure |
 | `restore` | Restores AppData, SQL Server and SQLite databases from a dated backup folder. Options below. | `0` ok; `1` partial failure; `2` bad `--from` |
 | `bootstrap` | New-machine setup: install prerequisites, clone every `wip`-tagged repo, restore the latest reachable backup. Options below. | `0` ok; `1` partial failure |
+| `adopt-repos` | Onboarding, run once by `setup.ps1`: tags every non-archived GitHub repo the token can see with the `wip` topic so the roster fills on first launch. Saves a token first from the environment variable named by `--token-env <NAME>` (default `MINDATTIC_GITHUB_TOKEN`) when none is configured. | `0` ok; `1` no token, or at least one repo could not be tagged |
 | `version` (alias `--version`) | Prints the assembly's informational version and the running exe's process path. | `0` |
 
 ### host
@@ -199,6 +203,7 @@ Launching the exe with no arguments runs `MainMenuCommand`, which loads settings
 | Open Project Tab | `open` | Opens `OpenProjectMenu`: pick a project, then which agent CLI to launch it with, then `ProjectActionMenu`. |
 | Backup | `backup` | Runs `BackupMenu` directly: confirms source, target and database list, then runs the file, AppData, SQL Server and SQLite backup. |
 | Scheduled Backup | `schedule` | Opens `ScheduledBackupMenu`: a pointer to the nightly backup job, which now lives in MindAttic.WatchDog (M.WD-T6). Launcher no longer registers a Scheduled Task. |
+| Orchestrator | `orchestrator` | Opens the MindAttic.Orchestrator dashboard (every session, the token budget and pace, the ticket queue) from `C:\Apps\MindAttic.Orchestrator` or the per-user `Programs` folder. It is a separate app, so it opens beside the menu, not in a tab; a notice says so when it is not installed. |
 | Settings | `settings` | Opens `SettingsMenu`: the model each agent CLI runs with (only). |
 | Open Command Prompt (Admin) | `cmd` | Opens an elevated `cmd` tab at the workspace root via UAC (`wt … -- cmd`, `Verb=runas`). |
 | Open PowerShell (Admin) | `ps` | Same, but `powershell`. |
@@ -266,7 +271,7 @@ On first run, if that Vault file does not yet exist, `SettingsStore` looks for a
 | `Gemini` | Google Antigravity | `agy --dangerously-skip-permissions` |
 | `Kimi` | Kimi Code | `kimi --yolo` |
 
-`AgentProviderRegistry.Current()` (the first-listed provider, Claude by ordering) is what any launch path with no explicit choice resolves to: a bare `host` with no `--provider`, and the Status menu item. Opening a project tab from the menu always prompts instead (see [Open Project Tab](#open-project-tab)); the pick is never saved.
+`AgentProviderRegistry.Current()` (the first-listed provider, Claude by ordering) is what any launch path with no explicit choice resolves to: a bare `host` with no `--provider`, and nothing else (there is no Status menu item). Opening a project tab from the menu always prompts instead (see [Open Project Tab](#open-project-tab)); the pick is never saved.
 
 ### Credential injection
 
@@ -278,7 +283,7 @@ On first run, if that Vault file does not yet exist, `SettingsStore` looks for a
 
 ### Host tabs
 
-Every agent session is a Windows Terminal tab running `MindAttic.Launcher.exe host --name <Project> --provider <Key> --title "<Title> [<Key>]"` (or `--path <dir>` for Status), built by `WindowsTerminalLauncher.BuildAgentTab` / `BuildAgentTabAtPath` and opened with `--tabColor`/`--colorScheme` from the project. Inside that process, two background loops run for the tab's lifetime:
+Every agent session is a Windows Terminal tab running `MindAttic.Launcher.exe host --name <Project> --provider <Key> --title "<Title> [<Key>]"` (or `--path <dir>` for a General tab), built by `WindowsTerminalLauncher.BuildAgentTab` / `BuildAgentTabAtPath` and opened with `--tabColor`/`--colorScheme` from the project. Inside that process, two background loops run for the tab's lifetime:
 
 - `TitlePinner` polls the console's bottom rows every 250 ms (`ConsoleBuffer.ReadBottomRows`) for a busy signature ("esc to interrupt", "ctrl+c to cancel", or Claude Code's "N shell(s)" background-job footer) and reasserts the tab title with a busy (`▶`) or idle (`⏸`) glyph whenever the CLI's own title write has clobbered it. Windows Terminal exposes no API for another process to set a tab's title, so the watchdog has to live inside the hosted process. This requires the tab be opened without `--suppressApplicationTitle` (`BuildAgentTab` sets `SuppressApplicationTitle = false`).
 - `HostInputPipeServer` listens on a per-tab named pipe (`mindattic-host-{provider}-{pid}`, single-instance) and injects any text it receives into the console's input buffer via `ConsoleInputInjector`, the delivery mechanism for [Remote control](#remote-control).
