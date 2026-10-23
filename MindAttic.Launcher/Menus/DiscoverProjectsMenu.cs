@@ -156,7 +156,7 @@ public sealed class DiscoverProjectsMenu(SettingsStore store, GitService git, Wi
 
     // hex -> project name, for flagging palette colors already in use. First
     // project to claim a hex wins the label (good enough for a hint).
-    private static Dictionary<string, string> UsedColors(AppSettings settings)
+    internal static Dictionary<string, string> UsedColors(AppSettings settings)
     {
         var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var p in settings.Projects ?? [])

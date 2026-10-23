@@ -283,12 +283,12 @@ public sealed class BackupMenu(
         }
     }
 
-    private static string Format(TimeSpan t) =>
+    internal static string Format(TimeSpan t) =>
         t.TotalHours >= 1
             ? t.ToString(@"h\:mm\:ss")
             : t.ToString(@"m\:ss");
 
-    private static string FormatBytes(long bytes) =>
+    internal static string FormatBytes(long bytes) =>
         bytes switch
         {
             < 1024L                => $"{bytes} B",

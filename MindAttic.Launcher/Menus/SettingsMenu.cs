@@ -142,7 +142,7 @@ public sealed class SettingsMenu(AgentProviderRegistry providers, SettingsStore 
         Thread.Sleep(800);
     }
 
-    private static string Mask(string token) =>
+    internal static string Mask(string token) =>
         token.Length <= 8 ? "••••" : $"{token[..4]}…{token[^4..]}";
 
     private void EditWindowsTerminalPath()

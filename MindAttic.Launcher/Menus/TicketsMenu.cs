@@ -98,7 +98,7 @@ public sealed class TicketsMenu(string workspaceRoot)
 
     private static string Count(int n) => n == 0 ? "[grey]0[/]" : $"[yellow]{n}[/]";
 
-    private static string GitHubCell(RepoStatus s, IReadOnlyDictionary<string, GitHubRepoInfo>? github)
+    internal static string GitHubCell(RepoStatus s, IReadOnlyDictionary<string, GitHubRepoInfo>? github)
     {
         if (s.Error is not null) return "[red]git error[/]";
         if (s.GitHubSlug is null) return "[red]no GitHub remote[/]";
