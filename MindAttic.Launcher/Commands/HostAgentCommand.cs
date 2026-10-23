@@ -62,54 +62,27 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
         // arbitrary directory with no roster entry (e.g. a General tab, rooted
         // at the whole MindAttic workspace). Otherwise --name looks a registered
         // project up the usual way.
-        Project? project = null;
-        string workingDir;
-        if (!string.IsNullOrWhiteSpace(settings.Path))
+        var root = ResolveRoot(settings.Path, settings.Name, n => ProjectRoster.FindByName(store.Load(), n));
+        if (root.Error is not null)
         {
-            workingDir = settings.Path!;
+            System.Console.Error.WriteLine(root.Error);
+            return root.ExitCode;
         }
-        else if (!string.IsNullOrWhiteSpace(settings.Name))
-        {
-            project = ProjectRoster.FindByName(store.Load(), settings.Name);
-            if (project is null)
-            {
-                System.Console.Error.WriteLine($"Unknown project: {settings.Name}");
-                return 1;
-            }
-            workingDir = project.Path;
-        }
-        else
-        {
-            System.Console.Error.WriteLine("--name or --path is required.");
-            return 64;
-        }
+        var project = root.Project;
+        var workingDir = root.WorkingDir!;
 
-        AgentProvider provider;
-        if (!string.IsNullOrWhiteSpace(settings.Provider))
+        // An explicit --provider that doesn't resolve is a caller bug (a typo),
+        // not "quietly launch the default" - fail loudly instead. With none, a
+        // direct `host` call resolves to the first-listed provider.
+        var resolved = ResolveProvider(settings.Provider, registry);
+        if (resolved.Error is not null)
         {
-            // An explicit --provider that doesn't resolve is a caller bug (a
-            // typo), not "quietly launch the project default" — that would hide
-            // the mistake and start the wrong agent. Fail loudly instead.
-            var requested = registry.ByKey(settings.Provider);
-            if (requested is null)
-            {
-                System.Console.Error.WriteLine($"Unknown provider: {settings.Provider}");
-                return 4;
-            }
-            provider = requested;
+            System.Console.Error.WriteLine(resolved.Error);
+            return resolved.ExitCode;
         }
-        else
-        {
-            // No explicit --provider: there's no per-project override anymore
-            // (that's now an ephemeral, menu-time choice — see OpenProjectMenu),
-            // so a direct/scripted `host` call always resolves to the
-            // first-listed provider (Claude, per AgentProviderRegistry.Defaults).
-            provider = registry.Current();
-        }
+        var provider = resolved.Provider!;
 
-        var title = !string.IsNullOrWhiteSpace(settings.Title) ? settings.Title!
-                  : !string.IsNullOrWhiteSpace(settings.Name) ? settings.Name
-                  : System.IO.Path.GetFileName(workingDir.TrimEnd(System.IO.Path.DirectorySeparatorChar));
+        var title = ResolveTitle(settings.Title, settings.Name, workingDir);
 
         var parts = CommandLineParser.Split(provider.RunCommand);
         if (parts.Length == 0)
@@ -206,30 +179,7 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
             // Bare npm-shim names (codex, gemini, ...) have no .exe on PATH, and
             // CreateProcessW (what Process.Start uses below) doesn't walk PATHEXT
             // the way cmd.exe does — so resolve to the actual .cmd/.bat shim first.
-            var psi = new ProcessStartInfo(ExecutableResolver.Resolve(parts[0]))
-            {
-                UseShellExecute = false,
-                // Working directory matches the wt tab so the agent starts in the
-                // right root; menu code already passes -d to wt, but be defensive in
-                // case someone runs `mindattic host` directly.
-                WorkingDirectory = Directory.Exists(workingDir) ? workingDir : Environment.CurrentDirectory
-            };
-            for (var i = 1; i < parts.Length; i++) psi.ArgumentList.Add(parts[i]);
-            // wt.exe can carry a stale NO_COLOR=1 from a since-unset registry value
-            // (it only re-reads the environment on its own fresh launch), which
-            // would otherwise flow down and strip every hosted agent's colors.
-            psi.EnvironmentVariables.Remove("NO_COLOR");
-            if (resumeSession is not null)
-            {
-                // A restart carries the conversation on; the seed prompt was its first turn's.
-                psi.ArgumentList.Add("--resume");
-                psi.ArgumentList.Add(resumeSession);
-            }
-            // A seed prompt is the agent's first positional arg — `claude <flags>
-            // "<order>"` / `codex <flags> "<order>"`. Both start interactive with
-            // the prompt loaded; the Status tab uses this to pre-fill /status.
-            else if (!string.IsNullOrWhiteSpace(settings.Prompt))
-                psi.ArgumentList.Add(settings.Prompt!);
+            var psi = BuildBaseStartInfo(parts, workingDir, resumeSession, settings.Prompt);
 
             // Push this provider's API key (if Vault has one) to wherever its CLI
             // expects it — an env var for Gemini, config.toml for Kimi. A missing
@@ -309,28 +259,93 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
     /// is shown in the tab and the agent still starts on the local code; it never
     /// blocks the launch. Non-repos and repos with no remote are skipped quietly.
     /// </summary>
-    private static void PullBeforeLaunch(string workingDir, string title)
+    private static void PullBeforeLaunch(string workingDir, string title) =>
+        PullBeforeLaunch(workingDir, title, new GitService().Pull, System.Console.WriteLine, WriteWarning);
+
+    private static void WriteWarning(string line)
+    {
+        var prior = System.Console.ForegroundColor;
+        System.Console.ForegroundColor = ConsoleColor.Yellow;
+        System.Console.WriteLine(line);
+        System.Console.ForegroundColor = prior;
+    }
+
+    public static void PullBeforeLaunch(
+        string workingDir, string title,
+        Func<string, (bool ok, string? message)> pull,
+        Action<string> write, Action<string> warn)
     {
         var dotGit = System.IO.Path.Combine(workingDir, ".git");
         if (!Directory.Exists(dotGit) && !File.Exists(dotGit)) return;
 
-        System.Console.WriteLine($"Pulling the latest {title}...");
-        var (ok, message) = new GitService().Pull(workingDir);
+        write($"Pulling the latest {title}...");
+        var (ok, message) = pull(workingDir);
         if (ok)
         {
-            System.Console.WriteLine($"  {message}.");
+            write($"  {message}.");
             return;
         }
         if (GitService.IsNoUpstream(message)) return;
 
-        var prior = System.Console.ForegroundColor;
-        System.Console.ForegroundColor = ConsoleColor.Yellow;
-        System.Console.WriteLine("  Pull failed; starting on the local code:");
+        warn("  Pull failed; starting on the local code:");
         foreach (var line in (message ?? "").Split('\n'))
         {
             if (!string.IsNullOrWhiteSpace(line))
-                System.Console.WriteLine($"    {line.TrimEnd()}");
+                warn($"    {line.TrimEnd()}");
         }
-        System.Console.ForegroundColor = prior;
+    }
+
+    public readonly record struct RootResult(string? WorkingDir, Project? Project, string? Error, int ExitCode);
+
+    /// <summary>--path wins over --name; an unknown name is 1, neither is 64.</summary>
+    public static RootResult ResolveRoot(string? path, string? name, Func<string, Project?> findByName)
+    {
+        if (!string.IsNullOrWhiteSpace(path)) return new(path, null, null, 0);
+        if (string.IsNullOrWhiteSpace(name)) return new(null, null, "--name or --path is required.", 64);
+        var project = findByName(name);
+        return project is null
+            ? new(null, null, $"Unknown project: {name}", 1)
+            : new(project.Path, project, null, 0);
+    }
+
+    public readonly record struct ProviderResult(AgentProvider? Provider, string? Error, int ExitCode);
+
+    /// <summary>An unknown explicit --provider is 4, never a fallback; none given is the first-listed provider.</summary>
+    public static ProviderResult ResolveProvider(string? requestedKey, AgentProviderRegistry registry)
+    {
+        if (string.IsNullOrWhiteSpace(requestedKey)) return new(registry.Current(), null, 0);
+        var requested = registry.ByKey(requestedKey);
+        return requested is null
+            ? new(null, $"Unknown provider: {requestedKey}", 4)
+            : new(requested, null, 0);
+    }
+
+    /// <summary>--title, else --name, else the folder name of the path (trailing separator trimmed).</summary>
+    public static string ResolveTitle(string? title, string? name, string workingDir) =>
+        !string.IsNullOrWhiteSpace(title) ? title
+        : !string.IsNullOrWhiteSpace(name) ? name
+        : System.IO.Path.GetFileName(workingDir.TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar));
+
+    /// <summary>The agent's start info before provider credentials and login: argv, working dir, NO_COLOR stripped, then --resume or the seed prompt last.</summary>
+    public static ProcessStartInfo BuildBaseStartInfo(string[] parts, string workingDir, string? resumeSession, string? prompt)
+    {
+        // Bare npm-shim names (codex, gemini, ...) have no .exe on PATH, and
+        // CreateProcessW doesn't walk PATHEXT, so resolve to the real shim first.
+        var psi = new ProcessStartInfo(ExecutableResolver.Resolve(parts[0]))
+        {
+            UseShellExecute = false,
+            WorkingDirectory = Directory.Exists(workingDir) ? workingDir : Environment.CurrentDirectory
+        };
+        for (var i = 1; i < parts.Length; i++) psi.ArgumentList.Add(parts[i]);
+        // wt.exe can carry a stale NO_COLOR=1 that would strip every hosted agent's colors.
+        psi.EnvironmentVariables.Remove("NO_COLOR");
+        if (resumeSession is not null)
+        {
+            psi.ArgumentList.Add("--resume");
+            psi.ArgumentList.Add(resumeSession);
+        }
+        else if (!string.IsNullOrWhiteSpace(prompt))
+            psi.ArgumentList.Add(prompt);
+        return psi;
     }
 }
