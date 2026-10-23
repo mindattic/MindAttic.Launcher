@@ -67,11 +67,10 @@ public sealed class ProjectSetupMenu(SettingsStore store, string projectName)
         AnsiConsole.MarkupLine($"  Current: [cyan1]{Markup.Escape(string.IsNullOrWhiteSpace(current) ? "(none)" : current!)}[/]");
         AnsiConsole.WriteLine();
 
-        var entered = AnsiConsole.Prompt(
-            new TextPrompt<string>($"  [cyan1]{Markup.Escape(label)}[/] [grey50](blank to clear):[/]")
-                .AllowEmpty()
-                .DefaultValue(current ?? "")
-                .ShowDefaultValue(!string.IsNullOrWhiteSpace(current)));
+        // Not a Spectre TextPrompt with a default: Enter on a blank line returns the default (the
+        // current value), so "blank to clear" could never clear. Blank clears; Esc cancels.
+        var entered = Prompt.TextOrCancel($"  [cyan1]{Markup.Escape(label)}[/] [grey50](blank to clear, Esc to cancel):[/] ");
+        if (entered is null) return;
 
         var trimmed = entered.Trim();
         store.Update(s =>
