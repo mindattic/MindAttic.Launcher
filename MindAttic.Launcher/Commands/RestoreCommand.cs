@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
+using MindAttic.Launcher.Models;
 using MindAttic.Launcher.Services;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -29,23 +30,46 @@ public sealed class RestoreCommand : Command<RestoreCommand.Settings>
 
     public override int Execute(CommandContext context, Settings settings)
     {
-        if (string.IsNullOrWhiteSpace(settings.From) || !Directory.Exists(settings.From))
+        return Run(settings.From, settings.Server, Deps.Live());
+    }
+
+    /// <summary>The restore services as delegates so tests never reach sqlcmd/sqlite3 or the real AppData.</summary>
+    public sealed record Deps(
+        Func<string, AppDataBackupResult> RestoreAppDataZip,
+        Func<string, string, DatabaseRestoreResult> RestoreBak,
+        Func<AppSettings> LoadSettings,
+        Func<string, string, string, SqliteRestoreResult> RestoreDump)
+    {
+        public static Deps Live()
         {
-            AnsiConsole.MarkupLine($"[red]--from folder not found: {Markup.Escape(settings.From ?? "")}[/]");
+            var appData = new AppDataBackupService();
+            var sql = new SqlRestoreService();
+            var sqlite = new SqliteRestoreService();
+            return new Deps(
+                zip => appData.Restore(zip, appData.Source),
+                (server, bak) => sql.RestoreOne(server, bak),
+                () => new SettingsStore().Load(),
+                (project, dbFile, dump) => sqlite.RestoreOne(project, dbFile, dump));
+        }
+    }
+
+    /// <summary>The exit code for a restore: 2 for a missing/blank --from, else 0 only if every part succeeded.</summary>
+    public static int Run(string? from, string? server, Deps d)
+    {
+        if (string.IsNullOrWhiteSpace(from) || !Directory.Exists(from))
+        {
+            AnsiConsole.MarkupLine($"[red]--from folder not found: {Markup.Escape(from ?? "")}[/]");
             return 2;
         }
-
-        var from = settings.From;
-        var ok = true;
-
-        ok &= RestoreAppData(from);
-        ok &= RestoreSqlDatabases(from, settings.Server ?? SqlBackupService.DefaultInstance);
-        ok &= RestoreSqliteDatabases(from);
-
+        var ok = RestoreAppData(from, d);
+        ok &= RestoreSqlDatabases(from, server ?? SqlBackupService.DefaultInstance, d);
+        ok &= RestoreSqliteDatabases(from, d);
         return ok ? 0 : 1;
     }
 
-    internal static bool RestoreAppData(string from)
+    internal static bool RestoreAppData(string from) => RestoreAppData(from, Deps.Live());
+
+    public static bool RestoreAppData(string from, Deps d)
     {
         var zipPath = Path.Combine(from, AppDataBackupService.ZipFileName);
         if (!File.Exists(zipPath))
@@ -54,10 +78,9 @@ public sealed class RestoreCommand : Command<RestoreCommand.Settings>
             return true;
         }
 
-        var appData = new AppDataBackupService();
-        var r = appData.Restore(zipPath, appData.Source);
+        var r = d.RestoreAppDataZip(zipPath);
         AnsiConsole.MarkupLine(r.Ok
-            ? $"[white]AppData:[/] [green]restored[/] -> {Markup.Escape(appData.Source)}"
+            ? $"[white]AppData:[/] [green]restored[/] -> {Markup.Escape(AppDataBackupService.DefaultSource)}"
             : $"[white]AppData:[/] [red]FAILED[/] {Markup.Escape(r.Output)}");
         return r.Ok;
     }
@@ -70,7 +93,9 @@ public sealed class RestoreCommand : Command<RestoreCommand.Settings>
     /// not always reversible (e.g. <c>(localdb)\MSSQLLocalDB</c>), so it's not used to resolve a
     /// per-file server; pass <c>--server</c> for anything other than the default instance.
     /// </summary>
-    internal static bool RestoreSqlDatabases(string from, string server)
+    internal static bool RestoreSqlDatabases(string from, string server) => RestoreSqlDatabases(from, server, Deps.Live());
+
+    public static bool RestoreSqlDatabases(string from, string server, Deps d)
     {
         var databasesRoot = Path.Combine(from, SqlBackupService.DatabasesSubfolder);
         if (!Directory.Exists(databasesRoot)) return true;
@@ -78,11 +103,10 @@ public sealed class RestoreCommand : Command<RestoreCommand.Settings>
         var baks = Directory.GetFiles(databasesRoot, "*.bak", SearchOption.AllDirectories);
         if (baks.Length == 0) return true;
 
-        var restore = new SqlRestoreService();
         var ok = true;
         foreach (var bak in baks)
         {
-            var r = restore.RestoreOne(server, bak);
+            var r = d.RestoreBak(server, bak);
             ok &= r.Ok;
             AnsiConsole.MarkupLine(r.Ok
                 ? $"[white]{Markup.Escape(r.Database)}@{Markup.Escape(r.Server)}:[/] [green]restored[/] ({Format(r.Elapsed)})"
@@ -98,13 +122,14 @@ public sealed class RestoreCommand : Command<RestoreCommand.Settings>
     /// A dump with no matching project in the current roster is reported and skipped — there's
     /// nowhere known to put it back.
     /// </summary>
-    internal static bool RestoreSqliteDatabases(string from)
+    internal static bool RestoreSqliteDatabases(string from) => RestoreSqliteDatabases(from, Deps.Live());
+
+    public static bool RestoreSqliteDatabases(string from, Deps d)
     {
         var sqliteRoot = Path.Combine(from, SqlBackupService.DatabasesSubfolder, SqliteBackupService.SqliteSubfolder);
         if (!Directory.Exists(sqliteRoot)) return true;
 
-        var store = new SettingsStore();
-        var settings = store.Load();
+        var settings = d.LoadSettings();
         var targets = SqliteBackupService.CollectTargets(settings);
         // A project can list several SQLite files; each dump is named after its file's stem, so match on
         // (project, stem) — keying on the project alone restored every dump over the project's first file.
@@ -112,7 +137,6 @@ public sealed class RestoreCommand : Command<RestoreCommand.Settings>
             .GroupBy(t => t.Project, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
 
-        var restore = new SqliteRestoreService();
         var ok = true;
         foreach (var projectDir in Directory.GetDirectories(sqliteRoot))
         {
@@ -132,7 +156,7 @@ public sealed class RestoreCommand : Command<RestoreCommand.Settings>
                     continue;
                 }
 
-                var r = restore.RestoreOne(projectName, dbFile, dump);
+                var r = d.RestoreDump(projectName, dbFile, dump);
                 ok &= r.Ok;
                 AnsiConsole.MarkupLine(r.Ok
                     ? $"[white]{Markup.Escape(r.Project)}:[/] [green]restored[/] -> {Markup.Escape(r.DatabaseFile)} ({Format(r.Elapsed)})"

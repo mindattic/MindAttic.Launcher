@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
+using MindAttic.Launcher.Models;
 using MindAttic.Launcher.Services;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -23,18 +24,47 @@ public sealed class BackupCommand : Command<BackupCommand.Settings>
         public int? Keep { get; init; }
     }
 
-    public override int Execute(CommandContext context, Settings settings)
+    /// <summary>The services <see cref="Run"/> drives, as delegates so tests never reach robocopy/sqlcmd/sqlite3.</summary>
+    public sealed record Deps(
+        string BackupBase,
+        Func<string> ResolveTargetFolder,
+        Func<string, BackupResult> RunFiles,
+        Func<string, AppDataBackupResult> ZipAppData,
+        Func<AppSettings> LoadSettings,
+        Func<string, DatabaseDiscoveryResult> DiscoverLocalDb,
+        Func<IReadOnlyList<BackupTarget>, string, IReadOnlyList<DatabaseBackupResult>> BackupSql,
+        Func<IReadOnlyList<SqliteBackupTarget>, string, IReadOnlyList<SqliteBackupResult>> BackupSqlite,
+        Func<string, IReadOnlyList<string>> ListFolders,
+        Action<string> DeleteFolder);
+
+    public static Deps Live()
     {
         var store = new SettingsStore();
         var backup = new BackupService();
         var appData = new AppDataBackupService();
         var sql = new SqlBackupService();
         var sqlite = new SqliteBackupService();
+        return new Deps(
+            backup.BackupBase,
+            backup.ResolveTargetFolder,
+            t => backup.Run(t),
+            appData.Zip,
+            store.Load,
+            server => sql.DiscoverDatabases(server),
+            (targets, t) => sql.Backup(targets, t),
+            (targets, t) => sqlite.Backup(targets, t),
+            baseFolder => Directory.Exists(baseFolder) ? Directory.GetDirectories(baseFolder) : [],
+            folder => Directory.Delete(folder, recursive: true));
+    }
 
+    public override int Execute(CommandContext context, Settings settings) => Run(settings.Keep, Live());
+
+    public static int Run(int? keepOption, Deps d)
+    {
         string target;
         try
         {
-            target = backup.ResolveTargetFolder();
+            target = d.ResolveTargetFolder();
         }
         catch (Exception ex)
         {
@@ -45,21 +75,21 @@ public sealed class BackupCommand : Command<BackupCommand.Settings>
 
         var ok = true;
 
-        var fileResult = backup.Run(target);
+        var fileResult = d.RunFiles(target);
         ok &= fileResult.Ok;
         AnsiConsole.MarkupLine(fileResult.Ok
             ? $"[white]Files:[/] [green]OK[/] ({FormatBytes(fileResult.BytesCopied)})"
             : $"[white]Files:[/] [red]FAILED (robocopy exit {fileResult.RobocopyExitCode})[/]");
 
-        var appDataResult = appData.Zip(target);
+        var appDataResult = d.ZipAppData(target);
         ok &= appDataResult.Ok;
         AnsiConsole.MarkupLine(appDataResult.Ok
             ? $"[white]AppData:[/] [green]OK[/] ({FormatBytes(appDataResult.Bytes)})"
             : $"[white]AppData:[/] [red]FAILED[/] {Markup.Escape(appDataResult.Output)}");
 
-        var settingsData = store.Load();
+        var settingsData = d.LoadSettings();
         var dbTargets = SqlBackupService.CollectTargets(settingsData);
-        var localDb = sql.DiscoverDatabases(SqlBackupService.LocalDbInstance);
+        var localDb = d.DiscoverLocalDb(SqlBackupService.LocalDbInstance);
         if (localDb.Ok)
         {
             dbTargets = SqlBackupService.Merge(dbTargets, localDb.Targets);
@@ -69,7 +99,7 @@ public sealed class BackupCommand : Command<BackupCommand.Settings>
         {
             AnsiConsole.MarkupLine($"[yellow]LocalDB discovery skipped:[/] {Markup.Escape(localDb.Output)}");
         }
-        var dbResults = sql.Backup(dbTargets, target);
+        var dbResults = d.BackupSql(dbTargets, target);
         foreach (var r in dbResults)
         {
             ok &= r.Ok;
@@ -79,7 +109,7 @@ public sealed class BackupCommand : Command<BackupCommand.Settings>
         }
 
         var sqliteTargets = SqliteBackupService.CollectTargets(settingsData);
-        var sqliteResults = sqlite.Backup(sqliteTargets, target);
+        var sqliteResults = d.BackupSqlite(sqliteTargets, target);
         foreach (var r in sqliteResults)
         {
             ok &= r.Ok;
@@ -89,22 +119,20 @@ public sealed class BackupCommand : Command<BackupCommand.Settings>
         }
 
         var pruned = 0;
-        if (settings.Keep is not null && !ok)
+        if (keepOption is not null && !ok)
         {
             // A failed run must never delete older backups: they may be the only good ones left.
             AnsiConsole.MarkupLine("[yellow]Backup had failures; skipping prune of older backup folders.[/]");
         }
-        else if (settings.Keep is { } keep)
+        else if (keepOption is { } keep)
         {
-            var existing = Directory.Exists(backup.BackupBase)
-                ? Directory.GetDirectories(backup.BackupBase)
-                : [];
+            var existing = d.ListFolders(d.BackupBase);
             var stale = BackupService.ResolveStaleFolders(existing, keep);
             foreach (var folder in stale)
             {
                 try
                 {
-                    Directory.Delete(folder, recursive: true);
+                    d.DeleteFolder(folder);
                     pruned++;
                 }
                 catch (Exception ex)
@@ -124,7 +152,7 @@ public sealed class BackupCommand : Command<BackupCommand.Settings>
         return ok ? 0 : 1;
     }
 
-    private static string FormatBytes(long bytes) =>
+    public static string FormatBytes(long bytes) =>
         bytes switch
         {
             < 1024L => $"{bytes} B",
