@@ -11,8 +11,14 @@ namespace MindAttic.Launcher.Services;
 /// </summary>
 public sealed class ClaudeStatusService
 {
-    private static readonly string ClaudeDir =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude");
+    private readonly string ClaudeDir;
+
+    /// <summary>Reads from <c>~/.claude</c>.</summary>
+    public ClaudeStatusService() : this(null) { }
+
+    /// <summary>Reads from <paramref name="claudeDir"/> instead of <c>~/.claude</c> (the seam tests use a temp folder through).</summary>
+    public ClaudeStatusService(string? claudeDir) =>
+        ClaudeDir = claudeDir ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude");
 
     private string[] _cachedLines = [];
     private DateTime _lastRefresh = DateTime.MinValue;
@@ -40,7 +46,7 @@ public sealed class ClaudeStatusService
 
     // ── Usage line ───────────────────────────────────────────────────────────
 
-    private string BuildUsageLine()
+    public string BuildUsageLine()
     {
         var usage = ReadTodayFromJsonl();
         string label;
@@ -148,7 +154,7 @@ public sealed class ClaudeStatusService
         usage[model] = usage.GetValueOrDefault(model) + total;
     }
 
-    private static Dictionary<string, long> ReadFromStatsCache(out string? cacheDate)
+    private Dictionary<string, long> ReadFromStatsCache(out string? cacheDate)
     {
         cacheDate = null;
         var usage = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
@@ -264,7 +270,7 @@ public sealed class ClaudeStatusService
                                        or InvalidOperationException or InvalidCastException or FormatException) { return null; }
     }
 
-    private string? BuildRateLimitLine()
+    public string? BuildRateLimitLine()
     {
         var json = ReadRateLimitStatus(OrchestratorDbPath(), Path.Combine(ClaudeDir, "rl-status.json"));
         if (json is null) return null;
@@ -308,7 +314,7 @@ public sealed class ClaudeStatusService
 
     // ── Formatting helpers ───────────────────────────────────────────────────
 
-    private static string ShortModelName(string model) => model switch
+    public static string ShortModelName(string model) => model switch
     {
         "claude-fable-5"              => "Fable 5",
         "claude-opus-4-8"             => "Opus 4.8",
@@ -322,7 +328,7 @@ public sealed class ClaudeStatusService
         _ => model
     };
 
-    private static string FormatTokens(long n) => n switch
+    public static string FormatTokens(long n) => n switch
     {
         >= 1_000_000 => $"{n / 1_000_000.0:F1}M",
         >= 10_000    => $"{n / 1_000.0:F0}K",
