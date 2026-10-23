@@ -164,7 +164,7 @@ public static class Menu
     }
 
     /// <summary>Moves the highlight for navigation keys; returns false for any other key.</summary>
-    private static bool Navigate(ConsoleKey key, int count, int pageSize, ref int index)
+    internal static bool Navigate(ConsoleKey key, int count, int pageSize, ref int index)
     {
         var next = key switch
         {
@@ -182,7 +182,7 @@ public static class Menu
     }
 
     /// <summary>Maps a non-navigation key to a result, or null to keep waiting.</summary>
-    private static MenuResult? Resolve(
+    internal static MenuResult? Resolve(
         ConsoleKey key, IReadOnlyList<MenuItem> rows, int index, bool allowBack, IReadOnlySet<ConsoleKey>? customKeys)
     {
         switch (key)
@@ -295,7 +295,7 @@ public static class Menu
     /// length is the visible share of the list, its offset how far down it is.
     /// Display only; it isn't clickable.
     /// </summary>
-    private static (int Start, int Length) Thumb(int total, int visible, int first, int trackLines)
+    internal static (int Start, int Length) Thumb(int total, int visible, int first, int trackLines)
     {
         if (total <= visible) return (0, trackLines);
         var length = Math.Max(1, (int)Math.Round((double)trackLines * visible / total));
@@ -303,7 +303,7 @@ public static class Menu
         return (start, length);
     }
 
-    private static string Truncate(string text, int max) =>
+    internal static string Truncate(string text, int max) =>
         max <= 0 ? "" : text.Length <= max ? text : max == 1 ? "…" : text[..(max - 1)] + "…";
 
     /// <summary>
@@ -311,7 +311,7 @@ public static class Menu
     /// styling is dropped and the plain text is cut off with an ellipsis (cutting
     /// inside markup tags would leave them unbalanced).
     /// </summary>
-    private static string Fit(string markup, int max)
+    internal static string Fit(string markup, int max)
     {
         var plain = Markup.Remove(markup);
         return plain.Length <= max ? markup : Markup.Escape(Truncate(plain, max));

@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <Content Include="M.ico" />
+    <InternalsVisibleTo Include="MindAttic.Launcher.Tests" />
   </ItemGroup>
 
 
