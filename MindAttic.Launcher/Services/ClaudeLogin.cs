@@ -17,7 +17,7 @@ public static class ClaudeLogin
     public static string Initial(string? inherited) => inherited?.Trim() ?? "";
 
     /// <summary>The login a host's explicit <c>--config-dir</c> names: "" when it's the global login's own folder
-    /// (<c>~/.claude</c>, how a Launcher that asked passes the global login, M.LNCH-T65), else the folder as given.</summary>
+    /// (<c>~/.claude</c>, how a scoped Launcher passes the global login), else the folder as given.</summary>
     public static string FromOption(string configDir, string? globalConfigDir = null)
     {
         var dir = configDir.Trim();

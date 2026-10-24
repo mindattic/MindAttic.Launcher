@@ -1,3 +1,4 @@
+using System.IO;
 using System.Linq;
 using MindAttic.Launcher.Models;
 using MindAttic.Launcher.Services;
@@ -69,5 +70,83 @@ public sealed class WindowsTerminalLauncherTests
 
         Assert.That(none.Command, Does.Not.Contain("--prompt"));
         Assert.That(blank.Command, Does.Not.Contain("--prompt"));
+    }
+
+    // ---- an explicit login (outside the usual scope) ----------------------------------
+
+    private string loginRoot = "";
+
+    [SetUp]
+    public void SetUpLoginRoot() => loginRoot = Path.Combine(Path.GetTempPath(), "launcher-wtl-" + Path.GetRandomFileName());
+
+    [TearDown]
+    public void TearDownLoginRoot()
+    {
+        try { Directory.Delete(loginRoot, recursive: true); } catch (IOException) { }
+    }
+
+    private string Login(string email)
+    {
+        var dir = Path.Combine(loginRoot, email);
+        Directory.CreateDirectory(dir);
+        return dir;
+    }
+
+    [Test]
+    public void An_explicit_login_opens_in_its_window_with_its_badge_and_color_and_tells_host()
+    {
+        var jordan = Login("jordan@mindattic.com");
+        var wt = new WindowsTerminalLauncher(claudeLook: () => null);
+
+        foreach (var tab in new[]
+                 {
+                     wt.BuildAgentTab(Project, Provider, "mindattic.exe", "go", login: jordan),
+                     wt.BuildAgentTabAtPath("General [Claude]", @"D:\Projects", Provider, "mindattic.exe", prompt: "go", login: jordan),
+                 })
+        {
+            var look = LoginLook.ForConfigDir(jordan);
+            var args = tab.Command.ToList();
+            Assert.That(args[args.IndexOf("--config-dir") + 1], Is.EqualTo(jordan));
+            Assert.That(tab.Window, Is.EqualTo("jordan"));
+            Assert.That(tab.Title, Does.StartWith("JO: "));
+            Assert.That(tab.TabColor, Is.EqualTo(look.TabColor));
+            Assert.That(args[^2], Is.EqualTo("--prompt"), "the prompt stays the host's last argument");
+        }
+    }
+
+    [Test]
+    public void The_global_login_is_passed_as_its_own_folder_which_host_maps_back_to_global()
+    {
+        var global = new LoginLook("ryan", "RY", "#2E7D32");
+        var wt = new WindowsTerminalLauncher(claudeLook: () => null, loginLook: dir => dir == "" ? global : LoginLook.ForConfigDir(dir));
+
+        var tab = wt.BuildAgentTab(Project, Provider, "mindattic.exe", login: "");
+
+        var args = tab.Command.ToList();
+        var passed = args[args.IndexOf("--config-dir") + 1];
+        Assert.That(passed, Is.EqualTo(ClaudeResume.GlobalConfigDir));
+        Assert.That(ClaudeLogin.FromOption(passed), Is.EqualTo(""));
+        Assert.That(tab.Window, Is.EqualTo("ryan"));
+    }
+
+    [Test]
+    public void FromOption_keeps_a_per_cli_folder()
+    {
+        var jordan = Login("jordan@mindattic.com");
+        Assert.That(ClaudeLogin.FromOption(jordan, Path.Combine(loginRoot, ".claude")), Is.EqualTo(jordan));
+        Assert.That(ClaudeLogin.FromOption(Path.Combine(loginRoot, ".claude") + "\\", Path.Combine(loginRoot, ".claude")), Is.EqualTo(""));
+    }
+
+    [Test]
+    public void A_scope_wins_over_an_explicit_login_and_other_providers_ignore_it()
+    {
+        var codexProvider = new AgentProvider { Key = "Codex", Name = "OpenAI Codex", RunCommand = "codex" };
+        var scope = new AccountScope("amy@mindattic.com", Login("amy@mindattic.com"), "Amy");
+        var scoped = new WindowsTerminalLauncher(scope).BuildAgentTab(Project, Provider, "mindattic.exe", login: Login("jordan@mindattic.com"));
+        Assert.That(scoped.Command[scoped.Command.ToList().IndexOf("--config-dir") + 1], Is.EqualTo(scope.ConfigDir));
+
+        var codex = new WindowsTerminalLauncher(claudeLook: () => null).BuildAgentTab(Project, codexProvider, "mindattic.exe", login: "");
+        Assert.That(codex.Command, Does.Not.Contain("--config-dir"));
+        Assert.That(codex.Window, Is.Null);
     }
 }

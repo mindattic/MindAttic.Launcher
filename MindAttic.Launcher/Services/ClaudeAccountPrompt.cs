@@ -30,7 +30,7 @@ public static class ClaudeAccountPrompt
     }
 
     /// <summary>What the question says about <paramref name="o"/> after its name: its usage left, whether it already has a
-    /// CLI and whether it's the Auto pick. Shared with the Launcher's own question (M.LNCH-T65), so both read the same.</summary>
+    /// CLI and whether it's the Auto pick.</summary>
     public static string Details(ClaudeAccountOption o, bool isAuto)
     {
         var usage = o.HasUsageData

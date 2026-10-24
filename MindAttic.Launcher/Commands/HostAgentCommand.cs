@@ -111,9 +111,9 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
         // that, a Claude tab asks which signed-in login to start on when more than one is around
         // (M.LNCH-T53): --account names one outright, a single login skips the question, and an
         // interactive tab offers the full catalog with the Orchestrator's Auto pick preselected.
-        // An explicit --config-dir (a Launcher scoped to one account, M.LNCH-T54, or one that asked which
-        // account before opening the tab, M.LNCH-T65) wins over whatever was inherited and skips the
-        // question; the global login's own folder (~/.claude) names the global login.
+        // An explicit --config-dir (a Launcher scoped to one account up front, M.LNCH-T54/M.LNCH-T71) wins
+        // over whatever was inherited and skips the question; the global login's own folder (~/.claude)
+        // names the global login.
         var loginGiven = !string.IsNullOrWhiteSpace(settings.ConfigDir);
         var claudeConfigDir = loginGiven
             ? ClaudeLogin.FromOption(settings.ConfigDir!)

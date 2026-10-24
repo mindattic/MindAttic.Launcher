@@ -12,10 +12,10 @@ namespace MindAttic.Launcher.Services;
 /// <para>Every Claude agent tab whose login is known when it opens goes in that person's own window (M.LNCH-T55, the
 /// Orchestrator's rule, M.ORCH-T616): <c>wt -w &lt;alias&gt;</c>, its title badged with the login's initials
 /// ("RD: Repo [Claude]") and its tab colored as the login, all read from <c>mindattic-account.json</c> in the login's
-/// folder (<see cref="LoginLook"/>). A scoped Launcher's login is its scope's; an unscoped one's is the global login while
-/// that's the only one signed in. With per-CLI logins around, an unscoped Launcher asks which login first (M.LNCH-T65,
-/// <see cref="ClaudeTabLogin"/>) and passes the answer as the tab's <c>login</c>: the tab opens in that person's window,
-/// badged and colored as them, and its host gets the login as <c>--config-dir</c>, so it never asks again (M.LNCH-T53).</para>
+/// folder (<see cref="LoginLook"/>). A scoped Launcher's login is its scope's, decided once at startup — either
+/// <c>--account</c> (M.LNCH-T54) or, without it, the one-time question <c>WhoIsUsing</c> asks from the org's current,
+/// eligible members (M.LNCH-T71, which replaced an earlier per-tab question, M.LNCH-T65); an unscoped Launcher's is the
+/// global login.</para>
 /// <para>Such a tab also opens with the login's own Terminal profile (M.LNCH-T56, <see cref="LoginTerminalProfiles"/>), whose
 /// icon is the login's initials on its tab color, so whose tab it is shows as an icon too. Building a tab only names the
 /// profile; <see cref="Open"/> writes its fragment and icon, so tests that build tabs never touch the fragments folder.</para>
@@ -137,8 +137,8 @@ public sealed class WindowsTerminalLauncher(
     /// Builds an "agent host" tab — invokes `mindattic host …` for the given
     /// project + provider. When <paramref name="prompt"/> is set it's passed
     /// through as <c>--prompt</c> so the agent opens with that text pre-loaded.
-    /// <paramref name="login"/> is the login an unscoped Launcher asked for (M.LNCH-T65): a config dir, "" for the
-    /// global login, null when it didn't ask. A scope wins over it; other providers ignore it.
+    /// <paramref name="login"/> is an explicit login to open on, outside the usual scope (a config dir, "" for the
+    /// global login, null for none); a scope wins over it, and other providers ignore it.
     /// </summary>
     public Tab BuildAgentTab(Project project, AgentProvider provider, string hostExePath, string? prompt = null, string? login = null)
     {

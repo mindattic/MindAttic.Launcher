@@ -117,13 +117,11 @@ public sealed class OpenProjectMenu(SettingsStore store, AgentProviderRegistry p
 
         var provider = PickProvider("General Prompt", "the workspace");
         if (provider is null) return;
-        // More than one Claude login signed in: ask which here, so the tab opens in that person's window (M.LNCH-T65).
-        var login = ClaudeAccountMenu.Choose(wt, provider, "General Prompt");
-        if (login.Cancelled) return;
+        // Who this opens as was already decided for the whole session at Launcher startup (M.LNCH-T71).
 
         Screen.Working();
         ExePath.EnsureFresh();
-        wt.Open(wt.BuildAgentTabAtPath($"General [{provider.Key}]", root, provider, ExePath.Release, login: login.Login));
+        wt.Open(wt.BuildAgentTabAtPath($"General [{provider.Key}]", root, provider, ExePath.Release));
         Thread.Sleep(800);
     }
 
