@@ -7,8 +7,14 @@ namespace MindAttic.Launcher.Services;
 /// the deserializer).</summary>
 public sealed record MemberOption(string Email, string? Name, string Role, string Tier, string Status)
 {
-    /// <summary>What a startup picker shows: the name (or the email when none is set) plus role and tier.</summary>
-    public string Describe() => $"{(string.IsNullOrWhiteSpace(Name) ? Email : Name)} — {Role}, {Tier}";
+    /// <summary>What a startup picker shows: the name (or the email when none is set) plus role and tier, or the
+    /// name alone when there's no role/tier to show (WhoIsUsing's synthetic <see cref="WhoIsUsing.ApiKeyOption"/>
+    /// entry, which is no one's role or tier).</summary>
+    public string Describe()
+    {
+        var label = string.IsNullOrWhiteSpace(Name) ? Email : Name;
+        return string.IsNullOrWhiteSpace(Role) && string.IsNullOrWhiteSpace(Tier) ? label : $"{label} — {Role}, {Tier}";
+    }
 }
 
 /// <summary>

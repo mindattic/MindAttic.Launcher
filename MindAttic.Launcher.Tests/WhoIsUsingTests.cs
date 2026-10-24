@@ -14,6 +14,7 @@ public sealed class WhoIsUsingTests
         OrchestratorMembers.OrchestratorOverride = null;
         WhoIsUsing.AskOverride = null;
         WhoIsUsing.RosterOverride = null;
+        WhoIsUsing.SwitchToApiKeyOverride = null;
     }
 
     // ---- OrchestratorMembers ----------------------------------------------------------
@@ -58,6 +59,14 @@ public sealed class WhoIsUsingTests
         Assert.That(member.Describe(), Is.EqualTo("a@mindattic.com — admin, premium"));
     }
 
+    [Test]
+    public void Describe_omits_the_role_and_tier_when_neither_is_set()
+    {
+        var member = new MemberOption(WhoIsUsing.ApiKeyOption, "API Key", "", "", "");
+
+        Assert.That(member.Describe(), Is.EqualTo("API Key"));
+    }
+
     // ---- WhoIsUsing.Resolve -------------------------------------------------------------
 
     [Test]
@@ -89,7 +98,7 @@ public sealed class WhoIsUsingTests
         WhoIsUsing.AskOverride = roster => { asked = roster; return amy; };
 
         Assert.That(WhoIsUsing.Resolve(), Is.EqualTo("amy@mindattic.com"));
-        Assert.That(asked, Is.EqualTo(new[] { jordan, amy }));
+        Assert.That(asked!.Select(m => m.Email), Is.EqualTo(new[] { "jordan@mindattic.com", "amy@mindattic.com", WhoIsUsing.ApiKeyOption }));
     }
 
     [Test]
@@ -103,6 +112,56 @@ public sealed class WhoIsUsingTests
         WhoIsUsing.AskOverride = _ => null;
 
         Assert.That(WhoIsUsing.Resolve(), Is.Null);
+    }
+
+    [Test]
+    public void Resolve_offers_the_API_Key_alongside_the_real_roster()
+    {
+        WhoIsUsing.RosterOverride = () => new[]
+        {
+            new MemberOption("jordan@mindattic.com", "Jordan", "member", "standard", "active"),
+            new MemberOption("amy@mindattic.com", "Amy", "admin", "premium", "active"),
+        };
+        IReadOnlyList<MemberOption>? asked = null;
+        WhoIsUsing.AskOverride = roster => { asked = roster; return null; };
+
+        WhoIsUsing.Resolve();
+
+        var apiKey = asked!.Last();
+        Assert.That(apiKey.Email, Is.EqualTo(WhoIsUsing.ApiKeyOption));
+        Assert.That(apiKey.Describe(), Is.EqualTo("API Key — bill every CLI to the organization's Vault key, not a person's seat"));
+    }
+
+    [Test]
+    public void Resolve_switches_billing_to_the_API_key_and_returns_null_when_it_is_chosen()
+    {
+        WhoIsUsing.RosterOverride = () => new[]
+        {
+            new MemberOption("jordan@mindattic.com", "Jordan", "member", "standard", "active"),
+            new MemberOption("amy@mindattic.com", "Amy", "admin", "premium", "active"),
+        };
+        WhoIsUsing.AskOverride = roster => roster.Single(m => m.Email == WhoIsUsing.ApiKeyOption);
+        var switched = false;
+        WhoIsUsing.SwitchToApiKeyOverride = () => switched = true;
+
+        Assert.That(WhoIsUsing.Resolve(), Is.Null);
+        Assert.That(switched, Is.True);
+    }
+
+    [Test]
+    public void Resolve_does_not_switch_billing_when_a_real_member_is_chosen()
+    {
+        var amy = new MemberOption("amy@mindattic.com", "Amy", "admin", "premium", "active");
+        WhoIsUsing.RosterOverride = () => new[]
+        {
+            new MemberOption("jordan@mindattic.com", "Jordan", "member", "standard", "active"), amy,
+        };
+        WhoIsUsing.AskOverride = _ => amy;
+        var switched = false;
+        WhoIsUsing.SwitchToApiKeyOverride = () => switched = true;
+
+        Assert.That(WhoIsUsing.Resolve(), Is.EqualTo("amy@mindattic.com"));
+        Assert.That(switched, Is.False);
     }
 
     // ---- WhoIsUsing.Prompt ---------------------------------------------------------------
