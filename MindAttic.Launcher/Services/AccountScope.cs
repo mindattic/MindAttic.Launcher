@@ -7,8 +7,9 @@ namespace MindAttic.Launcher.Services;
 /// A Launcher scoped to one person (M.LNCH-T54): <c>MindAttic.Launcher --account &lt;email&gt;</c> runs the whole Launcher as
 /// that Claude login. Every Claude tab it opens names the login's folder (<see cref="ConfigDir"/>, the per-CLI login under
 /// <c>%USERPROFILE%\.claude-accounts\&lt;email&gt;</c>) in its own command, since Windows Terminal tabs don't inherit the
-/// Launcher's environment, so every CLI it starts bills that person. Its own window title carries <see cref="Alias"/>; its
-/// Claude tabs (and its restart) go in that login's own terminal window, badged and colored as it (<see cref="LoginLook"/>, M.LNCH-T55).
+/// Launcher's environment, so every CLI it starts bills that person. Its own window title carries its real initials badge, the
+/// same "Initials: Title" every repo CLI's tab carries (<see cref="LoginLook.Badge"/>); its Claude tabs (and its restart) go in
+/// that login's own terminal window, badged and colored as it (<see cref="LoginLook"/>, M.LNCH-T55).
 /// </summary>
 public sealed record AccountScope(string Email, string ConfigDir, string Alias)
 {
@@ -96,9 +97,6 @@ public sealed record AccountScope(string Email, string ConfigDir, string Alias)
 
     private static string? Text(JsonElement e, string key) =>
         e.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.String && v.GetString() is { } s && s.Trim().Length > 0 ? s.Trim() : null;
-
-    /// <summary><paramref name="title"/> with this login's alias after it, as every window and tab of a scoped Launcher shows.</summary>
-    public string Stamp(string title) => $"{title} — {Alias}";
 
     /// <summary>Test seam for the sign-in; production runs <c>orchestrator login --account &lt;email&gt;</c> in this console.</summary>
     public static Func<string, int>? SignInOverride { get; set; }

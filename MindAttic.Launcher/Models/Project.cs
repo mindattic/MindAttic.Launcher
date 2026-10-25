@@ -59,20 +59,33 @@ public sealed class Project
     public Dictionary<string, JsonElement>? Extra { get; set; }
 
     /// <summary>
-    /// The leading prefixes a project's name drops where a tab shows it (M.LNCH-T69, the Orchestrator's
-    /// <c>SessionControl.NamePrefixes</c>, M.ORCH-T632): "GTFO.EZ" shows as "EZ".
+    /// The project names known right now (M.LNCH-T69): <see cref="Services.SettingsStore"/> replaces this with the
+    /// roster it just loaded or saved, every time, so <see cref="ShortName"/> can tell a dot-prefix two or more
+    /// projects share (worth stripping, e.g. "GTFO.") from one unique to a single project (kept whole — stripping it
+    /// would hide which org it's under) without threading the roster through every call site. Tests set their own.
     /// </summary>
-    public static readonly IReadOnlyList<string> NamePrefixes = ["GTFO.", "MindAttic.", "Unity."];
+    public static IReadOnlyCollection<string> KnownNames { get; set; } = [];
 
     /// <summary>
-    /// <paramref name="name"/> without a leading <see cref="NamePrefixes"/> entry (case-insensitive); a name that is
-    /// only the prefix stays whole.
+    /// <paramref name="name"/> without its dot-prefix (up to and including the first '.') once two or more of
+    /// <see cref="KnownNames"/> share that prefix, case-insensitively (M.LNCH-T69, generalized from a fixed
+    /// "GTFO."/"MindAttic."/"Unity." list, M.ORCH-T632): "GTFO.EZ" shows as "EZ" once another "GTFO." project is
+    /// known. A name whose prefix nothing else shares, or that is only the prefix, stays whole.
     /// </summary>
-    public static string ShortName(string name)
+    public static string ShortName(string name) =>
+        DotPrefix(name) is { } prefix && SharedPrefixes(KnownNames).Contains(prefix) ? name[prefix.Length..] : name;
+
+    private static HashSet<string> SharedPrefixes(IEnumerable<string> names) =>
+        new(names.Select(DotPrefix).OfType<string>()
+            .GroupBy(p => p, StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key),
+            StringComparer.OrdinalIgnoreCase);
+
+    private static string? DotPrefix(string name)
     {
-        foreach (var prefix in NamePrefixes)
-            if (name.Length > prefix.Length && name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return name[prefix.Length..];
-        return name;
+        var dot = name.IndexOf('.');
+        return dot > 0 && dot < name.Length - 1 ? name[..(dot + 1)] : null;
     }
 
     /// <summary>

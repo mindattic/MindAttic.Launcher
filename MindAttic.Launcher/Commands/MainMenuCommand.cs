@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using MindAttic.Launcher.Menus;
+using MindAttic.Launcher.Models;
 using MindAttic.Launcher.Services;
 using MindAttic.Launcher.Ui;
 using Spectre.Console;
@@ -11,6 +12,21 @@ namespace MindAttic.Launcher.Commands;
 [SuppressMessage("Performance", "CA1812", Justification = "Instantiated by Spectre.Console.Cli")]
 public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
 {
+    private const string AppName = "MindAttic.Launcher";
+
+    /// <summary>
+    /// This process's own window/tab title, in the same "Initials: Title" form every other repo CLI's tab carries
+    /// (<see cref="LoginLook.Badge"/>, M.ORCH-T632): the signed-in login's real initials in front when scoped
+    /// ("RD: Launcher"), so the tab is identifiable at a glance among other logins' tabs in the same Windows Terminal
+    /// window; unscoped, no badge, matching an unscoped CLI's tab elsewhere. The name itself goes through the same
+    /// (now-generalized) prefix strip every project's tab title does.
+    /// </summary>
+    private static string Title(AccountScope? scope)
+    {
+        var shortName = Project.ShortName(AppName);
+        return scope is null ? shortName : LoginLook.ForConfigDir(scope.ConfigDir).Badge(shortName);
+    }
+
     public sealed class Settings : CommandSettings
     {
         [CommandOption("--account <EMAIL>")]
@@ -39,10 +55,11 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
             scope = resolved;
             Screen.Scope = scope.Alias;
         }
-        if (scope is not null)
-        {
-            try { System.Console.Title = scope.Stamp("MindAttic.Launcher"); } catch { /* no console */ }
-        }
+
+        var store = new SettingsStore();
+        _ = store.Load(); // surface legacy-seed migration on launch; also loads the roster Title's ShortName checks
+
+        try { System.Console.Title = Title(scope); } catch { /* no console */ }
 
         // The console starts on the OEM code page, where the menu's rounded box
         // corners, scrollbar thumb (┃) and ellipsis (…) print as '?'. Switch the
@@ -58,9 +75,6 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
             AnsiConsole.Profile.Capabilities.Unicode = true;
         }
         catch (IOException) { /* redirected output: no console code page to set */ }
-
-        var store = new SettingsStore();
-        _ = store.Load(); // surface legacy-seed migration on launch
 
         var providers = new AgentProviderRegistry(store);
         var wt = new WindowsTerminalLauncher(scope);
@@ -231,7 +245,7 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
         // A scoped Launcher (M.LNCH-T54) restarts scoped to the same login, in that person's window (M.LNCH-T55).
         var root = ExePath.RepoRoot;
         var restartScript = root is null ? null : Path.Combine(root, "deploy.ps1");
-        var title = scope?.Stamp("MindAttic.Launcher") ?? "MindAttic.Launcher";
+        var title = Title(scope);
         string[] launchArgs = scope is null ? [] : ["--account", scope.Email];
 
         if (restartScript is null || !File.Exists(restartScript))

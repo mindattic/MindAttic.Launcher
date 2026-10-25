@@ -1,11 +1,22 @@
+using MindAttic.Launcher.Models;
 using MindAttic.Launcher.Services;
 using NUnit.Framework;
 
 namespace MindAttic.Launcher.Tests;
 
 [TestFixture]
+[NonParallelizable] // Project.KnownNames (behind ColorPalette.SchemeName's strip) is process-wide
 public sealed class ColorPaletteTests
 {
+    // Wide enough that every prefix below is shared by a sibling, mirroring the old fixed "GTFO."/"MindAttic."/"Unity."
+    // list's effect now that it's computed from a roster instead (Project.ShortName).
+    [SetUp]
+    public void SetUp() => Project.KnownNames =
+        ["MindAttic.Authentication", "MindAttic.Vault", "mindattic.com", "GTFO.EZ", "GTFO.Dust", "Unity.Eve", "Unity.Other"];
+
+    [TearDown]
+    public void TearDown() => Project.KnownNames = [];
+
     [TestCase("MindAttic.Authentication", ExpectedResult = "MindAttic-Authentication")]
     [TestCase("MindAttic.Vault", ExpectedResult = "MindAttic-Vault")]
     [TestCase("ChiMesh", ExpectedResult = "MindAttic-ChiMesh")]

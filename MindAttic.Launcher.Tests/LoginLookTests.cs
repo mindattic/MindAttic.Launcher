@@ -118,15 +118,23 @@ public sealed class LoginLookTests
         }
     }
 
-    [Test]
+    [Test, NonParallelizable] // Project.KnownNames is process-wide
     public void The_badge_is_the_initials_and_a_colon_as_the_Orchestrator_titles_tabs()
     {
         // M.LNCH-T69 (M.ORCH-T632): "JR: EZ [Claude]", no longer "[JR] GTFO.EZ [Claude]".
         var look = new LoginLook("Jordan", "JR", "#2E7D32");
         Assert.That(look.Badge("EZ [Claude]"), Is.EqualTo("JR: EZ [Claude]"));
         var wt = new WindowsTerminalLauncher(claudeLook: () => look);
-        Assert.That(wt.BuildAgentTab(new Project { Name = "GTFO.EZ", Path = @"D:\Projects\GTFO.EZ" }, Claude, "mindattic.exe").Title,
-            Is.EqualTo("JR: EZ [Claude]"));
+        var saved = Project.KnownNames;
+        try
+        {
+            // Another "GTFO." project must be known for the prefix to be shared (and so stripped) now that the strip
+            // is computed from the roster rather than a fixed list.
+            Project.KnownNames = ["GTFO.EZ", "GTFO.Dust"];
+            Assert.That(wt.BuildAgentTab(new Project { Name = "GTFO.EZ", Path = @"D:\Projects\GTFO.EZ" }, Claude, "mindattic.exe").Title,
+                Is.EqualTo("JR: EZ [Claude]"));
+        }
+        finally { Project.KnownNames = saved; }
     }
 
     [Test]

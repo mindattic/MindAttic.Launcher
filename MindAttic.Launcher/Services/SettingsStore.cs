@@ -58,12 +58,20 @@ public sealed class SettingsStore
         if (!store.Exists())
             SeedFromLegacyIfPresent();
 
-        return store.Load();
+        return Known(store.Load());
     }
 
     public void Save(AppSettings settings) => store.Save(settings);
 
-    public AppSettings Update(Action<AppSettings> mutate) => store.Update(mutate);
+    public AppSettings Update(Action<AppSettings> mutate) => Known(store.Update(mutate));
+
+    // Every load/update refreshes Project.KnownNames with the roster just read, so ShortName sees the real
+    // roster rather than a fixed prefix list, without this store threading it through every menu that titles a tab.
+    private static AppSettings Known(AppSettings settings)
+    {
+        Project.KnownNames = [.. (settings.Projects ?? []).Select(p => p.Name)];
+        return settings;
+    }
 
     private void SeedFromLegacyIfPresent()
     {
