@@ -15,8 +15,11 @@ namespace MindAttic.Launcher.Services;
 /// the CLI's later restarts until another request says otherwise.</param>
 /// <param name="Now">Restart at once rather than at the next idle point (<c>"now":true</c>: the CLI's turn already
 /// ended at a limit error).</param>
+/// <param name="Relocate">Dock/Undock (<c>"reason":"relocate"</c>, M.LNCH-T78): the Orchestrator is moving this tab
+/// between its embedded Terminals panel and a standalone window. There is no restart — once idle, the watch loop
+/// ends the CLI here instead of relaunching it, and the Orchestrator reopens it resumed wherever it's going.</param>
 public sealed record RestartResumeRequest(string? Billing, string Session, int CliPid, string? Cwd, string? ConfigDir = null,
-    bool Failover = false, bool Now = false);
+    bool Failover = false, bool Now = false, bool Relocate = false);
 
 /// <summary>
 /// Background loop on the tab's control pipe, <c>mindattic-control-{provider}-{pid}</c>: the channel
@@ -33,6 +36,8 @@ public sealed record RestartResumeRequest(string? Billing, string Session, int C
 /// request doesn't wait on the billing mode). A request with neither is not well formed.
 /// <c>"reason":"failover"</c> (M.LNCH-T67, the Orchestrator's emergency failover to the API key) must carry a
 /// <c>billing</c>, which then holds for this CLI alone; <c>"now":true</c> restarts at once instead of at the idle point.
+/// <c>"reason":"relocate"</c> (M.LNCH-T78, Dock/Undock) carries neither <c>billing</c> nor <c>configDir</c> and is
+/// well formed anyway: it means end this CLI here, once idle, rather than restart it.
 /// </summary>
 public sealed class HostControlPipeServer : IDisposable
 {
@@ -80,7 +85,8 @@ public sealed class HostControlPipeServer : IDisposable
                 billing = b.ValueKind == JsonValueKind.String ? b.GetString()!.ToLowerInvariant() : null;
                 if (billing is not (ClaudeBillingMode.Team or ClaudeBillingMode.Api)) return null;
             }
-            if (billing is null && configDir is null) return null;
+            var relocate = Str(root, "reason") == "relocate";
+            if (billing is null && configDir is null && !relocate) return null;
             var failover = Str(root, "reason") == "failover";
             if (failover && billing is null) return null;
             var now = root.TryGetProperty("now", out var n) && n.ValueKind == JsonValueKind.True;
@@ -88,7 +94,7 @@ public sealed class HostControlPipeServer : IDisposable
             if (string.IsNullOrWhiteSpace(session)) return null;
             if (!root.TryGetProperty("cliPid", out var pid) || pid.ValueKind != JsonValueKind.Number || !pid.TryGetInt32(out var cliPid))
                 return null;
-            return new RestartResumeRequest(billing, session, cliPid, Str(root, "cwd"), configDir, failover, now);
+            return new RestartResumeRequest(billing, session, cliPid, Str(root, "cwd"), configDir, failover, now, relocate);
         }
         catch (JsonException)
         {

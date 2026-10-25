@@ -210,22 +210,30 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
 
                 RestartResumeRequest? request;
                 lock (pendingLock) request = pending;
-                if (request is null) continue;
+                var action = NextAction(request, p.Id);
+                if (action is WatchAction.Wait) continue;
 
-                // Only the CLI the request names, and only while the mode is still the one asked for;
-                // anything else is dropped. One waiting for its idle point stays pending.
-                if (!ClaudeRestartGate.IsFor(request, p.Id) || !ClaudeRestartGate.StillWanted(request))
-                {
-                    lock (pendingLock) if (ReferenceEquals(pending, request)) pending = null;
-                    continue;
-                }
-                if (!ClaudeRestartGate.IsReady(request)) continue;
                 lock (pendingLock) if (ReferenceEquals(pending, request)) pending = null;
+                if (action is WatchAction.Drop) continue;
+
+                if (action is WatchAction.Relocate)
+                {
+                    // Dock/Undock (M.LNCH-T78): the Orchestrator is moving this tab elsewhere, not asking for a
+                    // restart here. End the CLI once idle and let Execute() return normally, so the standalone
+                    // wt tab's window closes (or the embedded pane shows "ended") and the Orchestrator reopens
+                    // it resumed wherever it's going.
+                    System.Console.WriteLine();
+                    System.Console.WriteLine("This session is relocating; ending here now that it's idle...");
+                    try { p.Kill(entireProcessTree: true); }
+                    catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or AggregateException) { }
+                    p.WaitForExit();
+                    return 0;
+                }
 
                 System.Console.WriteLine();
-                claudeConfigDir = ClaudeLogin.Next(claudeConfigDir, request);
-                claudeBilling = ClaudeBillingMode.Next(claudeBilling, request);
-                System.Console.WriteLine(request.Failover
+                claudeConfigDir = ClaudeLogin.Next(claudeConfigDir, request!);
+                claudeBilling = ClaudeBillingMode.Next(claudeBilling, request!);
+                System.Console.WriteLine(request!.Failover
                     ? request.Billing == ClaudeBillingMode.Api
                         ? $"No login has room: restarting Claude on the API key under {ClaudeLogin.Describe(claudeConfigDir)}, resuming this conversation..."
                         : $"Restarting Claude back on {ClaudeLogin.Describe(claudeConfigDir)} off the API key, resuming this conversation..."
@@ -294,6 +302,23 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
             if (!string.IsNullOrWhiteSpace(line))
                 warn($"    {line.TrimEnd()}");
         }
+    }
+
+    public enum WatchAction { Wait, Drop, Relaunch, Relocate }
+
+    /// <summary>What the watch loop does this tick for the <paramref name="request"/> pending on the control pipe,
+    /// if any: <c>Wait</c> (none pending, or pending but not yet idle), <c>Drop</c> (not for this CLI, or its
+    /// billing mode moved on before its idle point — <see cref="ClaudeRestartGate"/>), <c>Relaunch</c> (an ordinary
+    /// restart-resume, once idle), or <c>Relocate</c> (<c>"reason":"relocate"</c>, M.LNCH-T78, Dock/Undock) — the
+    /// Orchestrator is moving this tab elsewhere, so the loop ends the CLI here instead of restarting it.</summary>
+    public static WatchAction NextAction(RestartResumeRequest? request, int runningCliPid,
+        string? billingModePath = null, string? sessionContextDirectory = null, DateTime? nowUtc = null)
+    {
+        if (request is null) return WatchAction.Wait;
+        if (!ClaudeRestartGate.IsFor(request, runningCliPid) || !ClaudeRestartGate.StillWanted(request, billingModePath))
+            return WatchAction.Drop;
+        if (!ClaudeRestartGate.IsReady(request, sessionContextDirectory, nowUtc)) return WatchAction.Wait;
+        return request.Relocate ? WatchAction.Relocate : WatchAction.Relaunch;
     }
 
     public readonly record struct RootResult(string? WorkingDir, Project? Project, string? Error, int ExitCode);

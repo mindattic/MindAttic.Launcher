@@ -90,6 +90,18 @@ public sealed class ClaudeRestartTests
         Assert.That(HostControlPipeServer.Parse("""{"type":"restart-resume","reason":"failover","configDir":"","now":true,"session":"abc","cliPid":7}"""), Is.Null);
 
     [Test]
+    public void Parse_reads_a_relocate_request_with_neither_billing_nor_configDir()
+    {
+        var r = HostControlPipeServer.Parse("""{"type":"restart-resume","reason":"relocate","session":"abc","cliPid":123,"cwd":"D:\\Projects\\Prose","requestedAt":"2026-10-25T12:00:00Z"}""");
+
+        Assert.That(r, Is.EqualTo(new RestartResumeRequest(null, "abc", 123, @"D:\Projects\Prose", Relocate: true)));
+    }
+
+    [Test]
+    public void Parse_still_rejects_a_request_with_none_of_billing_configDir_or_relocate() =>
+        Assert.That(HostControlPipeServer.Parse("""{"type":"restart-resume","session":"abc","cliPid":123}"""), Is.Null);
+
+    [Test]
     public void A_failover_is_never_dropped_for_differing_from_the_mode()
     {
         var billing = Path.Combine(dir, "billing.json");

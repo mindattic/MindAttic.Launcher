@@ -156,6 +156,55 @@ public sealed class HostAgentCommandTests
         });
     }
 
+    private static RestartResumeRequest RelocateRequest(int pid = 4242) =>
+        new(null, "11111111-2222-3333-4444-555555555555", pid, @"D:\Projects\Prose", Relocate: true);
+
+    private void State(string session, string state) =>
+        File.WriteAllText(Path.Combine(tempRoot, session + ".state.json"), $$"""{"state": "{{state}}"}""");
+
+    [Test]
+    public void No_pending_request_waits() =>
+        Assert.That(HostAgentCommand.NextAction(null, 4242), Is.EqualTo(HostAgentCommand.WatchAction.Wait));
+
+    [Test]
+    public void A_relocate_request_waits_until_idle()
+    {
+        State(RelocateRequest().Session, "busy");
+
+        Assert.That(HostAgentCommand.NextAction(RelocateRequest(), 4242, sessionContextDirectory: tempRoot),
+            Is.EqualTo(HostAgentCommand.WatchAction.Wait));
+    }
+
+    [Test]
+    public void An_idle_relocate_request_for_this_CLI_relocates_instead_of_relaunching()
+    {
+        State(RelocateRequest().Session, "idle");
+
+        Assert.That(HostAgentCommand.NextAction(RelocateRequest(), 4242, sessionContextDirectory: tempRoot),
+            Is.EqualTo(HostAgentCommand.WatchAction.Relocate));
+    }
+
+    [Test]
+    public void A_relocate_request_for_another_CLI_is_dropped()
+    {
+        State(RelocateRequest().Session, "idle");
+
+        Assert.That(HostAgentCommand.NextAction(RelocateRequest(pid: 4242), 5555, sessionContextDirectory: tempRoot),
+            Is.EqualTo(HostAgentCommand.WatchAction.Drop));
+    }
+
+    [Test]
+    public void An_idle_ordinary_restart_request_relaunches()
+    {
+        var request = new RestartResumeRequest("api", "11111111-2222-3333-4444-555555555555", 4242, @"D:\Projects\Prose");
+        State(request.Session, "idle");
+        var billing = Path.Combine(tempRoot, "billing.json");
+        File.WriteAllText(billing, """{"mode": "api"}""");
+
+        Assert.That(HostAgentCommand.NextAction(request, 4242, billingModePath: billing, sessionContextDirectory: tempRoot),
+            Is.EqualTo(HostAgentCommand.WatchAction.Relaunch));
+    }
+
     [Test]
     public void Pull_skips_a_non_repo_without_pulling_or_printing()
     {
