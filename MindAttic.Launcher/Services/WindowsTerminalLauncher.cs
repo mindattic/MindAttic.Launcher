@@ -1,4 +1,8 @@
 using System.Diagnostics;
+using System.IO.Pipes;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using MindAttic.Launcher.Models;
 
 namespace MindAttic.Launcher.Services;
@@ -19,11 +23,31 @@ namespace MindAttic.Launcher.Services;
 /// <para>Such a tab also opens with the login's own Terminal profile (M.LNCH-T56, <see cref="LoginTerminalProfiles"/>), whose
 /// icon is the login's initials on its tab color, so whose tab it is shows as an icon too. Building a tab only names the
 /// profile; <see cref="Open"/> writes its fragment and icon, so tests that build tabs never touch the fragments folder.</para>
+/// <para>When this process itself is one of the Orchestrator's own embedded Terminals-panel panes — its wrapper sets
+/// <see cref="OrchestratorTerminalsEnvVar"/> to a named pipe — opening an agent-host tab (<see cref="Tab.IsAgentHost"/>)
+/// routes into that panel as a new tab there instead of its own <c>wt</c> window (M.LNCH-T77). Nothing listening on the
+/// pipe (the dashboard closed since) falls back to <c>wt</c> exactly as if unembedded; a utility tab (elevated, or built
+/// by <see cref="OpenElevated"/>) always still opens its own real window.</para>
 /// </summary>
 public sealed class WindowsTerminalLauncher(
     AccountScope? scope = null, Func<LoginLook?>? claudeLook = null, LoginTerminalProfiles? profiles = null,
-    Func<string, LoginLook>? loginLook = null)
+    Func<string, LoginLook>? loginLook = null, Func<string, string, string?>? sendToOrchestrator = null,
+    Action<WindowsTerminalLauncher.Tab>? launchWindowsTerminal = null)
 {
+    /// <summary>Set by the Orchestrator in every pane it hosts in its embedded Terminals panel, including this
+    /// process's own menu when opened that way; its value is the named pipe an agent-host tab routes into (M.LNCH-T77).</summary>
+    public const string OrchestratorTerminalsEnvVar = "MINDATTIC_ORCHESTRATOR_TERMINALS";
+
+    /// <summary>Sends an agent-host tab's request down the Orchestrator's Terminals pipe. Null means nothing is
+    /// listening (fall back to <c>wt</c>); otherwise the dashboard's reply line — blank for success, non-blank its
+    /// error. Tests fake this; production goes through <see cref="SendToOrchestratorPipe"/>.</summary>
+    private readonly Func<string, string, string?> sendToOrchestrator = sendToOrchestrator ?? SendToOrchestratorPipe;
+
+    /// <summary>Actually starts <c>wt</c> for a tab <see cref="Open"/> decided isn't going down the Orchestrator's pipe.
+    /// A seam purely so tests can assert "it fell back to wt" without a real Windows Terminal popping up; production
+    /// goes through <see cref="LaunchWindowsTerminal"/>, unchanged from before M.LNCH-T77.</summary>
+    private readonly Action<Tab> launchWindowsTerminal = launchWindowsTerminal ?? LaunchWindowsTerminal;
+
     public AccountScope? Scope { get; } = scope;
 
     /// <summary>Where Claude logins' Terminal profiles are written as their tabs open; tests pass a temp folder's.</summary>
@@ -64,6 +88,19 @@ public sealed class WindowsTerminalLauncher(
         public string? ColorScheme { get; init; }
         public bool SuppressApplicationTitle { get; init; } = true;
         public required IReadOnlyList<string> Command { get; init; }
+
+        /// <summary>Only an agent CLI tab (<see cref="BuildAgentTab"/>/<see cref="BuildAgentTabAtPath"/>) can route into
+        /// the Orchestrator's embedded Terminals panel (M.LNCH-T77) — a utility tab (Command Prompt, PowerShell) always
+        /// opens its own real <c>wt</c> window, embedded or not.</summary>
+        public bool IsAgentHost { get; init; }
+
+        /// <summary>This tab's <see cref="AgentProvider.Key"/> ("Claude", "Codex", …); cosmetic/routing only, read when
+        /// this is an agent-host tab sent down the Orchestrator's pipe.</summary>
+        public string? Provider { get; init; }
+
+        /// <summary>The project this tab is for, if it's rooted at one (<see cref="BuildAgentTab"/>); null for a tab
+        /// rooted at an arbitrary path (<see cref="BuildAgentTabAtPath"/>), where naming one isn't cheap to get right.</summary>
+        public string? Repo { get; init; }
     }
 
     public void Open(Tab tab)
@@ -71,7 +108,27 @@ public sealed class WindowsTerminalLauncher(
         if (tab.Command.Count == 0)
             throw new ArgumentException("Tab.Command must contain at least the executable.", nameof(tab));
 
-        tab = WithProfileWritten(tab);
+        // Embedded in the Orchestrator's own Terminals panel (M.LNCH-T77): an agent-host tab goes down that pipe as a
+        // new tab there instead of its own wt window. Nothing listening (null — e.g. the dashboard closed since this
+        // Launcher was embedded) falls back to wt below, exactly as if the env var had never been set. A reply means
+        // the dashboard took the request either way — a blank line is success, a non-blank one its error; either way
+        // we must NOT also open a wt tab here, or the request would be duplicated.
+        if (tab.IsAgentHost && Environment.GetEnvironmentVariable(OrchestratorTerminalsEnvVar) is { Length: > 0 } pipeName)
+        {
+            var reply = sendToOrchestrator(pipeName, PipeRequestJson(tab));
+            if (reply is not null)
+            {
+                if (reply.Length > 0)
+                    throw new InvalidOperationException($"Failed to open tab via the Orchestrator: {reply}");
+                return;
+            }
+        }
+
+        launchWindowsTerminal(WithProfileWritten(tab));
+    }
+
+    private static void LaunchWindowsTerminal(Tab tab)
+    {
         var psi = new ProcessStartInfo("wt")
         {
             UseShellExecute = false,
@@ -133,6 +190,78 @@ public sealed class WindowsTerminalLauncher(
         foreach (var c in tab.Command) yield return c;
     }
 
+    private static readonly JsonSerializerOptions PipeRequestOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+
+    /// <summary>The wire shape the Orchestrator's own tests already exercise for a Terminals-panel tab request
+    /// (M.LNCH-T77) — field names are case-insensitive on its end, but kept camelCase here to match exactly.</summary>
+    private sealed record PipeTabRequest
+    {
+        public required string Title { get; init; }
+        public required string Directory { get; init; }
+        public required IReadOnlyList<string> Command { get; init; }
+        public string? Repo { get; init; }
+        public string? Provider { get; init; }
+        public string? ConfigDir { get; init; }
+        public string? Email { get; init; }
+        public string? Initials { get; init; }
+        public string? TabColor { get; init; }
+    }
+
+    /// <summary>One line of UTF-8 JSON for <paramref name="tab"/>, exactly the <c>wt</c> command it would otherwise
+    /// run — same title, directory and argv, different transport. The login's email/initials come from
+    /// <see cref="Tab.ProfileLook"/> (already resolved for this tab's window/profile/color); its config folder isn't
+    /// kept on <see cref="Tab"/> separately, so it's read back out of the command this tab already carries, the same
+    /// <c>--config-dir</c> <see cref="AddLoginAndPrompt"/> added.</summary>
+    private static string PipeRequestJson(Tab tab) => JsonSerializer.Serialize(new PipeTabRequest
+    {
+        Title = tab.Title ?? "",
+        Directory = tab.WorkingDirectory ?? "",
+        Command = tab.Command,
+        Repo = tab.Repo,
+        Provider = tab.Provider,
+        ConfigDir = ConfigDirFromCommand(tab.Command),
+        Email = tab.ProfileLook?.Email,
+        Initials = tab.ProfileLook?.Initials,
+        TabColor = tab.TabColor
+    }, PipeRequestOptions);
+
+    private static string? ConfigDirFromCommand(IReadOnlyList<string> command)
+    {
+        for (var i = 0; i < command.Count - 1; i++)
+            if (command[i] == "--config-dir") return command[i + 1];
+        return null;
+    }
+
+    /// <summary>Round-trips <paramref name="json"/> over the named pipe the Orchestrator told us about: connects (~1s),
+    /// writes the one request line, reads the one reply line (~30s). Null — connect timed out, or nothing is listening
+    /// (<see cref="IOException"/>/<see cref="UnauthorizedAccessException"/>, e.g. the dashboard closed) — tells
+    /// <see cref="Open"/> to fall back to <c>wt</c>; any other outcome is the dashboard's own reply.</summary>
+    private static string? SendToOrchestratorPipe(string pipeName, string json)
+    {
+        try
+        {
+            using var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.CurrentUserOnly);
+            pipe.Connect(1000);
+
+            // leaveOpen on both: they share one pipe, and a Reader/Writer's Dispose otherwise closes the underlying
+            // stream — the first of the pair to dispose would pull it out from under the other.
+            using var writer = new StreamWriter(pipe, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), leaveOpen: true) { NewLine = "\n", AutoFlush = true };
+            writer.WriteLine(json);
+
+            using var reader = new StreamReader(pipe, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 1024, leaveOpen: true);
+            var readLine = reader.ReadLineAsync();
+            return readLine.Wait(TimeSpan.FromSeconds(30)) ? readLine.Result ?? "" : "timed out waiting for the Orchestrator's reply";
+        }
+        catch (Exception ex) when (ex is TimeoutException or IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>
     /// Builds an "agent host" tab — invokes `mindattic host …` for the given
     /// project + provider. When <paramref name="prompt"/> is set it's passed
@@ -166,7 +295,10 @@ public sealed class WindowsTerminalLauncher(
             // TitlePinner toggles "Paused" into the tab title when the agent
             // isn't running; --suppressApplicationTitle would block those writes.
             SuppressApplicationTitle = false,
-            Command = command
+            Command = command,
+            IsAgentHost = true,
+            Provider = provider.Key,
+            Repo = project.Name
         };
     }
 
@@ -204,7 +336,10 @@ public sealed class WindowsTerminalLauncher(
             ColorScheme = colorScheme,
             // Match BuildAgentTab: let TitlePinner write "Paused" into the title.
             SuppressApplicationTitle = false,
-            Command = command
+            Command = command,
+            IsAgentHost = true,
+            Provider = provider.Key
+            // No Repo: a path-rooted tab isn't for any one registered project.
         };
     }
 
