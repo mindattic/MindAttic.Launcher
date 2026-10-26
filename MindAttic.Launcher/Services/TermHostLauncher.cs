@@ -13,6 +13,7 @@ public static class TermHostLauncher
 {
     public const string InstallDir = @"C:\Apps\MindAttic.Orchestrator";
     public const string HostPathVariable = "MINDATTIC_TERMHOST";
+    public const string BillingVariable = "MINDATTIC_CLAUDE_BILLING";
     public const string FolderName = "TermHost";
     public const string ExeName = "MindAttic.Orchestrator.TermHost.exe";
     public const string StartedMessage = "Started in the background; it will appear in the Orchestrator dashboard.";
@@ -83,6 +84,10 @@ public static class TermHostLauncher
             args.AddRange(["--login", folderLogin]);
         if (!string.IsNullOrWhiteSpace(repo)) args.AddRange(["--repo", repo]);
         if (!string.IsNullOrWhiteSpace(configDir)) args.AddRange(["--env", "CLAUDE_CONFIG_DIR=" + configDir]);
+        // The API key's own login (M.LNCH-T86), as the Orchestrator's PaneRequest.ApiKeySetup: mark the billing, and remove the
+        // tokens that would bill a seat or a gateway instead (KEY= removes a variable), so the Vault key is what bills.
+        if (ClaudeBillingMode.OfLogin(configDir) == ClaudeBillingMode.Api)
+            args.AddRange(["--env", BillingVariable + "=api", "--env", "CLAUDE_CODE_OAUTH_TOKEN=", "--env", "ANTHROPIC_AUTH_TOKEN="]);
         args.AddRange(["--", CommandLine(command)]);
         return args;
     }
