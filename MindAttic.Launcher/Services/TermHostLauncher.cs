@@ -12,13 +12,35 @@ namespace MindAttic.Launcher.Services;
 public static class TermHostLauncher
 {
     public const string InstallDir = @"C:\Apps\MindAttic.Orchestrator";
+    public const string HostPathVariable = "MINDATTIC_TERMHOST";
     public const string FolderName = "TermHost";
     public const string ExeName = "MindAttic.Orchestrator.TermHost.exe";
     public const string StartedMessage = "Started in the background; it will appear in the Orchestrator dashboard.";
 
+    /// <summary>The install folders to look in, in the Orchestrator's order: <c>C:\Apps</c>, then
+    /// <c>%LOCALAPPDATA%\Programs\MindAttic.Orchestrator</c> (where its installer puts it without rights to C:\Apps).</summary>
+    public static IReadOnlyList<string> InstallDirs()
+    {
+        var dirs = new List<string> { InstallDir };
+        if (Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) is { Length: > 0 } local)
+            dirs.Add(Path.Combine(local, "Programs", "MindAttic.Orchestrator"));
+        return dirs;
+    }
+
+    /// <summary>The TermHost exe to start (M.LNCH-T85), as the Orchestrator's <c>TermLauncher.FindHost</c> finds it: the file
+    /// <c>MINDATTIC_TERMHOST</c> names when it exists, else the newest install under each of <see cref="InstallDirs"/>; null when none.</summary>
+    public static string? ResolveExe()
+    {
+        if (Environment.GetEnvironmentVariable(HostPathVariable) is { Length: > 0 } named && File.Exists(named.Trim()))
+            return Path.GetFullPath(named.Trim());
+        foreach (var dir in InstallDirs())
+            if (ResolveExe(dir) is { } exe) return exe;
+        return null;
+    }
+
     /// <summary>The newest installed TermHost exe under <paramref name="installDir"/>\TermHost\&lt;version&gt;\, or null.
     /// Folders are named <c>major.minor.patch[-yyyyMMddHHmmss]</c>; the newest is by version, then stamp, then name.</summary>
-    public static string? ResolveExe(string installDir = InstallDir)
+    public static string? ResolveExe(string installDir)
     {
         var root = Path.Combine(installDir, FolderName);
         if (!Directory.Exists(root)) return null;
