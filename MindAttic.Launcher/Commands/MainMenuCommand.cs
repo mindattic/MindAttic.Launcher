@@ -212,14 +212,18 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
     /// </summary>
     private static void OpenOrchestrator()
     {
-        var exe = new[]
+        // M.ORCH-T844 renamed the dashboard to MindAttic.Orchestrator.Desktop.exe; the old name is only a legacy fallback.
+        var dirs = new[]
         {
-            @"C:\Apps\MindAttic.Orchestrator\MindAttic.Orchestrator.exe",
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "MindAttic.Orchestrator", "MindAttic.Orchestrator.exe"),
-        }.FirstOrDefault(File.Exists);
+            @"C:\Apps\MindAttic.Orchestrator",
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "MindAttic.Orchestrator"),
+        };
+        var exe = new[] { "MindAttic.Orchestrator.Desktop.exe", "MindAttic.Orchestrator.exe" }
+            .SelectMany(name => dirs.Select(d => Path.Combine(d, name)))
+            .FirstOrDefault(File.Exists);
         if (exe is null)
         {
-            AnsiConsole.MarkupLine("[yellow]The orchestrator isn't installed. Double-click MindAttic.Orchestrator.exe once (or run its deploy.ps1) and it installs itself.[/]");
+            AnsiConsole.MarkupLine("[yellow]The orchestrator isn't installed. Double-click MindAttic.Orchestrator.Desktop.exe once (or run its deploy.ps1) and it installs itself.[/]");
             Thread.Sleep(2500);
             return;
         }

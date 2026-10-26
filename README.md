@@ -203,7 +203,7 @@ Launching the exe with no arguments runs `MainMenuCommand`, which loads settings
 | Open Project Tab | `open` | Opens `OpenProjectMenu`: pick a project, then which agent CLI to launch it with, then `ProjectActionMenu`. |
 | Backup | `backup` | Runs `BackupMenu` directly: confirms source, target and database list, then runs the file, AppData, SQL Server and SQLite backup. |
 | Scheduled Backup | `schedule` | Opens `ScheduledBackupMenu`: a pointer to the nightly backup job, which now lives in MindAttic.WatchDog (M.WD-T6). Launcher no longer registers a Scheduled Task. |
-| Orchestrator | `orchestrator` | Opens the MindAttic.Orchestrator dashboard (every session, the token budget and pace, the ticket queue) from `C:\Apps\MindAttic.Orchestrator` or the per-user `Programs` folder. It is a separate app, so it opens beside the menu, not in a tab; a notice says so when it is not installed. |
+| Orchestrator | `orchestrator` | Opens the MindAttic.Orchestrator dashboard (MindAttic.Orchestrator.Desktop.exe) (every session, the token budget and pace, the ticket queue) from `C:\Apps\MindAttic.Orchestrator` or the per-user `Programs` folder. It is a separate app, so it opens beside the menu, not in a tab; a notice says so when it is not installed. |
 | Settings | `settings` | Opens `SettingsMenu`: the model each agent CLI runs with (only). |
 | Open Command Prompt (Admin) | `cmd` | Opens an elevated `cmd` tab at the workspace root via UAC (`wt … -- cmd`, `Verb=runas`). |
 | Open PowerShell (Admin) | `ps` | Same, but `powershell`. |
