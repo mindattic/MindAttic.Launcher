@@ -51,7 +51,8 @@ public sealed class WindowsTerminalLauncher(
     /// <summary>Starts an agent-host tab inside an Orchestrator TermHost (M.LNCH-T82/T83); false
     /// means it didn't (no TermHost is installed or it failed) and <c>wt</c> opens as before. A seam so tests never
     /// start a real host.</summary>
-    private readonly Func<Tab, bool> startInTermHost = startInTermHost ?? (tab => TermHostLauncher.TryStart(tab.WorkingDirectory, tab.Title, tab.Command));
+    private readonly Func<Tab, bool> startInTermHost = startInTermHost ?? (tab => TermHostLauncher.TryStart(
+        tab.WorkingDirectory, tab.Title, tab.Command, login: tab.ProfileLook?.Email, repo: tab.Repo, configDir: ConfigDirFromCommand(tab.Command)));
 
     public AccountScope? Scope { get; } = scope;
 

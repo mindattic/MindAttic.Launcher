@@ -45,12 +45,22 @@ public static class TermHostLauncher
     }
 
     /// <summary>The <c>--launch</c> arguments: id, folder and title, then <c>--</c> and the CLI's whole command line as one
-    /// argument (the host runs a single argument with a space in it as a whole command line).</summary>
-    public static IReadOnlyList<string> Arguments(string id, string? directory, string? title, IReadOnlyList<string> command)
+    /// argument (the host runs a single argument with a space in it as a whole command line). <paramref name="login"/> (the
+    /// account email) and <paramref name="repo"/> go to the host's <c>--login</c>/<c>--repo</c> (M.ORCH-T925), which register the
+    /// session for the dashboard under that person and repo; <paramref name="configDir"/> becomes the host's
+    /// <c>CLAUDE_CONFIG_DIR</c> (<c>--env</c>), which its registration reads (M.LNCH-T84). Without an email, the login is read
+    /// from the config dir's folder name, as the per-CLI logins are named by email.</summary>
+    public static IReadOnlyList<string> Arguments(string id, string? directory, string? title, IReadOnlyList<string> command,
+        string? login = null, string? repo = null, string? configDir = null)
     {
         var args = new List<string> { "--launch", "--id", id };
         if (!string.IsNullOrWhiteSpace(directory)) args.AddRange(["--cwd", directory]);
         if (!string.IsNullOrWhiteSpace(title)) args.AddRange(["--title", title]);
+        if (!string.IsNullOrWhiteSpace(login)) args.AddRange(["--login", login]);
+        else if (!string.IsNullOrWhiteSpace(configDir) && AccountScope.Normalize(Path.GetFileName(configDir.TrimEnd(['\\', '/']))) is { } folderLogin)
+            args.AddRange(["--login", folderLogin]);
+        if (!string.IsNullOrWhiteSpace(repo)) args.AddRange(["--repo", repo]);
+        if (!string.IsNullOrWhiteSpace(configDir)) args.AddRange(["--env", "CLAUDE_CONFIG_DIR=" + configDir]);
         args.AddRange(["--", CommandLine(command)]);
         return args;
     }
@@ -76,7 +86,8 @@ public static class TermHostLauncher
     /// <summary>Starts <paramref name="command"/> under a detached TermHost and says where it went. False, doing nothing,
     /// when no TermHost is installed or it fails to launch:
     /// the caller then opens its Windows Terminal window as before.</summary>
-    public static bool TryStart(string? directory, string? title, IReadOnlyList<string> command, Action<string>? say = null)
+    public static bool TryStart(string? directory, string? title, IReadOnlyList<string> command, Action<string>? say = null,
+        string? login = null, string? repo = null, string? configDir = null)
     {
         if (ResolveExe() is not { } exe) return false;
         try
@@ -91,7 +102,7 @@ public static class TermHostLauncher
                 // The host's own folder, never the CLI's: the launch holds no handle on a repo.
                 WorkingDirectory = Path.GetDirectoryName(exe) ?? Environment.CurrentDirectory,
             };
-            foreach (var a in Arguments(id, directory, title, command)) psi.ArgumentList.Add(a);
+            foreach (var a in Arguments(id, directory, title, command, login, repo, configDir)) psi.ArgumentList.Add(a);
             // The host's CLI inherits this environment; the login rides in the command (--config-dir) and the token comes
             // from Vault in the host command, exactly as in a wt tab. A secret never goes on the command line.
             psi.Environment.Remove("NO_COLOR");
