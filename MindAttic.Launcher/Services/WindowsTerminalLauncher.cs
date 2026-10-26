@@ -48,8 +48,8 @@ public sealed class WindowsTerminalLauncher(
     /// goes through <see cref="LaunchWindowsTerminal"/>, unchanged from before M.LNCH-T77.</summary>
     private readonly Action<Tab> launchWindowsTerminal = launchWindowsTerminal ?? LaunchWindowsTerminal;
 
-    /// <summary>Starts an agent-host tab inside an Orchestrator TermHost when no dashboard is listening (M.LNCH-T82); false
-    /// means it didn't (a dashboard is up, or no TermHost is installed) and <c>wt</c> opens as before. A seam so tests never
+    /// <summary>Starts an agent-host tab inside an Orchestrator TermHost (M.LNCH-T82/T83); false
+    /// means it didn't (no TermHost is installed or it failed) and <c>wt</c> opens as before. A seam so tests never
     /// start a real host.</summary>
     private readonly Func<Tab, bool> startInTermHost = startInTermHost ?? (tab => TermHostLauncher.TryStart(tab.WorkingDirectory, tab.Title, tab.Command));
 
@@ -129,8 +129,8 @@ public sealed class WindowsTerminalLauncher(
             }
         }
 
-        // No dashboard listening (M.LNCH-T82): host the CLI in a detached TermHost so it appears on the dashboard's next
-        // start. No TermHost installed falls through to wt, as before.
+        // Every other agent CLI (M.LNCH-T82/T83): host it in a detached TermHost, dashboard up or down, so it survives any
+        // window closing and the dashboard discovers it via the session registry. No TermHost installed falls through to wt, as before.
         if (tab.IsAgentHost && startInTermHost(tab)) return;
 
         launchWindowsTerminal(WithProfileWritten(tab));

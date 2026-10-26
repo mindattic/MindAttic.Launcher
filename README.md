@@ -131,7 +131,7 @@ Exit codes:
 
 `host` is what a Windows Terminal tab actually runs. The interactive menu never launches a provider directly; it always builds a `wt … -- MindAttic.Launcher.exe host …` command line via `WindowsTerminalLauncher` and lets `wt` fork the tab. The same `HostAgentCommand.Execute` path fires whether the tab was opened from the menu or by hand from a script.
 
-When no Orchestrator dashboard is listening on its Terminals pipe and a TermHost is installed (`C:\Apps\MindAttic.Orchestrator\TermHost\<version>\`, newest wins), an agent tab opens inside that detached TermHost instead of a Windows Terminal window, prints "Started in the background; it will appear in the Orchestrator dashboard.", and shows up on the dashboard's next start; without a TermHost it opens `wt` as before, and with a dashboard listening nothing changes. Once the Orchestrator's standalone viewer lands (M.ORCH-T960), it opens viewer windows for these hosted CLIs while the dashboard is down.
+When a TermHost is installed (`C:\Apps\MindAttic.Orchestrator\TermHost\<version>\`, newest wins), an agent tab opens inside that detached TermHost instead of a Windows Terminal window, prints "Started in the background; it will appear in the Orchestrator dashboard.", and shows up in the dashboard (up or down, embedded or not); a Launcher embedded in a dashboard tab still sends its request to the dashboard, which hosts it; without a TermHost it opens `wt` as before. Once the Orchestrator's standalone viewer lands (M.ORCH-T960), it opens viewer windows for these hosted CLIs while the dashboard is down.
 
 ### commit
 

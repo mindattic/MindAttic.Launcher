@@ -1,13 +1,12 @@
 using System.Diagnostics;
-using System.IO.Pipes;
 using System.Text;
 
 namespace MindAttic.Launcher.Services;
 
 /// <summary>
-/// Opens a CLI inside an Orchestrator TermHost (M.LNCH-T82, M.ORCH-T922 phase 1) when no dashboard is listening on the
-/// PaneBroker pipe: a detached per-CLI process keeps it alive outside any window, and the dashboard attaches it on its
-/// next start. Nothing references the Orchestrator's packages: the install folder, the version-folder naming and the
+/// Opens a CLI inside an Orchestrator TermHost (M.LNCH-T82, M.ORCH-T922 phase 1), dashboard up or down
+/// (M.LNCH-T83; an embedded Launcher sends its PaneRequest instead): a detached per-CLI process keeps it alive outside any
+/// window, and the dashboard discovers it through the session registry. Nothing references the Orchestrator's packages: the install folder, the version-folder naming and the
 /// <c>--launch</c> arguments mirror its <c>TermHostInstalls.ResolveExe</c> and <c>TermLauncher</c>.
 /// </summary>
 public static class TermHostLauncher
@@ -16,10 +15,6 @@ public static class TermHostLauncher
     public const string FolderName = "TermHost";
     public const string ExeName = "MindAttic.Orchestrator.TermHost.exe";
     public const string StartedMessage = "Started in the background; it will appear in the Orchestrator dashboard.";
-
-    /// <summary>The dashboard's pipe, one per Windows user (the Orchestrator's <c>PaneBroker.PipeName</c>).</summary>
-    public static string DashboardPipeName { get; } = "mindattic-orchestrator-terminals-" +
-        new string(Environment.UserName.Select(c => char.IsLetterOrDigit(c) ? c : '-').ToArray());
 
     /// <summary>The newest installed TermHost exe under <paramref name="installDir"/>\TermHost\&lt;version&gt;\, or null.
     /// Folders are named <c>major.minor.patch[-yyyyMMddHHmmss]</c>; the newest is by version, then stamp, then name.</summary>
@@ -78,24 +73,11 @@ public static class TermHostLauncher
         return sb.Append('\\', backslashes * 2).Append('"').ToString();
     }
 
-    /// <summary>True when a dashboard is listening on <paramref name="pipeName"/> (a connect that is closed unused).</summary>
-    public static bool DashboardListening(string? pipeName = null)
-    {
-        try
-        {
-            using var pipe = new NamedPipeClientStream(".", pipeName ?? DashboardPipeName, PipeDirection.InOut, PipeOptions.CurrentUserOnly);
-            pipe.Connect(300);
-            return true;
-        }
-        catch (Exception ex) when (ex is TimeoutException or IOException or UnauthorizedAccessException) { return false; }
-    }
-
     /// <summary>Starts <paramref name="command"/> under a detached TermHost and says where it went. False, doing nothing,
-    /// when a dashboard is listening (it hosts its own CLIs, M.ORCH-T926) or no TermHost is installed or it fails to launch:
+    /// when no TermHost is installed or it fails to launch:
     /// the caller then opens its Windows Terminal window as before.</summary>
     public static bool TryStart(string? directory, string? title, IReadOnlyList<string> command, Action<string>? say = null)
     {
-        if (DashboardListening()) return false;
         if (ResolveExe() is not { } exe) return false;
         try
         {
