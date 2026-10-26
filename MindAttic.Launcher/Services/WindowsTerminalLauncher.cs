@@ -32,7 +32,7 @@ namespace MindAttic.Launcher.Services;
 public sealed class WindowsTerminalLauncher(
     AccountScope? scope = null, Func<LoginLook?>? claudeLook = null, LoginTerminalProfiles? profiles = null,
     Func<string, LoginLook>? loginLook = null, Func<string, string, string?>? sendToOrchestrator = null,
-    Action<WindowsTerminalLauncher.Tab>? launchWindowsTerminal = null)
+    Action<WindowsTerminalLauncher.Tab>? launchWindowsTerminal = null, Func<WindowsTerminalLauncher.Tab, bool>? startInTermHost = null)
 {
     /// <summary>Set by the Orchestrator in every pane it hosts in its embedded Terminals panel, including this
     /// process's own menu when opened that way; its value is the named pipe an agent-host tab routes into (M.LNCH-T77).</summary>
@@ -47,6 +47,11 @@ public sealed class WindowsTerminalLauncher(
     /// A seam purely so tests can assert "it fell back to wt" without a real Windows Terminal popping up; production
     /// goes through <see cref="LaunchWindowsTerminal"/>, unchanged from before M.LNCH-T77.</summary>
     private readonly Action<Tab> launchWindowsTerminal = launchWindowsTerminal ?? LaunchWindowsTerminal;
+
+    /// <summary>Starts an agent-host tab inside an Orchestrator TermHost when no dashboard is listening (M.LNCH-T82); false
+    /// means it didn't (a dashboard is up, or no TermHost is installed) and <c>wt</c> opens as before. A seam so tests never
+    /// start a real host.</summary>
+    private readonly Func<Tab, bool> startInTermHost = startInTermHost ?? (tab => TermHostLauncher.TryStart(tab.WorkingDirectory, tab.Title, tab.Command));
 
     public AccountScope? Scope { get; } = scope;
 
@@ -123,6 +128,10 @@ public sealed class WindowsTerminalLauncher(
                 return;
             }
         }
+
+        // No dashboard listening (M.LNCH-T82): host the CLI in a detached TermHost so it appears on the dashboard's next
+        // start. No TermHost installed falls through to wt, as before.
+        if (tab.IsAgentHost && startInTermHost(tab)) return;
 
         launchWindowsTerminal(WithProfileWritten(tab));
     }

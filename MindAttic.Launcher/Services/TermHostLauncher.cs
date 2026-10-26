@@ -1,0 +1,132 @@
+using System.Diagnostics;
+using System.IO.Pipes;
+using System.Text;
+
+namespace MindAttic.Launcher.Services;
+
+/// <summary>
+/// Opens a CLI inside an Orchestrator TermHost (M.LNCH-T82, M.ORCH-T922 phase 1) when no dashboard is listening on the
+/// PaneBroker pipe: a detached per-CLI process keeps it alive outside any window, and the dashboard attaches it on its
+/// next start. Nothing references the Orchestrator's packages: the install folder, the version-folder naming and the
+/// <c>--launch</c> arguments mirror its <c>TermHostInstalls.ResolveExe</c> and <c>TermLauncher</c>.
+/// </summary>
+public static class TermHostLauncher
+{
+    public const string InstallDir = @"C:\Apps\MindAttic.Orchestrator";
+    public const string FolderName = "TermHost";
+    public const string ExeName = "MindAttic.Orchestrator.TermHost.exe";
+    public const string StartedMessage = "Started in the background; it will appear in the Orchestrator dashboard.";
+
+    /// <summary>The dashboard's pipe, one per Windows user (the Orchestrator's <c>PaneBroker.PipeName</c>).</summary>
+    public static string DashboardPipeName { get; } = "mindattic-orchestrator-terminals-" +
+        new string(Environment.UserName.Select(c => char.IsLetterOrDigit(c) ? c : '-').ToArray());
+
+    /// <summary>The newest installed TermHost exe under <paramref name="installDir"/>\TermHost\&lt;version&gt;\, or null.
+    /// Folders are named <c>major.minor.patch[-yyyyMMddHHmmss]</c>; the newest is by version, then stamp, then name.</summary>
+    public static string? ResolveExe(string installDir = InstallDir)
+    {
+        var root = Path.Combine(installDir, FolderName);
+        if (!Directory.Exists(root)) return null;
+        try
+        {
+            return Directory.EnumerateDirectories(root)
+                .Select(dir => (dir, name: Path.GetFileName(dir), parsed: ParseFolder(Path.GetFileName(dir))))
+                .Where(x => x.parsed is not null && File.Exists(Path.Combine(x.dir, ExeName)))
+                .OrderBy(x => x.parsed!.Value.Version).ThenBy(x => x.parsed!.Value.Stamp, StringComparer.Ordinal).ThenBy(x => x.name, StringComparer.Ordinal)
+                .Select(x => Path.Combine(x.dir, ExeName))
+                .LastOrDefault();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return null; }
+    }
+
+    private static (Version Version, string Stamp)? ParseFolder(string name)
+    {
+        var dash = name.IndexOf('-');
+        var versionText = dash < 0 ? name : name[..dash];
+        var stamp = dash < 0 ? "" : name[(dash + 1)..];
+        if (!Version.TryParse(versionText, out var version) || version.Major < 0 || version.Minor < 0) return null;
+        if (stamp.Length > 0 && (stamp.Length != 14 || !stamp.All(char.IsAsciiDigit))) return null;
+        return (version, stamp);
+    }
+
+    /// <summary>The <c>--launch</c> arguments: id, folder and title, then <c>--</c> and the CLI's whole command line as one
+    /// argument (the host runs a single argument with a space in it as a whole command line).</summary>
+    public static IReadOnlyList<string> Arguments(string id, string? directory, string? title, IReadOnlyList<string> command)
+    {
+        var args = new List<string> { "--launch", "--id", id };
+        if (!string.IsNullOrWhiteSpace(directory)) args.AddRange(["--cwd", directory]);
+        if (!string.IsNullOrWhiteSpace(title)) args.AddRange(["--title", title]);
+        args.AddRange(["--", CommandLine(command)]);
+        return args;
+    }
+
+    /// <summary>Windows command line for <paramref name="command"/>, each argument quoted by the CreateProcess rules.</summary>
+    public static string CommandLine(IReadOnlyList<string> command) => string.Join(' ', command.Select(Quote));
+
+    private static string Quote(string arg)
+    {
+        if (arg.Length > 0 && !arg.Any(c => char.IsWhiteSpace(c) || c == '"')) return arg;
+        var sb = new StringBuilder("\"");
+        var backslashes = 0;
+        foreach (var c in arg)
+        {
+            if (c == '\\') { backslashes++; continue; }
+            if (c == '"') sb.Append('\\', backslashes * 2 + 1).Append('"');
+            else sb.Append('\\', backslashes).Append(c);
+            backslashes = 0;
+        }
+        return sb.Append('\\', backslashes * 2).Append('"').ToString();
+    }
+
+    /// <summary>True when a dashboard is listening on <paramref name="pipeName"/> (a connect that is closed unused).</summary>
+    public static bool DashboardListening(string? pipeName = null)
+    {
+        try
+        {
+            using var pipe = new NamedPipeClientStream(".", pipeName ?? DashboardPipeName, PipeDirection.InOut, PipeOptions.CurrentUserOnly);
+            pipe.Connect(300);
+            return true;
+        }
+        catch (Exception ex) when (ex is TimeoutException or IOException or UnauthorizedAccessException) { return false; }
+    }
+
+    /// <summary>Starts <paramref name="command"/> under a detached TermHost and says where it went. False, doing nothing,
+    /// when a dashboard is listening (it hosts its own CLIs, M.ORCH-T926) or no TermHost is installed or it fails to launch:
+    /// the caller then opens its Windows Terminal window as before.</summary>
+    public static bool TryStart(string? directory, string? title, IReadOnlyList<string> command, Action<string>? say = null)
+    {
+        if (DashboardListening()) return false;
+        if (ResolveExe() is not { } exe) return false;
+        try
+        {
+            var id = Guid.NewGuid().ToString("N")[..12];
+            var psi = new ProcessStartInfo(exe)
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                // The host's own folder, never the CLI's: the launch holds no handle on a repo.
+                WorkingDirectory = Path.GetDirectoryName(exe) ?? Environment.CurrentDirectory,
+            };
+            foreach (var a in Arguments(id, directory, title, command)) psi.ArgumentList.Add(a);
+            // The host's CLI inherits this environment; the login rides in the command (--config-dir) and the token comes
+            // from Vault in the host command, exactly as in a wt tab. A secret never goes on the command line.
+            psi.Environment.Remove("NO_COLOR");
+
+            using var launch = Process.Start(psi);
+            if (launch is null) return false;
+            _ = launch.StandardOutput.ReadToEndAsync();
+            _ = launch.StandardError.ReadToEndAsync();
+            if (!launch.WaitForExit(TimeSpan.FromSeconds(30)))
+            {
+                try { launch.Kill(); } catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception) { }
+                return false;
+            }
+            if (launch.ExitCode != 0) return false;
+            (say ?? Console.WriteLine)(StartedMessage);
+            return true;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or IOException) { return false; }
+    }
+}

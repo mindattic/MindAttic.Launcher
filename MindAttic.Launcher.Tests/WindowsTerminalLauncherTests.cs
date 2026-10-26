@@ -172,7 +172,8 @@ public sealed class WindowsTerminalLauncherTests
             WindowsTerminalLauncher.Tab? launched = null;
             var wt = new WindowsTerminalLauncher(
                 sendToOrchestrator: (_, _) => throw new InvalidOperationException("must not touch the pipe when unembedded"),
-                launchWindowsTerminal: t => launched = t);
+                launchWindowsTerminal: t => launched = t,
+                startInTermHost: _ => false);
 
             wt.Open(wt.BuildAgentTab(Project, Provider, "mindattic.exe"));
 
@@ -189,7 +190,8 @@ public sealed class WindowsTerminalLauncherTests
             WindowsTerminalLauncher.Tab? launched = null;
             var wt = new WindowsTerminalLauncher(
                 sendToOrchestrator: (_, _) => throw new InvalidOperationException("a non-agent-host tab must not touch the pipe"),
-                launchWindowsTerminal: t => launched = t);
+                launchWindowsTerminal: t => launched = t,
+                startInTermHost: _ => false);
 
             // BuildCmdTab/BuildPowerShellTab (OpenElevated's callers) never set IsAgentHost.
             wt.Open(wt.BuildCmdTab(@"D:\Projects\MindAttic"));
@@ -210,7 +212,8 @@ public sealed class WindowsTerminalLauncherTests
             var wt = new WindowsTerminalLauncher(
                 claudeLook: () => null,
                 sendToOrchestrator: (pipe, json) => { pipeNameSeen = pipe; jsonSeen = json; return ""; },
-                launchWindowsTerminal: _ => Assert.Fail("a successful pipe send must not also open wt"));
+                launchWindowsTerminal: _ => Assert.Fail("a successful pipe send must not also open wt"),
+                startInTermHost: _ => { Assert.Fail("a successful pipe send must not also start a TermHost"); return true; });
 
             var tab = wt.BuildAgentTab(Project, Provider, "mindattic.exe", "go");
             wt.Open(tab);
@@ -253,7 +256,8 @@ public sealed class WindowsTerminalLauncherTests
             WindowsTerminalLauncher.Tab? launched = null;
             var wt = new WindowsTerminalLauncher(
                 sendToOrchestrator: (_, _) => null, // nothing listening (e.g. the dashboard closed)
-                launchWindowsTerminal: t => launched = t);
+                launchWindowsTerminal: t => launched = t,
+                startInTermHost: _ => false);
 
             wt.Open(wt.BuildAgentTab(Project, Provider, "mindattic.exe"));
 
@@ -303,7 +307,8 @@ public sealed class WindowsTerminalLauncherTests
         WithOrchestratorPipe(pipeName, () =>
         {
             WindowsTerminalLauncher.Tab? launched = null;
-            var wt = new WindowsTerminalLauncher(launchWindowsTerminal: t => launched = t);
+            var wt = new WindowsTerminalLauncher(launchWindowsTerminal: t => launched = t,
+                startInTermHost: _ => false);
 
             wt.Open(wt.BuildAgentTab(Project, Provider, "mindattic.exe"));
 
