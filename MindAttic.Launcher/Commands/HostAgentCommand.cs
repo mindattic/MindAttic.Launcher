@@ -186,7 +186,8 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
             // expects it — an env var for Gemini, config.toml for Kimi. A missing
             // Vault entry is a no-op; the CLI falls back to its own configured auth.
             // Claude follows the Orchestrator's billing mode (ClaudeBillingMode).
-            ProviderCredentials.Apply(psi, provider.Key, claudeBilling: isClaude ? claudeBilling : null);
+            // A login folder that is the Vault API key's own identity (M.ORCH-T906) bills the key whatever the mode.
+            ProviderCredentials.Apply(psi, provider.Key, claudeBilling: isClaude ? claudeBilling ?? ClaudeBillingMode.OfLogin(claudeConfigDir) : null);
             if (isClaude) ClaudeLogin.Apply(psi, claudeConfigDir);
             return psi;
         }

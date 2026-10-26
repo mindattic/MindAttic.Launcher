@@ -184,4 +184,26 @@ public sealed class AccountScopeTests
 
         Assert.That(tab.Command, Does.Not.Contain("--config-dir"));
     }
+
+    [Test]
+    public void The_api_key_identity_folder_counts_as_signed_in_and_bills_the_key()
+    {
+        // M.ORCH-T906: the Orchestrator marks the Vault API key's own login folder "billing": "api"; it has no claude.ai sign-in.
+        Directory.CreateDirectory(Folder("api-key@mindattic.vault"));
+        Look("api-key@mindattic.vault", """{"email":"api-key@mindattic.vault","alias":"API key","billing":"api"}""");
+        var scope = AccountScope.For("api-key@mindattic.vault", root)!;
+
+        Assert.That(scope.IsSignedIn, Is.True);
+        Assert.That(ClaudeBillingMode.OfLogin(scope.ConfigDir), Is.EqualTo(ClaudeBillingMode.Api));
+    }
+
+    [Test]
+    public void A_plain_login_folder_carries_no_billing_of_its_own()
+    {
+        SignIn("jordan@mindattic.com", "jordan@mindattic.com");
+        Look("jordan@mindattic.com", """{"email":"jordan@mindattic.com","alias":"Jordan"}""");
+
+        Assert.That(ClaudeBillingMode.OfLogin(Folder("jordan@mindattic.com")), Is.Null);
+        Assert.That(ClaudeBillingMode.OfLogin(null), Is.Null);
+    }
 }

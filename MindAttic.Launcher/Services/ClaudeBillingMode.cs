@@ -27,6 +27,30 @@ public static class ClaudeBillingMode
     public static string? Next(string? current, RestartResumeRequest request) =>
         request.Failover ? request.Billing : request.Billing is null ? current : null;
 
+    /// <summary>
+    /// The billing a login folder carries itself (M.ORCH-T906): <see cref="Api"/> when its <c>mindattic-account.json</c> says
+    /// <c>"billing": "api"</c>, which is how MindAttic.Orchestrator marks the Vault API key's own identity (a login folder with no
+    /// claude.ai sign-in, whose every CLI bills the key); null for any other folder, the global login, or one that can't be read.
+    /// </summary>
+    public static string? OfLogin(string? configDir)
+    {
+        if (string.IsNullOrWhiteSpace(configDir)) return null;
+        try
+        {
+            var path = Path.Combine(configDir, AccountScope.LookFileName);
+            if (!File.Exists(path)) return null;
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            return doc.RootElement.ValueKind == JsonValueKind.Object &&
+                   doc.RootElement.TryGetProperty("billing", out var b) && b.ValueKind == JsonValueKind.String &&
+                   string.Equals(b.GetString()?.Trim(), Api, StringComparison.OrdinalIgnoreCase)
+                ? Api : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
+        {
+            return null;
+        }
+    }
+
     /// <summary><see cref="Team"/>, <see cref="Api"/>, or null when no mode is set.</summary>
     public static string? Read(string? path = null)
     {

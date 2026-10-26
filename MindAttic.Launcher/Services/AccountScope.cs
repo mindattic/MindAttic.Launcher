@@ -40,8 +40,10 @@ public sealed record AccountScope(string Email, string ConfigDir, string Alias)
         return new AccountScope(e, dir, AliasOf(dir, SignedInEmail(dir) ?? e));
     }
 
-    /// <summary>Whether <see cref="ConfigDir"/> has <see cref="Email"/>'s Claude login signed in.</summary>
-    public bool IsSignedIn => SignedInEmail(ConfigDir) is { } signed && string.Equals(signed, Email, StringComparison.OrdinalIgnoreCase);
+    /// <summary>Whether <see cref="ConfigDir"/> has <see cref="Email"/>'s Claude login signed in, or is the Vault API key's own
+    /// identity (M.ORCH-T906: no claude.ai sign-in, it bills the key, <see cref="ClaudeBillingMode.OfLogin"/>), which never signs in.</summary>
+    public bool IsSignedIn => SignedInEmail(ConfigDir) is { } signed && string.Equals(signed, Email, StringComparison.OrdinalIgnoreCase)
+                              || ClaudeBillingMode.OfLogin(ConfigDir) == ClaudeBillingMode.Api;
 
     /// <summary>The email Claude Code has for the login in <paramref name="folder"/> (<c>oauthAccount.emailAddress</c> in its
     /// <c>.claude.json</c>); null when nobody is signed in there or it can't be read.</summary>
