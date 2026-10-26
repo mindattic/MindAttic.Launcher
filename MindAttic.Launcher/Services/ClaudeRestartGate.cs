@@ -36,8 +36,10 @@ public static class ClaudeRestartGate
             using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(dir, request.Session + ".state.json")));
             var root = doc.RootElement;
             if (root.ValueKind != JsonValueKind.Object ||
-                !root.TryGetProperty("state", out var state) || state.ValueKind != JsonValueKind.String ||
-                state.GetString() != "idle")
+                !root.TryGetProperty("state", out var state) || state.ValueKind != JsonValueKind.String)
+                return false;
+            var name = state.GetString();
+            if (name != "idle" && !(name == "busy" && DecidingIsStale(root, nowUtc ?? DateTime.UtcNow)))
                 return false;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
@@ -46,6 +48,19 @@ public static class ClaudeRestartGate
         }
         return !HasRunningSubagent(dir, request.CliPid, nowUtc ?? DateTime.UtcNow);
     }
+
+    /// <summary>How long the Orchestrator's Stop-hook <c>deciding</c> mark counts as busy: the hook's 60s timeout and a
+    /// little over, as the Orchestrator's ContextCycler.DecidingLife.</summary>
+    public static readonly TimeSpan DecidingLife = TimeSpan.FromSeconds(75);
+
+    /// <summary>Whether a busy state is only the Stop hook's <c>deciding</c> mark (M.ORCH-T1036) older than
+    /// <see cref="DecidingLife"/>: a hook cut off at its timeout, so the turn ended with it (M.LNCH-T87). Without this
+    /// such a CLI was never restarted or resumed.</summary>
+    private static bool DecidingIsStale(JsonElement root, DateTime nowUtc) =>
+        root.TryGetProperty("deciding", out var d) && d.ValueKind == JsonValueKind.String &&
+        DateTime.TryParse(d.GetString(), System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal, out var since) &&
+        nowUtc - since > DecidingLife;
 
     private static bool HasRunningSubagent(string dir, int cliPid, DateTime nowUtc)
     {

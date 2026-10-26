@@ -123,6 +123,22 @@ public sealed class ClaudeRestartTests
     }
 
     [Test]
+    public void A_deciding_mark_past_the_stop_hooks_timeout_is_the_idle_point()
+    {
+        // M.LNCH-T87: a Stop hook cut off after the Orchestrator's deciding save (M.ORCH-T1036) left the CLI busy for good.
+        var now = new DateTime(2026, 10, 26, 12, 0, 0, DateTimeKind.Utc);
+        void Deciding(DateTime at) => File.WriteAllText(Path.Combine(dir, Request().Session + ".state.json"),
+            $$"""{"pid": 4242, "state": "busy", "deciding": "{{at:yyyy-MM-ddTHH:mm:ssZ}}"}""");
+
+        Deciding(now.AddSeconds(-10));
+        Assert.That(ClaudeRestartGate.IsIdle(Request(), dir, now), Is.False, "still deciding");
+        Deciding(now.AddSeconds(-90));
+        Assert.That(ClaudeRestartGate.IsIdle(Request(), dir, now), Is.True, "the hook was cut off");
+        State("busy");
+        Assert.That(ClaudeRestartGate.IsIdle(Request(), dir, now), Is.False, "a plain busy turn");
+    }
+
+    [Test]
     public void A_failovers_billing_holds_until_another_request_says_otherwise()
     {
         string? billing = null;
