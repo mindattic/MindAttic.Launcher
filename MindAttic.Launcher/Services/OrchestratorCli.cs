@@ -4,7 +4,7 @@ namespace MindAttic.Launcher.Services;
 
 /// <summary>
 /// Shells out to the sibling <c>orchestrator</c> CLI (MindAttic.Orchestrator.Cli, deployed alongside
-/// MindAttic.Orchestrator.exe and already on PATH per its deploy.ps1). Used by <see cref="ClaudeAccountCatalog"/>
+/// MindAttic.Orchestrator.exe and already on PATH per its run.ps1). Used by <see cref="ClaudeAccountCatalog"/>
 /// for per-account usage and the Auto pick (M.LNCH-T53). <c>orchestrator</c> not being on PATH, erroring, or
 /// timing out is not a Launcher failure — it just means no data, the same tolerance M.LNCH-T51 asked for
 /// ("no change when the orchestrator isn't installed").

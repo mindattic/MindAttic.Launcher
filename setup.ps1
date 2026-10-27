@@ -26,7 +26,7 @@
         real settings have been created yet at
         %APPDATA%\MindAttic\MindAttic.Launcher\settings.json - an existing
         install is never touched).
-      - Runs deploy.ps1 -Force to publish to C:\Apps\MindAttic.Launcher.
+      - Runs run.ps1 -Force to publish to C:\Apps\MindAttic.Launcher.
       - If a GitHub token was given, runs 'adopt-repos' to save it and tag
         every repo it can see as 'wip'.
       - Creates the Desktop shortcut, if asked for.
@@ -49,7 +49,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $repo      = $PSScriptRoot
-$deployPs1 = Join-Path $repo 'deploy.ps1'
+$deployPs1 = Join-Path $repo 'run.ps1'
 $slnx      = Join-Path $repo 'MindAttic.Launcher.slnx'
 $deployDir = 'C:\Apps\MindAttic.Launcher'
 $exeName   = 'MindAttic.Launcher.exe'
@@ -80,7 +80,7 @@ Write-Host "MindAttic.Launcher setup" -ForegroundColor Magenta
 Write-Info "This checkout: $repo"
 
 if (-not (Test-Path $deployPs1) -or -not (Test-Path $slnx)) {
-    Write-Host "This doesn't look like the MindAttic.Launcher repo root (deploy.ps1 / MindAttic.Launcher.slnx not found next to setup.ps1)." -ForegroundColor Red
+    Write-Host "This doesn't look like the MindAttic.Launcher repo root (run.ps1 / MindAttic.Launcher.slnx not found next to setup.ps1)." -ForegroundColor Red
     Write-Host "Run setup.ps1 from inside the cloned checkout." -ForegroundColor Red
     exit 1
 }
@@ -259,7 +259,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $exe = Join-Path $deployDir $exeName
-$bat = Join-Path $deployDir 'deploy.bat'
+$bat = Join-Path $deployDir 'run.bat'
 
 # ── Adopt repos as 'wip' (only if a GitHub token was given) ─────────────────
 if ($githubToken) {

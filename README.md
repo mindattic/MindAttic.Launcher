@@ -52,10 +52,10 @@ Prerequisites: Windows, the .NET 10 SDK, Windows Terminal (`wt`) on `PATH`, at l
 ```powershell
 git clone https://github.com/mindattic/MindAttic.Launcher.git
 cd MindAttic.Launcher
-powershell -NoProfile -ExecutionPolicy Bypass -File deploy.ps1 -Launch
+powershell -NoProfile -ExecutionPolicy Bypass -File run.ps1 -Launch
 ```
 
-`deploy.ps1` publishes to `C:\Apps\MindAttic.Launcher\` like every other MindAttic app and writes a `deploy.bat` next to the exe. Point your desktop shortcut at `C:\Apps\MindAttic.Launcher\deploy.bat`: it republishes only when source changed, then starts the Launcher.
+`run.ps1` publishes to `C:\Apps\MindAttic.Launcher\` like every other MindAttic app and writes a `run.bat` next to the exe. Point your desktop shortcut at `C:\Apps\MindAttic.Launcherun.bat`: double-clicked it asks first, 1) Deploy & Run (republishes, then starts the Launcher) or 2) Run (starts it as deployed); started with arguments it skips the menu, republishes only when source changed, then starts the Launcher with them.
 
 You should see the menu above. On first run the launcher offers every git repo directly under the workspace root for the roster; pick a color for each, then choose Open Project Tab.
 
@@ -209,7 +209,7 @@ Launching the exe with no arguments runs `MainMenuCommand`, which loads settings
 | Settings | `settings` | Opens `SettingsMenu`: the model each agent CLI runs with (only). |
 | Open Command Prompt (Admin) | `cmd` | Opens an elevated `cmd` tab at the workspace root via UAC (`wt … -- cmd`, `Verb=runas`). |
 | Open PowerShell (Admin) | `ps` | Same, but `powershell`. |
-| Restart | `restart` | Launches `deploy.ps1 -WaitPid <this pid>` in a fresh tab (waits for this process to exit, force-republishes, then re-execs) and exits this instance. Needed because Windows locks the running exe image so it cannot republish itself in place. |
+| Restart | `restart` | Launches `run.ps1 -WaitPid <this pid>` in a fresh tab (waits for this process to exit, force-republishes, then re-execs) and exits this instance. Needed because Windows locks the running exe image so it cannot republish itself in place. |
 | Quit | `exit` | Closes the menu; other tabs are untouched. |
 
 The header also shows the staleness notice when the build is behind; it is not a menu item.
@@ -357,13 +357,13 @@ dotnet build
 dotnet test
 
 # Deploy a single-file, framework-dependent win-x64 exe to C:\Apps\MindAttic.Launcher\
-powershell -NoProfile -ExecutionPolicy Bypass -File deploy.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File run.ps1
 #   -Force        : clean bin/obj rebuild even if nothing looks changed
 #   -Launch ...   : then run the deployed exe here, passing the remaining args
 #   -WaitPid <n>  : the in-app Restart (wait for that menu to exit, force, launch)
 ```
 
-`deploy.ps1` is the one script for publishing, launching and restarting. Without `-Force` it republishes only when the deployed exe, `deploy.bat` or `repo.path` is missing or a source file is newer than the exe, so the per-launch call is a fast no-op. It never closes running copies (every agent tab is a live `MindAttic.Launcher.exe host` process): a locked exe is renamed to `*.stale-*` and the fresh one published beside it; leftovers are deleted once unlocked. Each publish also writes `deploy.bat` (what the desktop shortcut runs) and `repo.path` (the source path, which the deployed exe reads to find the repo, workspace root and git). Restart refuses to fall back to a stale exe when the rebuild fails.
+`run.ps1` is the one script for publishing, launching and restarting. Without `-Force` it republishes only when the deployed exe or `repo.path` is missing or a source file is newer than the exe, so the per-launch call is a fast no-op. It never closes running copies (every agent tab is a live `MindAttic.Launcher.exe host` process): a locked exe is renamed to `*.stale-*` and the fresh one published beside it; leftovers are deleted once unlocked. Every run also writes `run.bat` (what the desktop shortcut runs) and `repo.path` (the source path, which the deployed exe reads to find the repo, workspace root and git). Restart refuses to fall back to a stale exe when the rebuild fails.
 
 Test coverage (`MindAttic.Launcher.Tests/`, NUnit 4) spans:
 
@@ -399,7 +399,7 @@ docs/
   USER_STORIES.md                    L2: test-cited stories
   BIBLE.digest.md                    GENERATED, never hand-edit
   rfc/                               open design notes (deleted once decided and folded in)
-deploy.ps1                           publish to C:\Apps\MindAttic.Launcher\ (+ deploy.bat, repo.path); -Launch, -WaitPid
+run.ps1                              publish to C:\Apps\MindAttic.Launcher\ (+ run.bat, repo.path); -Launch, -WaitPid, -LauncherOnly
 tools/
   codex.ps1                          docs doctor/digest tooling
 setup.ps1, setup.bat                 first-time checkout setup: prereqs, workspace root, deploy,

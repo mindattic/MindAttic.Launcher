@@ -223,7 +223,7 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
             .FirstOrDefault(File.Exists);
         if (exe is null)
         {
-            AnsiConsole.MarkupLine("[yellow]The orchestrator isn't installed. Double-click MindAttic.Orchestrator.Desktop.exe once (or run its deploy.ps1) and it installs itself.[/]");
+            AnsiConsole.MarkupLine("[yellow]The orchestrator isn't installed. Double-click MindAttic.Orchestrator.Desktop.exe once (or run its run.ps1) and it installs itself.[/]");
             Thread.Sleep(2500);
             return;
         }
@@ -243,12 +243,12 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
     {
         // We don't republish in-process: this menu usually runs from the deployed exe
         // in C:\Apps\MindAttic.Launcher, which Windows locks while it runs. Instead
-        // run deploy.ps1 -WaitPid in a fresh tab; it waits for THIS process to exit,
+        // run run.ps1 -WaitPid in a fresh tab; it waits for THIS process to exit,
         // force-rebuilds, then runs the fresh exe (and refuses to launch a stale one
         // if the build fails). We return 0 right after, so this tab closes.
         // A scoped Launcher (M.LNCH-T54) restarts scoped to the same login, in that person's window (M.LNCH-T55).
         var root = ExePath.RepoRoot;
-        var restartScript = root is null ? null : Path.Combine(root, "deploy.ps1");
+        var restartScript = root is null ? null : Path.Combine(root, "run.ps1");
         var title = Title(scope);
         string[] launchArgs = scope is null ? [] : ["--account", scope.Email];
 

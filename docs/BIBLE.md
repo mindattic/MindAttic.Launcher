@@ -78,7 +78,7 @@ call stateless/injectable services; the services own all external-process and fi
 - `MindAttic.Launcher/MindAttic.Launcher.csproj` — the exe (`net10.0-windows`, `OutputType=Exe`,
   `Version 1.0.0`; references MindAttic.Vault 1.0.0, Spectre.Console + Spectre.Console.Cli 0.49.1).
 - `MindAttic.Launcher.Tests/MindAttic.Launcher.Tests.csproj` — NUnit 4 test project.
-- `deploy.ps1` — publishes to `C:\Apps\MindAttic.Launcher\` (writing `deploy.bat` and `repo.path` beside
+- `run.ps1` — publishes to `C:\Apps\MindAttic.Launcher\` (writing `run.bat` and `repo.path` beside
   the exe), launches it, and backs the in-app Restart (`-WaitPid`).
 
 ### 4.2 Domain model — NOUNS (`MindAttic.Launcher/Models/`)

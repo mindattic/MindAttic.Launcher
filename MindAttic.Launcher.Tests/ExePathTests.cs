@@ -25,7 +25,7 @@ public sealed class ExePathTests
     {
         var repo = Path.Combine(temp, name);
         Directory.CreateDirectory(repo);
-        File.WriteAllText(Path.Combine(repo, "deploy.ps1"), "");
+        File.WriteAllText(Path.Combine(repo, "run.ps1"), "");
         File.WriteAllText(Path.Combine(repo, "MindAttic.Launcher.slnx"), "");
         return repo;
     }
@@ -64,10 +64,10 @@ public sealed class ExePathTests
     [Test]
     public void ResolveRepoRoot_needs_the_solution_not_just_any_deploy_ps1()
     {
-        // Every C:\Apps-style repo has a deploy.ps1; only the Launcher has this solution.
+        // Every C:\Apps-style repo has a run.ps1; only the Launcher has this solution.
         var other = Path.Combine(temp, "OtherApp");
         Directory.CreateDirectory(other);
-        File.WriteAllText(Path.Combine(other, "deploy.ps1"), "");
+        File.WriteAllText(Path.Combine(other, "run.ps1"), "");
 
         Assert.That(ExePath.ResolveRepoRoot(other), Is.Null);
     }

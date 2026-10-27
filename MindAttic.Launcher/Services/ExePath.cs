@@ -6,9 +6,9 @@ namespace MindAttic.Launcher.Services;
 /// Resolves paths to the running and canonical MindAttic.Launcher executables.
 /// <see cref="Self"/> is whatever exe is currently executing (e.g. the Debug
 /// bin during dev). <see cref="Release"/> is the deployed single-file exe in
-/// <see cref="DeployDir"/>, which the desktop shortcut's deploy.bat runs and
+/// <see cref="DeployDir"/>, which the desktop shortcut's run.bat runs and
 /// which agent tabs and "Restart" launch. <see cref="EnsureFresh"/> shells out to
-/// the repo's <c>deploy.ps1</c> to republish when source has changed.
+/// the repo's <c>run.ps1</c> to republish when source has changed.
 /// </summary>
 public static class ExePath
 {
@@ -16,9 +16,9 @@ public static class ExePath
     public const string DeployDir = @"C:\Apps\MindAttic.Launcher";
 
     /// <summary>
-    /// File deploy.ps1 writes next to the deployed exe, holding the source repo's
+    /// File run.ps1 writes next to the deployed exe, holding the source repo's
     /// path. The deployed exe has no repo above it to walk up to, so this is how it
-    /// finds deploy.ps1, scripts\, the workspace root and git.
+    /// finds run.ps1, scripts\, the workspace root and git.
     /// </summary>
     public const string RepoPathFile = "repo.path";
 
@@ -34,7 +34,7 @@ public static class ExePath
     }
 
     /// <summary>
-    /// The MindAttic.Launcher repo root (the directory holding <c>deploy.ps1</c>
+    /// The MindAttic.Launcher repo root (the directory holding <c>run.ps1</c>
     /// and the solution). Null when it can't be found. Used by
     /// <see cref="BuildFreshness"/> to compare the build against the latest commit.
     /// </summary>
@@ -59,7 +59,7 @@ public static class ExePath
     {
         var root = FindRepoRoot();
         if (root is null) return;
-        var script = Path.Combine(root, "deploy.ps1");
+        var script = Path.Combine(root, "run.ps1");
         if (!File.Exists(script)) return;
 
         var psi = new ProcessStartInfo("powershell")
@@ -135,6 +135,6 @@ public static class ExePath
 
     private static bool IsRepo(string dir) =>
         !string.IsNullOrWhiteSpace(dir)
-        && File.Exists(Path.Combine(dir, "deploy.ps1"))
+        && File.Exists(Path.Combine(dir, "run.ps1"))
         && File.Exists(Path.Combine(dir, "MindAttic.Launcher.slnx"));
 }
