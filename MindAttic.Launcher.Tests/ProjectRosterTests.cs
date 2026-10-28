@@ -92,4 +92,25 @@ public sealed class ProjectRosterTests
 
         Assert.That(ProjectRoster.Sorted(settings, tagged), Is.Empty);
     }
+
+    [Test]
+    public void Sorted_collapses_duplicate_name_and_path_entries()
+    {
+        // M.LNCH-T91: a corrupted/hand-edited settings.json can carry the same
+        // (Name, Path) more than once; every caller just iterates this list, so
+        // duplicates must never reach them.
+        var settings = new AppSettings
+        {
+            Projects =
+            {
+                new Project { Name = "RogueTrader.Overwatch", Path = @"D:\Projects\MindAttic\RogueTrader.Overwatch" },
+                new Project { Name = "ROGUETRADER.OVERWATCH", Path = @"d:\projects\mindattic\roguetrader.overwatch" },
+                new Project { Name = "RogueTrader.Overwatch", Path = @"D:\Projects\MindAttic\RogueTrader.Overwatch" },
+            }
+        };
+
+        var sorted = ProjectRoster.Sorted(settings);
+
+        Assert.That(sorted, Has.Count.EqualTo(1));
+    }
 }

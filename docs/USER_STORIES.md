@@ -301,3 +301,4 @@ Dependency-ordered toward the headline goal (a frictionless single-binary worksp
 | M.LNCH-T88 | 2026-10-26 | fix | wont-do | AccountScope.Ensure sends the API-key login (api-key@mindattic.vault) through the claude.ai OAuth sign-in flow instead of recognizing it's Vault-key-based | 1c51228 |
 | M.LNCH-T89 | 2026-10-27 | chore | open | Follow the Orchestrator dashboard exe rename (M.ORCH-T1205): MainMenuCommand starts MindAttic.Orchestrator.Desktop.Wpf.exe, falling back to the old name, and honours the Preferred dashboard setting | — |
 | M.LNCH-T90 | 2026-10-27 | chore | closed | Add 1 file(s); Update 13 file(s) | — |
+| M.LNCH-T91 | 2026-10-27 | fix | open | Roster lists RogueTrader.Overwatch and RogueTrader.Shared 6x each (duplicate settings.json entries, no dedup) | — |

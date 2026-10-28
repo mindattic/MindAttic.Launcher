@@ -28,7 +28,11 @@ public static class ProjectRoster
         if (taggedFullNames is not null)
             projects = projects.Where(p => GitHubRepoRef.Parse(p.RepoUrl) is { } full && taggedFullNames.Contains(full));
 
+        // A hand-edited or corrupted settings.json can carry the same (Name, Path) more
+        // than once (M.LNCH-T91); every consumer here just iterates the list, so without
+        // this it'd fan out into repeated commit lines and repeated menu entries.
         return projects
+            .DistinctBy(p => (p.Name.ToUpperInvariant(), p.Path.ToUpperInvariant()))
             .OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
