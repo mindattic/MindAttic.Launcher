@@ -28,7 +28,7 @@ public sealed class TicketsMenu(string workspaceRoot)
         while (true)
         {
             Screen.Header("Tickets");
-            var result = Menu.PromptWithKeys("Choose a view:", items, customKeys: null, initialIndex: resumeIndex);
+            var result = Menu.PromptWithKeys("Choose a view:", items, initialIndex: resumeIndex);
             resumeIndex = result.Index;
             if (result.Selected is null) return;
 

@@ -45,7 +45,7 @@ public sealed class ProjectSetupMenu(SettingsStore store, string projectName)
             };
 
             Screen.Header(projectName, "Setup");
-            var result = Menu.PromptWithKeys($"Configure {Markup.Escape(projectName)}:", items, customKeys: null, initialIndex: resumeIndex);
+            var result = Menu.PromptWithKeys($"Configure {Markup.Escape(projectName)}:", items, initialIndex: resumeIndex);
             resumeIndex = result.Index;
             var sel = result.Selected;
             if (sel is null) return;

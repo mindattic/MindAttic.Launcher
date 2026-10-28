@@ -39,7 +39,6 @@ public sealed class OpenProjectMenu(SettingsStore store, AgentProviderRegistry p
             var result = Menu.PromptWithKeys(
                 "Choose a project to open:",
                 items,
-                customKeys: null,
                 initialIndex: resumeIndex);
 
             if (result.Back)

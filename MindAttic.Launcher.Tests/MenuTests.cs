@@ -16,7 +16,7 @@ public class MenuTests
     }
 
     [TestCase(ConsoleKey.UpArrow)]
-    [TestCase(ConsoleKey.K)]
+    [TestCase(ConsoleKey.W)]
     public void Navigate_Up_WrapsFromZeroToLast(ConsoleKey key)
     {
         var index = 0;
@@ -27,7 +27,7 @@ public class MenuTests
     }
 
     [TestCase(ConsoleKey.DownArrow)]
-    [TestCase(ConsoleKey.J)]
+    [TestCase(ConsoleKey.S)]
     public void Navigate_Down_WrapsToZero(ConsoleKey key)
     {
         var index = 4;
@@ -78,7 +78,7 @@ public class MenuTests
     public void Resolve_EnterOnItem_SelectsIt()
     {
         var rows = Rows(true);
-        var r = Menu.Resolve(ConsoleKey.Enter, rows, 1, true, null);
+        var r = Menu.Resolve(ConsoleKey.Enter, rows, 1, true);
         Assert.That(r!.Selected, Is.SameAs(rows[1]));
         Assert.That(r.Back, Is.False);
         Assert.That(r.Index, Is.EqualTo(1));
@@ -88,7 +88,7 @@ public class MenuTests
     public void Resolve_EnterOnBackRow_YieldsBack()
     {
         var rows = Rows(true);
-        var r = Menu.Resolve(ConsoleKey.Enter, rows, 3, true, null);
+        var r = Menu.Resolve(ConsoleKey.Enter, rows, 3, true);
         Assert.That(r!.Back, Is.True);
         Assert.That(r.Selected, Is.Null);
     }
@@ -96,33 +96,29 @@ public class MenuTests
     [Test]
     public void Resolve_Escape_BackOnlyWhenAllowed()
     {
-        Assert.That(Menu.Resolve(ConsoleKey.Escape, Rows(true), 0, true, null)!.Back, Is.True);
-        Assert.That(Menu.Resolve(ConsoleKey.Escape, Rows(false), 0, false, null), Is.Null);
+        Assert.That(Menu.Resolve(ConsoleKey.Escape, Rows(true), 0, true)!.Back, Is.True);
+        Assert.That(Menu.Resolve(ConsoleKey.Escape, Rows(false), 0, false), Is.Null);
     }
 
     [Test]
-    public void Resolve_CustomKey_TargetsHighlightedItem()
+    public void Resolve_DOnItem_SelectsItLikeEnter()
     {
         var rows = Rows(true);
-        var keys = new HashSet<ConsoleKey> { ConsoleKey.S };
-        var r = Menu.Resolve(ConsoleKey.S, rows, 2, true, keys);
-        Assert.That(r!.CustomKey, Is.EqualTo(ConsoleKey.S));
-        Assert.That(r.KeyTarget, Is.SameAs(rows[2]));
+        var r = Menu.Resolve(ConsoleKey.D, rows, 1, true);
+        Assert.That(r!.Selected, Is.SameAs(rows[1]));
     }
 
     [Test]
-    public void Resolve_CustomKey_IgnoredOnBackRow()
+    public void Resolve_A_BackOnlyWhenAllowed()
     {
-        var keys = new HashSet<ConsoleKey> { ConsoleKey.S };
-        Assert.That(Menu.Resolve(ConsoleKey.S, Rows(true), 3, true, keys), Is.Null);
+        Assert.That(Menu.Resolve(ConsoleKey.A, Rows(true), 0, true)!.Back, Is.True);
+        Assert.That(Menu.Resolve(ConsoleKey.A, Rows(false), 0, false), Is.Null);
     }
 
     [Test]
     public void Resolve_UnregisteredKey_ReturnsNull()
     {
-        var keys = new HashSet<ConsoleKey> { ConsoleKey.S };
-        Assert.That(Menu.Resolve(ConsoleKey.X, Rows(true), 0, true, keys), Is.Null);
-        Assert.That(Menu.Resolve(ConsoleKey.S, Rows(true), 0, true, null), Is.Null);
+        Assert.That(Menu.Resolve(ConsoleKey.X, Rows(true), 0, true), Is.Null);
     }
 
     [Test]

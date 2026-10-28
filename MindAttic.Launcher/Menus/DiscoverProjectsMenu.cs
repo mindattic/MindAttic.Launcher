@@ -15,10 +15,11 @@ namespace MindAttic.Launcher.Menus;
 /// </summary>
 public sealed class DiscoverProjectsMenu(SettingsStore store, GitService git, WindowsTerminalSchemes schemes, IReadOnlySet<string>? tagged = null)
 {
-    // Tag on the "Custom hex…" row, distinguishing it from the PaletteColor rows.
+    // Tags on the rows appended after the palette, distinguishing them from the
+    // PaletteColor rows.
     private static readonly object CustomHexTag = new();
-    private static readonly IReadOnlySet<ConsoleKey> SkipKeys =
-        new HashSet<ConsoleKey> { ConsoleKey.S, ConsoleKey.N };
+    private static readonly object SkipAllTag = new();
+    private static readonly object NeverAskTag = new();
 
     private enum Outcome { Added, Skipped, SkipAll, Never }
 
@@ -70,8 +71,8 @@ public sealed class DiscoverProjectsMenu(SettingsStore store, GitService git, Wi
 
         var colorResult = PickColor(settings);
         if (colorResult.Back) return Outcome.Skipped;
-        if (colorResult.CustomKey == ConsoleKey.S) return Outcome.SkipAll;
-        if (colorResult.CustomKey == ConsoleKey.N) return Outcome.Never;
+        if (ReferenceEquals(colorResult.Selected?.Tag, SkipAllTag)) return Outcome.SkipAll;
+        if (ReferenceEquals(colorResult.Selected?.Tag, NeverAskTag)) return Outcome.Never;
 
         string hex;
         if (ReferenceEquals(colorResult.Selected?.Tag, CustomHexTag))
@@ -134,12 +135,10 @@ public sealed class DiscoverProjectsMenu(SettingsStore store, GitService git, Wi
             })
             .ToList();
         items.Add(new MenuItem { Name = "Custom hex…", Description = "enter any #RRGGBB", Tag = CustomHexTag });
+        items.Add(new MenuItem { Name = "Skip all remaining", Description = "stop asking for this run", Tag = SkipAllTag, SpacerBefore = true });
+        items.Add(new MenuItem { Name = "Never ask about this repo", Description = "add to the discovery ignore list", Tag = NeverAskTag });
 
-        return Menu.PromptWithKeys(
-            "  Pick a tab color:",
-            items,
-            SkipKeys,
-            extraHint: "[green]S[/][grey50] skip all  [/][green]N[/][grey50] never ask  [/][green]Esc[/][grey50] skip this[/]");
+        return Menu.PromptWithKeys("  Pick a tab color:", items, extraHint: "[green]Esc[/][grey50] skip this[/]");
     }
 
     private static bool TryPromptCustomHex(out string hex)

@@ -28,7 +28,7 @@ public sealed class ProjectActionMenu(
             };
 
             Screen.Header(current.Name);
-            var result = Menu.PromptWithKeys($"Choose an action for {Markup.Escape(current.Name)}:", items, customKeys: null, initialIndex: resumeIndex);
+            var result = Menu.PromptWithKeys($"Choose an action for {Markup.Escape(current.Name)}:", items, initialIndex: resumeIndex);
             resumeIndex = result.Index;
             var sel = result.Selected;
             if (sel is null) return;

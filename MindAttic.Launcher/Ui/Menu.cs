@@ -18,16 +18,14 @@ public static class Menu
     /// </summary>
     public static MenuItem? Prompt(string title, IReadOnlyList<MenuItem> items, bool allowBack = true)
     {
-        var result = PromptWithKeys(title, items, customKeys: null, allowBack: allowBack);
+        var result = PromptWithKeys(title, items, allowBack: allowBack);
         return result.Selected;
     }
 
     /// <summary>
-    /// Like <see cref="Prompt"/>, but also surfaces a configured set of "custom"
-    /// keys (e.g. S/N to skip color prompts during project discovery). When a
-    /// custom key is pressed the prompt exits with <see cref="MenuResult.CustomKey"/>
-    /// set and <see cref="MenuResult.KeyTarget"/> pointing at the highlighted item,
-    /// so the caller can react and re-enter the loop with fresh items.
+    /// Like <see cref="Prompt"/>, but exposes <paramref name="extraHint"/> and
+    /// <paramref name="initialIndex"/> for callers that need a custom hint line
+    /// or to resume on a particular row.
     /// </summary>
     /// <remarks>
     /// Drawn as a Spectre live region: each key press swaps the region's content
@@ -37,7 +35,6 @@ public static class Menu
     public static MenuResult PromptWithKeys(
         string title,
         IReadOnlyList<MenuItem> items,
-        IReadOnlySet<ConsoleKey>? customKeys,
         bool allowBack = true,
         string? extraHint = null,
         CancellationToken refreshToken = default,
@@ -140,7 +137,7 @@ public static class Menu
                                 continue;
                             }
 
-                            result = Resolve(keyInfo.Key, rows, index, allowBack, customKeys);
+                            result = Resolve(keyInfo.Key, rows, index, allowBack);
                         }
                     });
 
@@ -168,8 +165,8 @@ public static class Menu
     {
         var next = key switch
         {
-            ConsoleKey.UpArrow or ConsoleKey.K => index == 0 ? count - 1 : index - 1,
-            ConsoleKey.DownArrow or ConsoleKey.J => (index + 1) % count,
+            ConsoleKey.UpArrow or ConsoleKey.W => index == 0 ? count - 1 : index - 1,
+            ConsoleKey.DownArrow or ConsoleKey.S => (index + 1) % count,
             ConsoleKey.Home => 0,
             ConsoleKey.End => count - 1,
             ConsoleKey.PageUp => Math.Max(0, index - pageSize),
@@ -182,12 +179,12 @@ public static class Menu
     }
 
     /// <summary>Maps a non-navigation key to a result, or null to keep waiting.</summary>
-    internal static MenuResult? Resolve(
-        ConsoleKey key, IReadOnlyList<MenuItem> rows, int index, bool allowBack, IReadOnlySet<ConsoleKey>? customKeys)
+    internal static MenuResult? Resolve(ConsoleKey key, IReadOnlyList<MenuItem> rows, int index, bool allowBack)
     {
         switch (key)
         {
             case ConsoleKey.Enter:
+            case ConsoleKey.D:
             {
                 var chosen = rows[index];
                 if (ReferenceEquals(chosen.Tag, MenuSentinel.Back))
@@ -195,14 +192,9 @@ public static class Menu
                 return new MenuResult { Selected = chosen, Index = index };
             }
             case ConsoleKey.Escape:
+            case ConsoleKey.A:
                 return allowBack ? new MenuResult { Back = true, Index = index } : null;
             default:
-                if (customKeys is not null && customKeys.Contains(key))
-                {
-                    var target = rows[index];
-                    if (!ReferenceEquals(target.Tag, MenuSentinel.Back))
-                        return new MenuResult { CustomKey = key, KeyTarget = target, Index = index };
-                }
                 return null;
         }
     }
@@ -328,8 +320,6 @@ public sealed class MenuResult
     public MenuItem? Selected { get; init; }
     public bool Back { get; init; }
     public bool Timeout { get; init; }
-    public ConsoleKey? CustomKey { get; init; }
-    public MenuItem? KeyTarget { get; init; }
     public int Index { get; init; }
 }
 

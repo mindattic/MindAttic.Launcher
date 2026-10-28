@@ -146,7 +146,6 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
             var result = Ui.Menu.PromptWithKeys(
                 "MindAttic Launcher — choose an action:",
                 items,
-                customKeys: null,
                 allowBack: false,
                 refreshToken: refreshCts.Token,
                 initialIndex: resumeIndex);

@@ -69,7 +69,7 @@ public sealed class SettingsMenu(AgentProviderRegistry providers, SettingsStore 
             });
 
             Screen.Header("Settings");
-            var result = Menu.PromptWithKeys("Configure CLI development:", items, customKeys: null, initialIndex: resumeIndex);
+            var result = Menu.PromptWithKeys("Configure CLI development:", items, initialIndex: resumeIndex);
             resumeIndex = result.Index;
             var sel = result.Selected;
             if (sel is null) return;

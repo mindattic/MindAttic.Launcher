@@ -83,9 +83,10 @@ call stateless/injectable services; the services own all external-process and fi
 
 ### 4.2 Domain model — NOUNS (`MindAttic.Launcher/Models/`)
 - **Project** (`Models/Project.cs`) — a managed repo: `Name`, `Path`, `RepoUrl`, tab alias/color/scheme,
-  `SqlServer` + `Databases`, `SqliteDatabases`, `[JsonExtensionData] Extra`. `TabTitle` strips the
-  shared `MindAttic.` prefix. Carries no provider — which CLI to launch with is chosen at
-  Open-Project-Tab time, not stored per project.
+  `SqlServer` + `Databases`, `SqliteDatabases`, `[JsonExtensionData] Extra`. `TabTitle` strips a
+  project's dot-prefix (e.g. `MindAttic.`) once the roster (`Project.KnownNames`) has another project
+  carrying the same one — a prefix unique to one project stays whole. Carries no provider — which CLI
+  to launch with is chosen at Open-Project-Tab time, not stored per project.
 - **AgentProvider** (`Models/AgentProvider.cs`) — a launchable agent: `Key`, `Name`, `RunCommand`,
   `Extra`.
 - **AppSettings** (`Models/AppSettings.cs`) — the persisted root: WT settings path, `AgentProviders`,
