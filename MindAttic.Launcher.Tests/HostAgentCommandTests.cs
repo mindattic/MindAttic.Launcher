@@ -127,6 +127,24 @@ public sealed class HostAgentCommandTests
     }
 
     [Test]
+    public void Title_falls_back_to_General_for_the_workspace_root_itself()
+    {
+        // M.LNCH-T92: a path-rooted, non-project tab (the General Prompt, no --name) at the MindAttic
+        // workspace root must not show the root folder's literal name ("MindAttic") as its title —
+        // every other non-project path still falls back to its own folder name (see above).
+        var root = ExePath.WorkspaceRoot;
+        var sep = Path.DirectorySeparatorChar;
+        Assert.Multiple(() =>
+        {
+            Assert.That(HostAgentCommand.ResolveTitle(null, null, root), Is.EqualTo("General"));
+            Assert.That(HostAgentCommand.ResolveTitle(null, null, root + sep), Is.EqualTo("General"));
+            Assert.That(HostAgentCommand.ResolveTitle(null, null, root.ToUpperInvariant()), Is.EqualTo("General"));
+            // An explicit --title or --name still wins, same as any other path.
+            Assert.That(HostAgentCommand.ResolveTitle("General [Claude]", null, root), Is.EqualTo("General [Claude]"));
+        });
+    }
+
+    [Test]
     public void StartInfo_strips_NO_COLOR_and_appends_the_prompt_last()
     {
         var prior = Environment.GetEnvironmentVariable("NO_COLOR");

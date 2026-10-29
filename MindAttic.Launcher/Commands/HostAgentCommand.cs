@@ -358,11 +358,32 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
             : new(requested, null, 0);
     }
 
-    /// <summary>--title, else --name, else the folder name of the path (trailing separator trimmed).</summary>
+    /// <summary>--title, else --name, else "General" when the path is the MindAttic workspace root itself (a
+    /// path-rooted, non-project tab — e.g. the General Prompt — whose folder is literally named "MindAttic" and
+    /// would otherwise leak that name into the tab title, M.LNCH-T92), else the folder name of the path
+    /// (trailing separator trimmed).</summary>
     public static string ResolveTitle(string? title, string? name, string workingDir) =>
         !string.IsNullOrWhiteSpace(title) ? title
         : !string.IsNullOrWhiteSpace(name) ? name
+        : IsWorkspaceRoot(workingDir) ? "General"
         : System.IO.Path.GetFileName(workingDir.TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar));
+
+    /// <summary>True when <paramref name="workingDir"/> is <see cref="ExePath.WorkspaceRoot"/> itself, trailing
+    /// separators and case ignored. An unresolvable path (bad characters, too long) just isn't the root.</summary>
+    private static bool IsWorkspaceRoot(string workingDir)
+    {
+        try
+        {
+            return string.Equals(NormalizedFullPath(workingDir), NormalizedFullPath(ExePath.WorkspaceRoot), StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
+        }
+    }
+
+    private static string NormalizedFullPath(string path) =>
+        System.IO.Path.GetFullPath(path).TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar);
 
     /// <summary>The agent's start info before provider credentials and login: argv, working dir, NO_COLOR stripped, then --resume or the seed prompt last.</summary>
     public static ProcessStartInfo BuildBaseStartInfo(string[] parts, string workingDir, string? resumeSession, string? prompt)
