@@ -15,6 +15,9 @@ using Spectre.Console.Cli;
 // docs/MIGRATION.md) — the same gap MediaButler's WPF front door had, fixed the same way: a crash
 // log at the boundary, not a rewrite of the many AnsiConsole.MarkupLine calls scattered through
 // Commands/Menus/Services/Ui — those are the TUI's actual menu output, not diagnostics to extract.
+// Every git, claude and hook this process starts sees the live User+Machine PATH, not a stale inherited one (M.LNCH-T98).
+Environment.SetEnvironmentVariable("PATH", MindAttic.Launcher.Services.ExecutableResolver.LivePath());
+
 // Install step: seed settings and write the manifest MindAttic Vault renders, then exit.
 if (args.Contains(MindAttic.Vault.Settings.Manifest.SettingsManifestCommand.Switch, StringComparer.OrdinalIgnoreCase))
 {
