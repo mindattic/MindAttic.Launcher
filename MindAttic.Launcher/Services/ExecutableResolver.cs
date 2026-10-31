@@ -33,19 +33,7 @@ public static class ExecutableResolver
         // Search PATH entries only. Do not prepend CurrentDirectory — agent provider
         // CLIs are system tools on PATH; local project scripts (e.g. a local codex.bat)
         // must never hijack the launcher's agent command resolution.
-        // The inherited PATH first, then the live User and Machine PATH (M.LNCH-T97): a Launcher started from a parent
-        // whose environment predates an install (claude in %USERPROFILE%\.local\bin) would otherwise never find it.
-        var searchDirs = new[]
-            {
-                Environment.GetEnvironmentVariable("PATH"),
-                Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.User),
-                Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.Machine)
-            }
-            .SelectMany(p => (p ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
-            .Select(Environment.ExpandEnvironmentVariables)
-            .Distinct(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var dir in searchDirs)
+        foreach (var dir in LivePathDirs())
         {
             foreach (var ext in extensions)
             {
@@ -65,4 +53,22 @@ public static class ExecutableResolver
 
         return command;
     }
+
+    /// <summary>
+    /// The inherited PATH first, then the live User and Machine PATH (M.LNCH-T97): a Launcher started from a parent
+    /// whose environment predates an install (claude in %USERPROFILE%\.local\bin, Python) would otherwise never find it.
+    /// </summary>
+    public static IEnumerable<string> LivePathDirs() =>
+        new[]
+        {
+            Environment.GetEnvironmentVariable("PATH"),
+            Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.User),
+            Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.Machine)
+        }
+        .SelectMany(p => (p ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        .Select(Environment.ExpandEnvironmentVariables)
+        .Distinct(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary><see cref="LivePathDirs"/> as one PATH value, for an agent whose hooks run python and friends (M.LNCH-T98).</summary>
+    public static string LivePath() => string.Join(Path.PathSeparator, LivePathDirs());
 }

@@ -253,7 +253,8 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
         }
         catch (Exception ex)
         {
-            System.Console.Error.WriteLine($"Failed to launch {provider.Key}: {ex.Message}");
+            // An empty message alone says nothing (M.LNCH-T98): name the exception too.
+            System.Console.Error.WriteLine($"Failed to launch {provider.Key}: {(string.IsNullOrWhiteSpace(ex.Message) ? ex.ToString() : $"{ex.GetType().Name}: {ex.Message}")}");
             return 3;
         }
         finally
@@ -399,6 +400,8 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
         for (var i = 1; i < parts.Length; i++) psi.ArgumentList.Add(parts[i]);
         // wt.exe can carry a stale NO_COLOR=1 that would strip every hosted agent's colors.
         psi.EnvironmentVariables.Remove("NO_COLOR");
+        // The agent's hooks (python ...) need the live PATH, not the one this Launcher inherited (M.LNCH-T98).
+        psi.Environment["PATH"] = ExecutableResolver.LivePath();
         if (resumeSession is not null)
         {
             psi.ArgumentList.Add("--resume");
