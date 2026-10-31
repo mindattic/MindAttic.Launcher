@@ -33,8 +33,17 @@ public static class ExecutableResolver
         // Search PATH entries only. Do not prepend CurrentDirectory — agent provider
         // CLIs are system tools on PATH; local project scripts (e.g. a local codex.bat)
         // must never hijack the launcher's agent command resolution.
-        var searchDirs = (Environment.GetEnvironmentVariable("PATH") ?? "")
-            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries);
+        // The inherited PATH first, then the live User and Machine PATH (M.LNCH-T97): a Launcher started from a parent
+        // whose environment predates an install (claude in %USERPROFILE%\.local\bin) would otherwise never find it.
+        var searchDirs = new[]
+            {
+                Environment.GetEnvironmentVariable("PATH"),
+                Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.User),
+                Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.Machine)
+            }
+            .SelectMany(p => (p ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+            .Select(Environment.ExpandEnvironmentVariables)
+            .Distinct(StringComparer.OrdinalIgnoreCase);
 
         foreach (var dir in searchDirs)
         {
