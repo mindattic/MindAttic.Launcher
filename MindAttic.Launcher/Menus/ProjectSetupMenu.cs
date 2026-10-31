@@ -1,86 +1,35 @@
-using MindAttic.Launcher.Models;
 using MindAttic.Launcher.Services;
 using MindAttic.Launcher.Ui;
+using MindAttic.Vault.Launch;
+using MindAttic.Vault.Settings.Manifest;
 using Spectre.Console;
 
 namespace MindAttic.Launcher.Menus;
 
+/// <summary>
+/// A project's Settings (alias, description, color scheme, tab color, ...) open MindAttic.Vault.Desktop on the
+/// Launcher's tab, scrolled to this project's entry in the roster.
+/// </summary>
 public sealed class ProjectSetupMenu(SettingsStore store, string projectName)
 {
     public void Run()
     {
-        var resumeIndex = 0;
-        while (true)
+        if (SettingFor(store, projectName) is not { } setting) return;
+        if (VaultSettings.Open(SettingsStore.AppBucket, setting))
         {
-            var settings = store.Load();
-            var project = ProjectRoster.FindByName(settings, projectName);
-            if (project is null) return;
-
-            var items = new List<MenuItem>
-            {
-                new()
-                {
-                    Name = "Alias",
-                    Description = string.IsNullOrWhiteSpace(project.TabAlias) ? "(uses project name)" : project.TabAlias,
-                    Tag = "alias"
-                },
-                new()
-                {
-                    Name = "Description",
-                    Description = string.IsNullOrWhiteSpace(project.Description) ? "(none)" : project.Description,
-                    Tag = "desc"
-                },
-                new()
-                {
-                    Name = "Color Scheme",
-                    Description = string.IsNullOrWhiteSpace(project.ColorScheme) ? "(none)" : project.ColorScheme,
-                    Tag = "scheme"
-                },
-                new()
-                {
-                    Name = "Tab Color",
-                    Description = string.IsNullOrWhiteSpace(project.TabColor) ? "(none)" : project.TabColor,
-                    Tag = "color"
-                },
-            };
-
-            Screen.Header(projectName, "Setup");
-            var result = Menu.PromptWithKeys($"Configure {Markup.Escape(projectName)}:", items, initialIndex: resumeIndex);
-            resumeIndex = result.Index;
-            var sel = result.Selected;
-            if (sel is null) return;
-
-            switch (sel.Tag)
-            {
-                case "alias":    EditField(project, "Alias",        p => p.TabAlias,    (p, v) => p.TabAlias    = v); break;
-                case "desc":     EditField(project, "Description",  p => p.Description, (p, v) => p.Description = v); break;
-                case "scheme":   EditField(project, "Color Scheme", p => p.ColorScheme, (p, v) => p.ColorScheme = v); break;
-                case "color":    EditField(project, "Tab Color",    p => p.TabColor,    (p, v) => p.TabColor    = v); break;
-            }
+            Screen.Notice($"[green]Opened MindAttic Vault at {Markup.Escape(projectName)}'s settings.[/]");
+            Thread.Sleep(800);
+            return;
         }
+        Screen.Notice($"[yellow]MindAttic Vault isn't installed.[/] [grey50]Install it, or edit {Markup.Escape(store.SettingsFilePath)}.[/]");
+        Screen.PressAnyKey();
     }
 
-    private void EditField(Project project, string label, Func<Project, string?> get, Action<Project, string?> set)
+    /// <summary>The full setting name of the project's tab alias row (its index in the roster), or null if it's gone.</summary>
+    internal static string? SettingFor(SettingsStore store, string projectName)
     {
-        var current = get(project);
-        Screen.Header(projectName, "Setup", label);
-        AnsiConsole.MarkupLine($"  Current: [cyan1]{Markup.Escape(string.IsNullOrWhiteSpace(current) ? "(none)" : current!)}[/]");
-        AnsiConsole.WriteLine();
-
-        // Not a Spectre TextPrompt with a default: Enter on a blank line returns the default (the
-        // current value), so "blank to clear" could never clear. Blank clears; Esc cancels.
-        var entered = Prompt.TextOrCancel($"  [cyan1]{Markup.Escape(label)}[/] [grey50](blank to clear, Esc to cancel):[/] ");
-        if (entered is null) return;
-
-        var trimmed = entered.Trim();
-        store.Update(s =>
-        {
-            var p = ProjectRoster.FindByName(s, projectName);
-            if (p is null) return;
-            set(p, string.IsNullOrWhiteSpace(trimmed) ? null : trimmed);
-        });
-
-        Screen.Notice($"[green]{Markup.Escape(label)} saved.[/]");
-        Thread.Sleep(600);
+        var projects = store.Load().Projects;
+        var index = projects.FindIndex(p => string.Equals(p.Name, projectName, StringComparison.OrdinalIgnoreCase));
+        return index < 0 ? null : $"{SettingsManifest.PrefixFor(SettingsStore.AppBucket)}:projects:{index}:tabAlias";
     }
 }

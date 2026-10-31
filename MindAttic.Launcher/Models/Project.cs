@@ -1,3 +1,4 @@
+using MindAttic.Vault.Settings.Manifest;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -56,6 +57,7 @@ public sealed class Project
     /// <see cref="AppSettings.Extra"/>.
     /// </summary>
     [JsonExtensionData]
+    [SettingIgnore]
     public Dictionary<string, JsonElement>? Extra { get; set; }
 
     /// <summary>

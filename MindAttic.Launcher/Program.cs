@@ -15,6 +15,15 @@ using Spectre.Console.Cli;
 // docs/MIGRATION.md) — the same gap MediaButler's WPF front door had, fixed the same way: a crash
 // log at the boundary, not a rewrite of the many AnsiConsole.MarkupLine calls scattered through
 // Commands/Menus/Services/Ui — those are the TUI's actual menu output, not diagnostics to extract.
+// Install step: seed settings and write the manifest MindAttic Vault renders, then exit.
+if (args.Contains(MindAttic.Vault.Settings.Manifest.SettingsManifestCommand.Switch, StringComparer.OrdinalIgnoreCase))
+{
+    var settingsStore = new MindAttic.Launcher.Services.SettingsStore();
+    settingsStore.Load();
+    Console.WriteLine(Path.Combine(Path.GetDirectoryName(settingsStore.SettingsFilePath)!, MindAttic.Vault.Settings.Manifest.SettingsManifest.FileName));
+    return 0;
+}
+
 var logDbPath = VaultPaths.LoggingDbPath("MindAttic.Launcher");
 
 // Phase 2 (MindAttic.Log 3.0.0, see its docs/BIBLE.md §1.1): carry forward any rows left in

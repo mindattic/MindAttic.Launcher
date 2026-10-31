@@ -58,7 +58,7 @@ public sealed class SettingsStore
         if (!store.Exists())
             SeedFromLegacyIfPresent();
 
-        return Known(store.Load());
+        return Known(store.LoadOrSeed());
     }
 
     public void Save(AppSettings settings) => store.Save(settings);

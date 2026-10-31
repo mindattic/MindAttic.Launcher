@@ -24,7 +24,7 @@ public sealed class ProjectActionMenu(
             {
                 new() { Name = "Start Editing", Description = $"open agent tab ({provider.Name})", Tag = "run" },
                 new() { Name = "Run Command",   Description = hasCmd ? current.RunCommand! : "(none — configure in Settings)", Tag = "runcmd" },
-                new() { Name = "Settings",      Description = "alias, description, color, provider", Tag = "setup" },
+                new() { Name = "Settings",      Description = "in MindAttic Vault: alias, description, color", Tag = "setup" },
             };
 
             Screen.Header(current.Name);

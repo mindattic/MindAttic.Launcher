@@ -1,3 +1,4 @@
+using MindAttic.Vault.Settings.Manifest;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -15,6 +16,7 @@ public sealed class AgentProvider
     /// just because this version doesn't model it.
     /// </summary>
     [JsonExtensionData]
+    [SettingIgnore]
     public Dictionary<string, JsonElement>? Extra { get; set; }
 
     /// <summary>

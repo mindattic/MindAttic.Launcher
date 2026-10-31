@@ -125,7 +125,7 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
             new() { Name = "Backup",                        Description = "back up MindAttic to R:\\Backup\\MindAttic", Tag = "backup" },
             new() { Name = "Scheduled Backup",              Description = "status and toggle for the nightly backup task", Tag = "schedule" },
             new() { Name = "Orchestrator",                  Description = "the dashboard: every session, the token budget and pace, the ticket queue", Tag = "orchestrator" },
-            new() { Name = "Settings",                      Description = "CLI development: the model each agent CLI runs with", Tag = "settings" },
+            new() { Name = "Open settings",                      Description = "in MindAttic Vault: agent CLIs and models, keys, roster, terminal", Tag = "settings" },
             new() { Name = "Open Command Prompt (Admin)",   Description = "open cmd as Administrator at the workspace root", Tag = "cmd" },
             new() { Name = "Open PowerShell (Admin)",       Description = "open PowerShell as Administrator at the workspace root", Tag = "ps" },
             new() { Name = "Restart",                       Description = "reload this console in a new tab; other tabs are untouched", Tag = "restart" },
