@@ -55,7 +55,7 @@ cd MindAttic.Launcher
 powershell -NoProfile -ExecutionPolicy Bypass -File run.ps1 -Launch
 ```
 
-`run.ps1` publishes to `C:\Apps\MindAttic.Launcher\` like every other MindAttic app and writes a `run.bat` next to the exe. Point your desktop shortcut at `C:\Apps\MindAttic.Launcherun.bat`: double-clicked it asks first, 1) Deploy & Run (republishes, then starts the Launcher) or 2) Run (starts it as deployed); started with arguments it skips the menu, republishes only when source changed, then starts the Launcher with them.
+`run.ps1` publishes to `C:\Apps\MindAttic.Launcher\` like every other MindAttic app and writes a `run.bat` next to the exe. Point your desktop shortcut at `C:\Apps\MindAttic.Launcher\run.bat`: double-clicked it asks first, 1) Deploy & Run (republishes, then starts the Launcher) or 2) Run (starts it as deployed); started with arguments it skips the menu, republishes only when source changed, then starts the Launcher with them.
 
 You should see the menu above. On first run the launcher offers every git repo directly under the workspace root for the roster; pick a color for each, then choose Open Project Tab.
 
