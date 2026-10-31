@@ -150,6 +150,19 @@ public class LampSettingsTests
     }
 
     [Test]
+    public void AgentCliKeys_ComeFromTheLaunchersAssignedNamedKey()
+    {
+        var keys = MindAttic.Vault.Credentials.NamedKeyStore.ForRoamingRoot();
+        keys.Add("gemini", "shared", "g-shared");
+        keys.Add("gemini", "launcher", "g-launcher");
+        keys.Assignments.Set(SettingsStore.AppBucket, "gemini", new[] { "launcher" });
+        var psi = new System.Diagnostics.ProcessStartInfo("x");
+        ProviderCredentials.Apply(psi, "Gemini");
+        Assert.That(psi.Environment.Values, Does.Contain("g-launcher"));
+        Assert.That(psi.Environment.Values, Does.Not.Contain("g-shared"));
+    }
+
+    [Test]
     public void SettingsMenuOpensVaultAtTheLaunchersTab()
     {
         string? opened = null;

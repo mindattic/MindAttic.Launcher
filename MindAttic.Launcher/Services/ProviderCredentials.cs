@@ -67,7 +67,10 @@ public static class ProviderCredentials
                 return;
         }
 
-        var key = (store ?? LlmCredentialStore.Default).GetKey(providerKey);
+        // The Launcher's active key in the shared named list (its Vault assignment, skipping disabled and failed keys).
+        var key = store is not null
+            ? store.GetKey(providerKey)
+            : MindAttic.Vault.Credentials.KeySelector.ForCurrentUser().GetActiveKey(providerKey, SettingsStore.AppBucket)?.Value;
         if (string.IsNullOrWhiteSpace(key)) return;
 
         if (EnvVarByProviderKey.TryGetValue(providerKey, out var envVar))
