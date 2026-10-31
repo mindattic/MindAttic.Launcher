@@ -68,9 +68,11 @@ public static class ProviderCredentials
         }
 
         // The Launcher's active key in the shared named list (its Vault assignment, skipping disabled and failed keys).
+        // Claude is billed by the Orchestrator (M.LNCH-T95): when keys are assigned to it for Claude, the CLI gets the
+        // same key the Orchestrator bills, so the two never disagree.
         var key = store is not null
             ? store.GetKey(providerKey)
-            : MindAttic.Vault.Credentials.KeySelector.ForCurrentUser().GetActiveKey(providerKey, SettingsStore.AppBucket)?.Value;
+            : ResolveKey(providerKey, NamedKeyStore.ForRoamingRoot(), KeyHealthStore.ForLocalRoot());
         if (string.IsNullOrWhiteSpace(key)) return;
 
         if (EnvVarByProviderKey.TryGetValue(providerKey, out var envVar))
@@ -81,5 +83,26 @@ public static class ProviderCredentials
 
         if (string.Equals(providerKey, "Kimi", StringComparison.OrdinalIgnoreCase))
             KimiConfigSync.EnsureApiKey(kimiConfigPath ?? KimiConfigSync.DefaultConfigPath, KimiConfigSync.ProviderTable, key);
+    }
+
+    /// <summary>The Orchestrator's Vault app id, whose Claude assignment the Launcher follows.</summary>
+    public const string OrchestratorAppId = "Orchestrator";
+
+    /// <summary>
+    /// The key to push for <paramref name="providerKey"/>: for Claude, the Orchestrator's assigned active key when it has a
+    /// Claude assignment; otherwise the Launcher's own active key (its assignment, else the shared order).
+    /// </summary>
+    public static string? ResolveKey(string providerKey, NamedKeyStore keys, KeyHealthStore? health = null)
+    {
+        var selector = new KeySelector(new FileKeySource(keys), health);
+        if (string.Equals(providerKey, "Claude", StringComparison.OrdinalIgnoreCase) && HasAssignment(keys, OrchestratorAppId, "claude"))
+            return selector.GetActiveKey("claude", OrchestratorAppId)?.Value;
+        return selector.GetActiveKey(providerKey, SettingsStore.AppBucket)?.Value;
+    }
+
+    private static bool HasAssignment(NamedKeyStore keys, string appId, string providerId)
+    {
+        try { return keys.Assignments.Get(appId, providerId).Count > 0; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException) { return false; }
     }
 }
