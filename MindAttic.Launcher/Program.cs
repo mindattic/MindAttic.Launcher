@@ -7,6 +7,7 @@ using MindAttic.Log.Extensions;
 using MindAttic.Log.Migration;
 using MindAttic.Vault.Paths;
 using Serilog;
+using Spectre.Console;
 using Spectre.Console.Cli;
 
 // No DI container here — Spectre.Console.Cli's CommandApp constructs commands directly — so this
@@ -61,6 +62,17 @@ var app = new CommandApp<MainMenuCommand>();
 app.Configure(config =>
 {
     config.SetApplicationName("MindAttic.Launcher");
+    // Spectre.Console.Cli's own default handler prints "Error: {message}" and swallows the exception —
+    // it never reaches the try/catch below, so the crash-visibility work above (MindAttic.Log) never saw
+    // a single exception thrown from inside the interactive menu (every "Commit and sync" / "Open Project
+    // Tab" failure included). Take over the handler so the same red one-liner still prints, but the full
+    // exception now lands in MindAttic.Log.db too.
+    config.SetExceptionHandler((ex, _) =>
+    {
+        Log.Fatal(ex, "MindAttic.Launcher command failed");
+        AnsiConsole.MarkupLine($"[red]Error:[/] {Markup.Escape(ex.Message)}");
+        return -1;
+    });
     config.AddCommand<HostAgentCommand>("host")
         .WithDescription("Run a coding agent inside this tab (used by 'Open Project Tab').")
         .WithExample("host", "--name", "MindAttic.Vault", "--provider", "Claude");
