@@ -1,3 +1,4 @@
+using MindAttic.Launcher.Services;
 using Spectre.Console;
 
 namespace MindAttic.Launcher.Ui;
@@ -23,6 +24,9 @@ public static class Screen
         {
             var root = Scope is { } alias ? $"MindAttic Launcher — {alias}" : "MindAttic Launcher";
             var trail = string.Join(" > ", new[] { root }.Concat(breadcrumbs));
+            var version = AppVersion.Tag;
+            var pad = Math.Max(0, AnsiConsole.Profile.Width - version.Length);
+            AnsiConsole.MarkupLine($"{new string(' ', pad)}[grey50]{Markup.Escape(version)}[/]");
             AnsiConsole.Write(new Rule($"[cyan1]{Markup.Escape(trail)}[/]")
             {
                 Style = Theme.AccentStyle,

@@ -1,5 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
-using System.Reflection;
+using MindAttic.Launcher.Services;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
@@ -12,13 +12,9 @@ public sealed class VersionCommand : Command<VersionCommand.Settings>
 
     public override int Execute(CommandContext context, Settings settings)
     {
-        var asm = typeof(VersionCommand).Assembly;
-        var info = asm.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
-                   ?? asm.GetName().Version?.ToString()
-                   ?? "unknown";
         var location = Environment.ProcessPath ?? "(unknown path)";
 
-        AnsiConsole.MarkupLine($"[cyan1]MindAttic.Launcher[/] [grey50]v[/][yellow]{Markup.Escape(info)}[/]");
+        AnsiConsole.MarkupLine($"[cyan1]MindAttic.Launcher[/] [yellow]{Markup.Escape(AppVersion.Tag)}[/]");
         AnsiConsole.MarkupLine($"  [grey50]exe:[/] {Markup.Escape(location)}");
         return 0;
     }

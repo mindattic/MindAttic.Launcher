@@ -316,3 +316,4 @@ Dependency-ordered toward the headline goal (a frictionless single-binary worksp
 | M.LNCH-T103 | 2026-10-31 | chore | closed | Vault tab named after the repo: SettingsApp DisplayName 'MindAttic Launcher' -> 'MindAttic.Launcher' | M.VALT-T75 5f2d009 |
 | M.LNCH-T104 | 2026-10-31 | docs | closed | Update USER_STORIES.md | — |
 | M.LNCH-T105 | 2026-10-31 | chore | closed | Program.cs's SetExceptionHandler logs every command-execution exception (Log.Fatal) before printing the same red Error: line Spectre's default handler used to print and swallow, so an interactive-menu crash (e.g. Commit and sync) is finally diagnosable instead of leaving zero trace | — |
+| M.LNCH-T106 | 2026-11-01 | feature | open | Show whole-number version in Launcher header | — |
