@@ -6,7 +6,7 @@ namespace MindAttic.Launcher.Models;
 
 /// <summary>The Launcher's settings (%APPDATA%\MindAttic\MindAttic.Launcher\settings.json), edited in MindAttic.Vault.Desktop.
 /// API keys are the shared named keys (Keys tab); the GitHub token is in Vault's Tokens credentials.</summary>
-[SettingsApp(Services.SettingsStore.AppBucket, "MindAttic Launcher", Icon = "rocket",
+[SettingsApp(Services.SettingsStore.AppBucket, "MindAttic.Launcher", Icon = "rocket",
     Description = "Project roster, agent CLIs and terminal integration for the MindAttic workspace.")]
 [UsesCredential("claude", Purpose = "Claude Code CLI (unless logged into claude.ai)")]
 [UsesCredential("gemini", Purpose = "Gemini CLI")]
