@@ -169,4 +169,14 @@ public class LampSettingsTests
         Assert.That(SettingsMenu.Open((app, setting) => { opened = app + "|" + setting; return true; }), Is.True);
         Assert.That(opened, Is.EqualTo("MindAttic.Launcher|"));
     }
+
+    [Test]
+    public void RunPs1_WritesTheSettingsManifestAfterPublishing()
+    {
+        // LAMP step 7 (M.LNCH-T102): a redeploy refreshes the manifest MindAttic Vault renders, not only the app's next start.
+        var root = TestContext.CurrentContext.TestDirectory;
+        while (!System.IO.Directory.Exists(System.IO.Path.Combine(root, ".git")) && !System.IO.File.Exists(System.IO.Path.Combine(root, ".git")))
+            root = System.IO.Path.GetDirectoryName(root) ?? throw new InvalidOperationException("no repo root above the tests");
+        Assert.That(System.IO.File.ReadAllText(System.IO.Path.Combine(root, "run.ps1")), Does.Contain("-ArgumentList '--write-settings-manifest'"));
+    }
 }

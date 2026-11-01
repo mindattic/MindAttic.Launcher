@@ -139,6 +139,9 @@ function Publish {
     if (-not (Test-Path $exe)) { return $false }
 
     Write-Host "Deployed $exe" -ForegroundColor Green
+    # LAMP step 7 (M.LNCH-T102): refresh settings.manifest.json so MindAttic Vault shows this build's settings.
+    $manifest = Start-Process -FilePath $exe -ArgumentList '--write-settings-manifest' -WorkingDirectory $deployDir -Wait -PassThru -WindowStyle Hidden
+    if ($manifest.ExitCode -ne 0) { Write-Host "  (--write-settings-manifest exited $($manifest.ExitCode); the Launcher writes it on its next start)" -ForegroundColor DarkYellow }
     return $true
 }
 
