@@ -173,7 +173,9 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
             : null;
         // Marks this login as "has a CLI" for any later account picker in another tab
         // (M.LNCH-T53); best-effort only — never blocks the launch when it can't be claimed.
-        using var loginMarker = isClaude ? new ClaudeLoginMarker(claudeConfigDir) : null;
+        // Not a `using var`: a restart-resume that moves the login (M.LNCH-T52) moves the marker with it, so the old
+        // login stops reading as busy and the new one starts to. Disposed in the finally below.
+        var loginMarker = isClaude ? new ClaudeLoginMarker(claudeConfigDir) : null;
 
         ProcessStartInfo BuildStartInfo(string? resumeSession)
         {
@@ -232,7 +234,13 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
                 }
 
                 System.Console.WriteLine();
+                var priorConfigDir = claudeConfigDir;
                 claudeConfigDir = ClaudeLogin.Next(claudeConfigDir, request!);
+                if (loginMarker is not null && !string.Equals(priorConfigDir, claudeConfigDir, StringComparison.OrdinalIgnoreCase))
+                {
+                    loginMarker.Dispose();
+                    loginMarker = new ClaudeLoginMarker(claudeConfigDir);
+                }
                 claudeBilling = ClaudeBillingMode.Next(claudeBilling, request!);
                 System.Console.WriteLine(request!.Failover
                     ? request.Billing == ClaudeBillingMode.Api
@@ -260,6 +268,7 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
         finally
         {
             p?.Dispose();
+            loginMarker?.Dispose();
         }
     }
 

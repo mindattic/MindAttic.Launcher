@@ -28,7 +28,8 @@ public sealed class ProjectSetupMenu(SettingsStore store, string projectName)
     /// <summary>The full setting name of the project's tab alias row (its index in the roster), or null if it's gone.</summary>
     internal static string? SettingFor(SettingsStore store, string projectName)
     {
-        var projects = store.Load().Projects;
+        // An explicit "projects": null in settings.json deserializes to null (see ProjectRoster).
+        var projects = store.Load().Projects ?? [];
         var index = projects.FindIndex(p => string.Equals(p.Name, projectName, StringComparison.OrdinalIgnoreCase));
         return index < 0 ? null : $"{SettingsManifest.PrefixFor(SettingsStore.AppBucket)}:projects:{index}:tabAlias";
     }

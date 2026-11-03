@@ -30,14 +30,19 @@ public static class OrchestratorCli
 
             using var p = Process.Start(psi);
             if (p is null) return null;
-            var stdout = p.StandardOutput.ReadToEnd();
-            p.StandardError.ReadToEnd();
+            // Drain both streams concurrently: a synchronous ReadToEnd blocks until the process exits, so the
+            // timeout below never applied (a hung orchestrator hung the caller), and reading stdout to the end
+            // before stderr could deadlock on a full stderr pipe.
+            var stdoutTask = p.StandardOutput.ReadToEndAsync();
+            var stderrTask = p.StandardError.ReadToEndAsync();
             if (!p.WaitForExit((int)Timeout.TotalMilliseconds))
             {
                 try { p.Kill(entireProcessTree: true); } catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception) { }
                 return null;
             }
-            return p.ExitCode == 0 ? stdout : null;
+            try { if (!Task.WaitAll([stdoutTask, stderrTask], TimeSpan.FromSeconds(2))) return null; }
+            catch (AggregateException) { return null; }
+            return p.ExitCode == 0 ? stdoutTask.Result : null;
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or IOException or InvalidOperationException)
         {
