@@ -29,7 +29,7 @@ public sealed class GitHubTopicReposTests
     }
 
     [Test]
-    public async Task FetchAsync_returns_lowercased_full_names_of_repos_carrying_the_topic()
+    public async Task FetchAsync_returns_GitHubs_real_cased_full_names_of_repos_carrying_the_topic_matched_case_insensitively()
     {
         using var handler = new FakeHandler(_ => JsonPage(
             ("MindAttic/Launcher", ["work-in-progress"]),
@@ -40,7 +40,8 @@ public sealed class GitHubTopicReposTests
 
         var result = await client.FetchAsync("test-token", "work-in-progress");
 
-        Assert.That(result, Is.EquivalentTo(new[] { "mindattic/launcher", "someone/other-repo" }));
+        Assert.That(result, Is.EquivalentTo(new[] { "MindAttic/Launcher", "someone/Other-Repo" }));
+        Assert.That(result.Contains("mindattic/launcher"), Is.True, "lookups stay case-insensitive");
     }
 
     [Test]
@@ -56,7 +57,7 @@ public sealed class GitHubTopicReposTests
 
         var result = await client.FetchAsync("test-token", "work-in-progress");
 
-        Assert.That(result, Is.EquivalentTo(new[] { "mindattic/active" }));
+        Assert.That(result, Is.EquivalentTo(new[] { "mindattic/Active" }));
     }
 
     [Test]
@@ -134,7 +135,7 @@ public sealed class GitHubTopicReposTests
 
         var result = await client.FetchAsync("read-only-token", "work-in-progress");
 
-        Assert.That(result, Is.EquivalentTo(new[] { "mindattic/active" }));
+        Assert.That(result, Is.EquivalentTo(new[] { "mindattic/Active" }));
         Assert.That(putCount, Is.EqualTo(1));
         Assert.That(client.HealDenied, Is.True);
         Assert.That(client.Healed, Is.Empty);

@@ -69,7 +69,7 @@ public sealed class TopicRepoSyncTests
 
         var result = TopicRepoSync.FetchOrNull(StoreWith("tok"), Client(handler));
 
-        Assert.That(result, Is.EquivalentTo(new[] { "mindattic/launcher", "someone/other" }));
+        Assert.That(result, Is.EquivalentTo(new[] { "MindAttic/Launcher", "someone/Other" }));
     }
 
     private static IEnumerable<TestCaseData> Degrading()

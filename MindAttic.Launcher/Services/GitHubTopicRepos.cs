@@ -47,7 +47,8 @@ public sealed class GitHubTopicRepos(HttpClient? http = null)
     });
 
     /// <summary>
-    /// Every repo's lower-cased <c>owner/repo</c> full name whose topics
+    /// Every repo's <c>owner/repo</c> full name, in GitHub's own casing (bootstrap clones into that
+    /// folder name; the returned set compares case-insensitively), whose topics
     /// include <paramref name="topic"/> (case-insensitive — GitHub itself
     /// stores topic names lower-cased). Paginates <c>GET /user/repos</c> until
     /// a short page ends it. Throws <see cref="InvalidOperationException"/> on
@@ -88,7 +89,7 @@ public sealed class GitHubTopicRepos(HttpClient? http = null)
                 }
 
                 if (HasTopic(repo, topic))
-                    result.Add(fullName.ToLowerInvariant());
+                    result.Add(fullName); // GitHub's own casing: bootstrap clones into this name; the set compares case-insensitively
             }
 
             if (count < PageSize) break;
