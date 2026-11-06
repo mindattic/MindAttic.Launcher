@@ -14,12 +14,22 @@
   <ItemGroup>
     <Content Include="M.ico" />
     <InternalsVisibleTo Include="MindAttic.Launcher.Tests" />
+    <!-- Ciantic/VirtualDesktopAccessor (MIT, https://github.com/Ciantic/VirtualDesktopAccessor), vendored prebuilt
+         x64 DLL — DesktopPinWatcher's own process boundary against it, see M.LNCH-T111. The source file lives
+         under Native\ for tidiness, but DllImport("VirtualDesktopAccessor.dll") needs it flat next to the exe
+         (the Windows loader's own search path), hence the Link overriding the copied-to path. -->
+    <Content Include="Native\VirtualDesktopAccessor.dll" Link="VirtualDesktopAccessor.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Native\VirtualDesktopAccessor.LICENSE.txt" Link="VirtualDesktopAccessor.LICENSE.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
 
   <ItemGroup>
     <PackageReference Include="MindAttic.Log" Version="3.0.0" />
-    <PackageReference Include="MindAttic.Vault" Version="7.0.0" />
+    <PackageReference Include="MindAttic.Vault" Version="9.0.0" />
     <PackageReference Include="MindAttic.Tickets" Version="3.0.0" />
     <PackageReference Include="Spectre.Console" Version="0.49.1" />
     <PackageReference Include="Spectre.Console.Cli" Version="0.49.1" />

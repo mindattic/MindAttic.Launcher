@@ -316,4 +316,9 @@ Dependency-ordered toward the headline goal (a frictionless single-binary worksp
 | M.LNCH-T103 | 2026-10-31 | chore | closed | Vault tab named after the repo: SettingsApp DisplayName 'MindAttic Launcher' -> 'MindAttic.Launcher' | M.VALT-T75 5f2d009 |
 | M.LNCH-T104 | 2026-10-31 | docs | closed | Update USER_STORIES.md | — |
 | M.LNCH-T105 | 2026-10-31 | chore | closed | Program.cs's SetExceptionHandler logs every command-execution exception (Log.Fatal) before printing the same red Error: line Spectre's default handler used to print and swallow, so an interactive-menu crash (e.g. Commit and sync) is finally diagnosable instead of leaving zero trace | — |
-| M.LNCH-T106 | 2026-11-01 | feature | open | Show whole-number version in Launcher header | — |
+| M.LNCH-T106 | 2026-11-01 | feature | closed | Show whole-number version in Launcher header | — |
+| M.LNCH-T107 | 2026-11-02 | fix | closed | Redeploy (was Restart): aware of Orchestrator-embedded vs plain-terminal menu, routes the embedded case through the Orchestrator pipe (IsMenu) instead of a detached wt window | WindowsTerminalLauncher.cs, MainMenuCommand.cs |
+| M.LNCH-T108 | 2026-11-02 | fix | closed | Bughunt sweep, two passes: find and fix real bugs across tracked source (user request 2026-11-02) | — |
+| M.LNCH-T109 | 2026-11-02 | fix | closed | Command pointer in .agent/commands said a literal $source instead of its legacy path (install.ps1 escaping bug fixed in MAT-T84); point it at the real source, or the global command when the project copy is gone | — |
+| M.LNCH-T110 | 2026-11-02 | fix | closed | Fix the open item the 2026-11-02 bughunt left for decision (bootstrap clones into the repo's real-cased name) | — |
+| M.LNCH-T111 | 2026-11-06 | feature | open | Background watcher pins new MindAttic windows (terminals, Unity/Unreal, any .exe under the MindAttic tree) to virtual Desktop 1 when Vault's Default to Desktop 1 setting is on | — |

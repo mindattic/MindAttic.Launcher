@@ -116,6 +116,13 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
         // with an add-to-roster prompt until it's actually tagged.
         new DiscoverProjectsMenu(store, git, new WindowsTerminalSchemes(), tagged).Run();
 
+        // M.LNCH-T111: started once, here, in the Launcher's singleton menu process (never in a per-tab
+        // host/commit/backup/… invocation, which would mean one SetWinEventHook per open tab). Keeps every
+        // MindAttic window off whatever virtual desktop (2+) the user is gaming on; disposed on the way out
+        // of this method (menu exit or Redeploy) so the hook never outlives this process's own loop.
+        using var desktopPinWatcher = new DesktopPinWatcher();
+        desktopPinWatcher.Start();
+
         var items = new List<MenuItem>
         {
             // First row = the highlighted default on launch (resumeIndex starts at 0).
@@ -128,7 +135,7 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
             new() { Name = "Open settings",                      Description = "in MindAttic Vault: agent CLIs and models, keys, roster, terminal", Tag = "settings" },
             new() { Name = "Open Command Prompt (Admin)",   Description = "open cmd as Administrator at the workspace root", Tag = "cmd" },
             new() { Name = "Open PowerShell (Admin)",       Description = "open PowerShell as Administrator at the workspace root", Tag = "ps" },
-            new() { Name = "Restart",                       Description = "reload this console in a new tab; other tabs are untouched", Tag = "restart" },
+            new() { Name = "Redeploy",                       Description = "rebuild and reload this console; other tabs are untouched", Tag = "redeploy" },
             new() { Name = "Quit",                          Description = "close this menu (other tabs are untouched)", Tag = "exit", SpacerBefore = true }
         };
 
@@ -180,9 +187,9 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
                     Thread.Sleep(600);
                     break;
                 }
-                case "restart":
-                    Screen.Working("Rebuilding and restarting…  Please wait.");
-                    RestartInNewTab(wt, scope);
+                case "redeploy":
+                    Screen.Working("Rebuilding and redeploying…  Please wait.");
+                    RedeployInNewTab(wt, scope);
                     Thread.Sleep(1000);
                     return Task.FromResult(0);
                 case "exit":     return Task.FromResult(0);
@@ -194,14 +201,14 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
     {
         if (r is null) return;
 
-        // The menu process can't rebuild itself; Restart republishes and reloads.
+        // The menu process can't rebuild itself; Redeploy republishes and reloads.
         // DaysBehind floors to whole days, so 0 means "behind by less than a day"
         // — not "built today" (the build itself may be days old; it's the *gap*
         // to HEAD that's under a day).
         var age = r.DaysBehind >= 1
             ? $"[yellow]{r.DaysBehind} day{(r.DaysBehind == 1 ? "" : "s")}[/] behind the latest commit"
             : "[yellow]less than a day[/] behind the latest commit";
-        AnsiConsole.MarkupLine($"  [grey50]Heads up:[/] this menu build is {age}. [grey50]Choose Restart to republish & reload.[/]");
+        AnsiConsole.MarkupLine($"  [grey50]Heads up:[/] this menu build is {age}. [grey50]Choose Redeploy to republish & reload.[/]");
         AnsiConsole.WriteLine();
     }
 
@@ -238,20 +245,25 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
         return Directory.Exists(root) ? root! : Environment.CurrentDirectory;
     }
 
-    private static void RestartInNewTab(WindowsTerminalLauncher wt, AccountScope? scope)
+    private static void RedeployInNewTab(WindowsTerminalLauncher wt, AccountScope? scope)
     {
         // We don't republish in-process: this menu usually runs from the deployed exe
         // in C:\Apps\MindAttic.Launcher, which Windows locks while it runs. Instead
         // run run.ps1 -WaitPid in a fresh tab; it waits for THIS process to exit,
         // force-rebuilds, then runs the fresh exe (and refuses to launch a stale one
         // if the build fails). We return 0 right after, so this tab closes.
-        // A scoped Launcher (M.LNCH-T54) restarts scoped to the same login, in that person's window (M.LNCH-T55).
+        // A scoped Launcher (M.LNCH-T54) redeploys scoped to the same login, in that person's window (M.LNCH-T55).
+        //
+        // IsMenu = true (M.LNCH-T107): this is the menu replacing itself, not a CLI it opened, so wt.Open routes it
+        // down the Orchestrator's pipe when this process is itself one of its embedded Terminals-panel panes
+        // (M.LNCH-T77) — the dashboard's own watchdog then replaces the ended pane with a fresh one. Running from a
+        // plain terminal (the env var unset, or the dashboard closed), it keeps opening a new wt tab exactly as before.
         var root = ExePath.RepoRoot;
-        var restartScript = root is null ? null : Path.Combine(root, "run.ps1");
+        var redeployScript = root is null ? null : Path.Combine(root, "run.ps1");
         var title = Title(scope);
         string[] launchArgs = scope is null ? [] : ["--account", scope.Email];
 
-        if (restartScript is null || !File.Exists(restartScript))
+        if (redeployScript is null || !File.Exists(redeployScript))
         {
             // No repo/script to publish from (e.g. an installed copy) — just relaunch
             // whatever exe currently exists; there's nothing to rebuild against.
@@ -260,7 +272,9 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
                 Window = wt.ScopeWindow,
                 Title = title,
                 WorkingDirectory = MindAtticRoot(),
-                Command = [ExePath.Release, .. launchArgs]
+                Command = [ExePath.Release, .. launchArgs],
+                IsMenu = true,
+                Provider = "Launcher"
             });
             return;
         }
@@ -273,10 +287,12 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
             Command =
             [
                 "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
-                "-File", restartScript,
+                "-File", redeployScript,
                 "-WaitPid", Environment.ProcessId.ToString(),
                 .. launchArgs
-            ]
+            ],
+            IsMenu = true,
+            Provider = "Launcher"
         });
     }
 }
