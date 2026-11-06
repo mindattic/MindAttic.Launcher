@@ -157,6 +157,12 @@ public sealed class HostAgentCommand : Command<HostAgentCommand.Settings>
 
         PullBeforeLaunch(workingDir, title);
 
+        // Keep every CLI's abilities/hooks current with the latest shared/abilities + shared/hooks
+        // (M.LNCH-T113): fire-and-forget and gated on staleness, so this never delays opening a tab
+        // and does real work only on the first tab opened after an actual edit. See AgentProvisioning's
+        // own doc for why this is fire-and-forget rather than inline like PullBeforeLaunch above.
+        AgentProvisioning.EnsureProvisionedFireAndForget();
+
         using var pinner = new TitlePinner(title);
         // Per-tab pipe lets text (e.g. /remote-control, via
         // RemoteControlBroadcaster) be typed into every running Claude/Codex
