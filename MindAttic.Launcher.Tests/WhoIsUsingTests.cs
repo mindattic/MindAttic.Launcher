@@ -215,6 +215,25 @@ public sealed class WhoIsUsingTests
         Assert.That(WhoIsUsing.Resolve(), Is.EqualTo("amy@mindattic.com"));
     }
 
+    // ---- WhoIsUsing.DetectSignedInEmail: never trusts the shared global login (M.LNCH-T118) ----------------------
+
+    [Test]
+    public void DetectSignedInEmail_is_null_when_CLAUDE_CONFIG_DIR_is_not_set()
+    {
+        // Regression for M.LNCH-T118: an unscoped Launcher used to fall back to the shared global ~/.claude.json
+        // here, which is rewritten by anyone's sign-in on this Windows account and so isn't proof of who THIS launch
+        // is for. With no CLAUDE_CONFIG_DIR, there's nothing to vouch for an identity, so this must stay null and
+        // let Resolve() ask instead of silently misattributing the launch to whoever that shared file names.
+        var previous = Environment.GetEnvironmentVariable(ClaudeLogin.ConfigDirVariable);
+        try
+        {
+            Environment.SetEnvironmentVariable(ClaudeLogin.ConfigDirVariable, null);
+
+            Assert.That(WhoIsUsing.DetectSignedInEmail(), Is.Null);
+        }
+        finally { Environment.SetEnvironmentVariable(ClaudeLogin.ConfigDirVariable, previous); }
+    }
+
     [Test]
     public void Resolve_falls_back_to_asking_when_nobody_is_signed_in_anywhere()
     {

@@ -3,12 +3,14 @@ namespace MindAttic.Launcher.Services;
 /// <summary>
 /// Resolves who is using this Launcher (M.LNCH-T71) once, at startup, when it wasn't told outright
 /// (<c>--account</c>, <see cref="Commands.MainMenuCommand"/>): from <see cref="OrchestratorMembers.ActiveRoster"/>,
-/// never asking when there's no real choice (no roster, or exactly one active member) or when the login already
-/// signed in on this machine (<see cref="AccountScope.SignedInEmail"/>, the same <c>oauthAccount.emailAddress</c>
-/// Claude Code itself reports) matches a roster member's email exactly (M.LNCH-T114): a person's name is not a
-/// reliable stand-in for which of their Claude logins is live (e.g. a Team org seat vs. a personal plan under the
-/// same name), so the match goes by the full sign-in email, never the display name, and only falls back to asking
-/// when nothing signed in matches anyone on the roster.
+/// never asking when there's no real choice (no roster, or exactly one active member) or when the login this
+/// process was explicitly started under (<c>CLAUDE_CONFIG_DIR</c>, via <see cref="AccountScope.SignedInEmail"/>, the
+/// same <c>oauthAccount.emailAddress</c> Claude Code itself reports) matches a roster member's email exactly
+/// (M.LNCH-T114): a person's name is not a reliable stand-in for which of their Claude logins is live (e.g. a Team
+/// org seat vs. a personal plan under the same name), so the match goes by the full sign-in email, never the display
+/// name. Deliberately does NOT trust the shared global <c>~/.claude</c> login as that signal (M.LNCH-T118): with no
+/// <c>CLAUDE_CONFIG_DIR</c> to vouch for who this specific launch is for, it falls back to asking rather than
+/// guessing from whoever last signed that shared file in.
 /// </summary>
 public static class WhoIsUsing
 {
@@ -27,9 +29,10 @@ public static class WhoIsUsing
     /// <summary>Test seam for the roster; production uses <see cref="OrchestratorMembers.ActiveRoster"/>.</summary>
     public static Func<IReadOnlyList<MemberOption>?>? RosterOverride { get; set; }
 
-    /// <summary>Test seam for the email already signed in on this machine's current login; production reads
-    /// <c>CLAUDE_CONFIG_DIR</c> and asks <see cref="AccountScope.SignedInEmail"/> of that folder (or the global
-    /// login's folder when the variable isn't set). Null when nobody is signed in there or it can't be read.</summary>
+    /// <summary>Test seam for the email signed in to the per-CLI login this process was explicitly started under;
+    /// production reads <c>CLAUDE_CONFIG_DIR</c> and asks <see cref="AccountScope.SignedInEmail"/> of that folder,
+    /// null when the variable isn't set (M.LNCH-T118: no fallback to the shared global login) or nobody is signed
+    /// in there or it can't be read.</summary>
     public static Func<string?>? SignedInEmailOverride { get; set; }
 
     /// <summary>Test seam for switching billing when <see cref="ApiKeyOption"/> is chosen; production runs
@@ -66,16 +69,19 @@ public static class WhoIsUsing
         return null;
     }
 
-    /// <summary>The email signed in to the login this process would currently open Claude tabs under: the
-    /// per-CLI login named by <c>CLAUDE_CONFIG_DIR</c> when that's set, else the global <c>~/.claude</c> login.
-    /// Reads the same <c>.claude.json</c> <c>oauthAccount.emailAddress</c> field as <see cref="ClaudeAccountCatalog"/>.</summary>
-    private static string? DetectSignedInEmail()
+    /// <summary>The email signed in to the per-CLI login this process was explicitly started under
+    /// (<c>CLAUDE_CONFIG_DIR</c>), or null when that variable isn't set (M.LNCH-T118).
+    /// Deliberately does NOT fall back to the shared global <c>~/.claude</c> login: that one file is shared by every
+    /// person on this Windows account and gets silently rewritten by whoever last signed in or refreshed a token
+    /// there, regardless of who is asking "who's using this Launcher?" right now — trusting it as identity proof
+    /// caused unscoped launches to get silently misattributed to a different roster member (M.LNCH-T118). Only a
+    /// caller that already set <c>CLAUDE_CONFIG_DIR</c> for this specific process (a per-CLI login folder) is actual
+    /// evidence of who this launch is for. Reads the same <c>.claude.json</c> <c>oauthAccount.emailAddress</c> field
+    /// as <see cref="ClaudeAccountCatalog"/>.</summary>
+    internal static string? DetectSignedInEmail()
     {
         var configDir = Environment.GetEnvironmentVariable(ClaudeLogin.ConfigDirVariable);
-        var folder = string.IsNullOrWhiteSpace(configDir)
-            ? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
-            : configDir;
-        return AccountScope.SignedInEmail(folder);
+        return string.IsNullOrWhiteSpace(configDir) ? null : AccountScope.SignedInEmail(configDir);
     }
 
     /// <summary>The plain-console question itself, split out so <see cref="Resolve"/>'s skip rules stay testable
