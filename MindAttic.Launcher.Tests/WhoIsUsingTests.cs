@@ -14,6 +14,7 @@ public sealed class WhoIsUsingTests
         OrchestratorMembers.OrchestratorOverride = null;
         WhoIsUsing.AskOverride = null;
         WhoIsUsing.RosterOverride = null;
+        WhoIsUsing.SignedInEmailOverride = null;
         WhoIsUsing.SwitchToApiKeyOverride = null;
     }
 
@@ -95,6 +96,7 @@ public sealed class WhoIsUsingTests
         var amy = new MemberOption("amy@mindattic.com", "Amy", "admin", "premium", "active");
         IReadOnlyList<MemberOption>? asked = null;
         WhoIsUsing.RosterOverride = () => new[] { jordan, amy };
+        WhoIsUsing.SignedInEmailOverride = () => null;
         WhoIsUsing.AskOverride = roster => { asked = roster; return amy; };
 
         Assert.That(WhoIsUsing.Resolve(), Is.EqualTo("amy@mindattic.com"));
@@ -109,6 +111,7 @@ public sealed class WhoIsUsingTests
             new MemberOption("jordan@mindattic.com", "Jordan", "member", "standard", "active"),
             new MemberOption("amy@mindattic.com", "Amy", "admin", "premium", "active"),
         };
+        WhoIsUsing.SignedInEmailOverride = () => null;
         WhoIsUsing.AskOverride = _ => null;
 
         Assert.That(WhoIsUsing.Resolve(), Is.Null);
@@ -122,6 +125,7 @@ public sealed class WhoIsUsingTests
             new MemberOption("jordan@mindattic.com", "Jordan", "member", "standard", "active"),
             new MemberOption("amy@mindattic.com", "Amy", "admin", "premium", "active"),
         };
+        WhoIsUsing.SignedInEmailOverride = () => null;
         IReadOnlyList<MemberOption>? asked = null;
         WhoIsUsing.AskOverride = roster => { asked = roster; return null; };
 
@@ -140,6 +144,7 @@ public sealed class WhoIsUsingTests
             new MemberOption("jordan@mindattic.com", "Jordan", "member", "standard", "active"),
             new MemberOption("amy@mindattic.com", "Amy", "admin", "premium", "active"),
         };
+        WhoIsUsing.SignedInEmailOverride = () => null;
         WhoIsUsing.AskOverride = roster => roster.Single(m => m.Email == WhoIsUsing.ApiKeyOption);
         var switched = false;
         WhoIsUsing.SwitchToApiKeyOverride = () => switched = true;
@@ -156,12 +161,72 @@ public sealed class WhoIsUsingTests
         {
             new MemberOption("jordan@mindattic.com", "Jordan", "member", "standard", "active"), amy,
         };
+        WhoIsUsing.SignedInEmailOverride = () => null;
         WhoIsUsing.AskOverride = _ => amy;
         var switched = false;
         WhoIsUsing.SwitchToApiKeyOverride = () => switched = true;
 
         Assert.That(WhoIsUsing.Resolve(), Is.EqualTo("amy@mindattic.com"));
         Assert.That(switched, Is.False);
+    }
+
+    // ---- WhoIsUsing.Resolve: auto-detect from the signed-in login (M.LNCH-T114) ----------
+
+    [Test]
+    public void Resolve_skips_asking_when_the_signed_in_email_matches_a_roster_member()
+    {
+        WhoIsUsing.RosterOverride = () => new[]
+        {
+            new MemberOption("ryandebraal@mindattic.com", "Ryan", "primary-owner", "premium", "active"),
+            new MemberOption("amy@mindattic.com", "Amy", "member", "premium", "active"),
+        };
+        WhoIsUsing.SignedInEmailOverride = () => "ryandebraal@mindattic.com";
+        WhoIsUsing.AskOverride = _ => throw new AssertionException("asked when the signed-in login already matched a member");
+
+        Assert.That(WhoIsUsing.Resolve(), Is.EqualTo("ryandebraal@mindattic.com"));
+    }
+
+    [Test]
+    public void Resolve_matches_the_signed_in_email_case_insensitively()
+    {
+        WhoIsUsing.RosterOverride = () => new[]
+        {
+            new MemberOption("ryandebraal@mindattic.com", "Ryan", "primary-owner", "premium", "active"),
+            new MemberOption("amy@mindattic.com", "Amy", "member", "premium", "active"),
+        };
+        WhoIsUsing.SignedInEmailOverride = () => "RyanDeBraal@MindAttic.com";
+        WhoIsUsing.AskOverride = _ => throw new AssertionException("asked despite a case-insensitive match");
+
+        Assert.That(WhoIsUsing.Resolve(), Is.EqualTo("ryandebraal@mindattic.com"));
+    }
+
+    [Test]
+    public void Resolve_falls_back_to_asking_when_the_signed_in_login_matches_nobody_on_the_roster()
+    {
+        var amy = new MemberOption("amy@mindattic.com", "Amy", "member", "premium", "active");
+        WhoIsUsing.RosterOverride = () => new[]
+        {
+            new MemberOption("ryandebraal@mindattic.com", "Ryan", "primary-owner", "premium", "active"), amy,
+        };
+        // A personal account (e.g. a Claude Ultra login) not registered as an org member.
+        WhoIsUsing.SignedInEmailOverride = () => "ryandebraal@gmail.com";
+        WhoIsUsing.AskOverride = _ => amy;
+
+        Assert.That(WhoIsUsing.Resolve(), Is.EqualTo("amy@mindattic.com"));
+    }
+
+    [Test]
+    public void Resolve_falls_back_to_asking_when_nobody_is_signed_in_anywhere()
+    {
+        var amy = new MemberOption("amy@mindattic.com", "Amy", "member", "premium", "active");
+        WhoIsUsing.RosterOverride = () => new[]
+        {
+            new MemberOption("ryandebraal@mindattic.com", "Ryan", "primary-owner", "premium", "active"), amy,
+        };
+        WhoIsUsing.SignedInEmailOverride = () => null;
+        WhoIsUsing.AskOverride = _ => amy;
+
+        Assert.That(WhoIsUsing.Resolve(), Is.EqualTo("amy@mindattic.com"));
     }
 
     // ---- WhoIsUsing.Prompt ---------------------------------------------------------------

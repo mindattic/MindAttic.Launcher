@@ -322,3 +322,4 @@ Dependency-ordered toward the headline goal (a frictionless single-binary worksp
 | M.LNCH-T109 | 2026-11-02 | fix | closed | Command pointer in .agent/commands said a literal $source instead of its legacy path (install.ps1 escaping bug fixed in MAT-T84); point it at the real source, or the global command when the project copy is gone | — |
 | M.LNCH-T110 | 2026-11-02 | fix | closed | Fix the open item the 2026-11-02 bughunt left for decision (bootstrap clones into the repo's real-cased name) | — |
 | M.LNCH-T111 | 2026-11-06 | feature | open | Background watcher pins new MindAttic windows (terminals, Unity/Unreal, any .exe under the MindAttic tree) to virtual Desktop 1 when Vault's Default to Desktop 1 setting is on | — |
+| M.LNCH-T114 | 2026-11-06 | feature | closed | WhoIsUsing roster can't tell apart two Claude logins under the same person's name | M.LNCH-T71 |

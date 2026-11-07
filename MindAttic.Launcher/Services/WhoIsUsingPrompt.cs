@@ -3,8 +3,12 @@ namespace MindAttic.Launcher.Services;
 /// <summary>
 /// Resolves who is using this Launcher (M.LNCH-T71) once, at startup, when it wasn't told outright
 /// (<c>--account</c>, <see cref="Commands.MainMenuCommand"/>): from <see cref="OrchestratorMembers.ActiveRoster"/>,
-/// never asking when there's no real choice (no roster, or exactly one active member), and otherwise asking once
-/// here rather than letting every opened tab ask again (the per-tab screen this replaced, M.LNCH-T65).
+/// never asking when there's no real choice (no roster, or exactly one active member) or when the login already
+/// signed in on this machine (<see cref="AccountScope.SignedInEmail"/>, the same <c>oauthAccount.emailAddress</c>
+/// Claude Code itself reports) matches a roster member's email exactly (M.LNCH-T114): a person's name is not a
+/// reliable stand-in for which of their Claude logins is live (e.g. a Team org seat vs. a personal plan under the
+/// same name), so the match goes by the full sign-in email, never the display name, and only falls back to asking
+/// when nothing signed in matches anyone on the roster.
 /// </summary>
 public static class WhoIsUsing
 {
@@ -23,6 +27,11 @@ public static class WhoIsUsing
     /// <summary>Test seam for the roster; production uses <see cref="OrchestratorMembers.ActiveRoster"/>.</summary>
     public static Func<IReadOnlyList<MemberOption>?>? RosterOverride { get; set; }
 
+    /// <summary>Test seam for the email already signed in on this machine's current login; production reads
+    /// <c>CLAUDE_CONFIG_DIR</c> and asks <see cref="AccountScope.SignedInEmail"/> of that folder (or the global
+    /// login's folder when the variable isn't set). Null when nobody is signed in there or it can't be read.</summary>
+    public static Func<string?>? SignedInEmailOverride { get; set; }
+
     /// <summary>Test seam for switching billing when <see cref="ApiKeyOption"/> is chosen; production runs
     /// <c>orchestrator billing api</c> (best-effort: a failure here still leaves the dashboard's own toggle to fall
     /// back on, so it's never fatal to opening the Launcher).</summary>
@@ -37,6 +46,13 @@ public static class WhoIsUsing
         if (roster is null or { Count: 0 }) return null;
         if (roster.Count == 1) return roster[0].Email;
 
+        var signedIn = SignedInEmailOverride is not null ? SignedInEmailOverride() : DetectSignedInEmail();
+        if (signedIn is not null)
+        {
+            var match = roster.FirstOrDefault(m => string.Equals(m.Email, signedIn, StringComparison.OrdinalIgnoreCase));
+            if (match is not null) return match.Email;
+        }
+
         var choices = new List<MemberOption>(roster)
         {
             new(ApiKeyOption, "API Key — bill every CLI to the organization's Vault key, not a person's seat", "", "", ""),
@@ -48,6 +64,18 @@ public static class WhoIsUsing
         if (SwitchToApiKeyOverride is not null) SwitchToApiKeyOverride();
         else try { OrchestratorCli.Run("billing", "api"); } catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException) { }
         return null;
+    }
+
+    /// <summary>The email signed in to the login this process would currently open Claude tabs under: the
+    /// per-CLI login named by <c>CLAUDE_CONFIG_DIR</c> when that's set, else the global <c>~/.claude</c> login.
+    /// Reads the same <c>.claude.json</c> <c>oauthAccount.emailAddress</c> field as <see cref="ClaudeAccountCatalog"/>.</summary>
+    private static string? DetectSignedInEmail()
+    {
+        var configDir = Environment.GetEnvironmentVariable(ClaudeLogin.ConfigDirVariable);
+        var folder = string.IsNullOrWhiteSpace(configDir)
+            ? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
+            : configDir;
+        return AccountScope.SignedInEmail(folder);
     }
 
     /// <summary>The plain-console question itself, split out so <see cref="Resolve"/>'s skip rules stay testable
