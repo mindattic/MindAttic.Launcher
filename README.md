@@ -379,6 +379,17 @@ Test coverage (`MindAttic.Launcher.Tests/`, NUnit 4) spans:
 
 After editing anything under `docs/`, run `powershell -File tools/codex.ps1 doctor` (validates IDs, links, front-matter and cited tests; `codex.ps1 digest` regenerates `docs/BIBLE.digest.md`).
 
+## Whole-number versioning
+
+`MindAttic.Launcher.csproj`'s `<Version>` ([HOUSE-LAW-1](../MindAttic.HouseRules.md#HOUSE-LAW-1)) is major-only (`1.0.0` -> `2.0.0` -> `3.0.0`; minor/patch always stay `0`), and `AppVersion.Tag` (`Services/AppVersion.cs`) shows it as `vN` in the app's own header so a glance says which build is running (M.LNCH-T106).
+
+It bumps itself, by one, on **every commit** to this repo - a git hook, not something `run.ps1` touches at deploy time (M.LNCH-T115/T116): bumping on redeploy would inflate the number on every `-Force` rebuild during iteration, long before anything is actually committed. One commit, one version number is the invariant this preserves, and that includes `--amend` (see below) - the version count is "how many commits has this repo had", full stop.
+
+- **The hook**: `.githooks/pre-commit` (a thin shell shim) calls `.githooks/pre-commit-bump-version.ps1`, which rewrites the `<Version>` in the csproj and `git add`s it, folding the bump into the commit being made.
+- **`--amend` is deliberately not special-cased.** M.LNCH-T117 tried to skip the bump on `--amend`/`-c`/`-C` by reading git's own commit-source classification in a `prepare-commit-msg` hook (that hook is told whether a commit is reusing an existing commit's identity). It was reverted after testing showed git only reports that classification when **no `-m` is also given** - `git commit --amend -m "..."`, the way most people actually amend, gets classified identically to a brand-new commit, so the "skip" silently failed to skip. A detector that works for one invocation style and not the other is worse than none: every commit, amends included, bumps by one.
+- **Installed via** `git config core.hookspath .githooks`, run once by `setup.ps1` for a fresh checkout. Git never honors a tracked `.git/hooks` directory on its own, so this is the one piece that has to be set up per machine/clone; `setup.ps1` does it automatically, but an existing checkout that predates this needs it run by hand once.
+- **Troubleshooting**: if commits stop bumping the version, check `git config --get core.hookspath` reports `.githooks` in this checkout, and that `powershell.exe` is on `PATH` for whatever shell runs your commits (the hook shells out to it). The hook writes `Version -> N.0.0` to the console on every bump it makes; silence means it didn't run, or the csproj's `<Version>` tag didn't match its regex.
+
 ## Project layout
 
 ```text

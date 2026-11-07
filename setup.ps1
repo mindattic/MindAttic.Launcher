@@ -85,6 +85,15 @@ if (-not (Test-Path $deployPs1) -or -not (Test-Path $slnx)) {
     exit 1
 }
 
+# ── Git hooks (M.LNCH-T116) ──────────────────────────────────────────────────
+# core.hookspath is local to this checkout (git never honors a tracked
+# .git/hooks), so each fresh clone needs this pointed at the tracked .githooks
+# dir once: that's what bumps MindAttic.Launcher.csproj's whole-number Version
+# on every commit (HOUSE-LAW-1).
+Write-Step "Git hooks"
+git -C $repo config core.hookspath .githooks
+Write-Ok "core.hookspath -> .githooks (every commit now bumps the whole-number Version)"
+
 # ── Prerequisites ────────────────────────────────────────────────────────────
 Write-Step "Checking prerequisites"
 

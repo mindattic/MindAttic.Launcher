@@ -1,0 +1,13 @@
+#!/bin/sh
+# Whole-number versioning (HOUSE-LAW-1, M.LNCH-T116, M.LNCH-T117): every commit
+# to this repo - including --amend - bumps MindAttic.Launcher.csproj's major
+# <Version> by one and folds it into the commit being made, so the version tag
+# shown in the app's header (AppVersion.Tag, M.LNCH-T106) tracks the repo's
+# commit count 1:1. See "Whole-number versioning" in README.md for the full
+# story, including why --amend is NOT special-cased (it was tried and reverted
+# - see that section).
+#
+# Installed by setup.ps1 ("git config core.hookspath .githooks") so a fresh
+# checkout picks it up without touching the unshared .git/hooks directory.
+hook_dir=$(dirname "$0")
+exec powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$hook_dir/pre-commit-bump-version.ps1"
