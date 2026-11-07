@@ -37,11 +37,13 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
     public override Task<int> ExecuteAsync(CommandContext context, Settings settings)
     {
         // A Launcher scoped to one person (M.LNCH-T54): resolved, and signed in when it isn't yet, before
-        // anything else opens, so no tab ever starts on a login nobody is in. Unscoped, nothing changes.
-        // Without --account, ask once here who's using it (M.LNCH-T71) — from the org's current, eligible
-        // members (WhoIsUsing.Resolve, backed by the orchestrator's own store) rather than per Claude tab
-        // (the screen this replaced, M.LNCH-T65): no real choice (no roster, or one active member) asks
-        // nothing, and every tab this session opens goes straight to the chosen person, no further question.
+        // anything else opens, so no tab ever starts on a login nobody is in. The Orchestrator always passes
+        // --account itself, so skipping it here means an unscoped launch: a desktop double-click or a bare
+        // terminal run. Ask once who's using it (M.LNCH-T71) — from the org's current, eligible members
+        // (WhoIsUsing.Resolve, backed by the orchestrator's own store) rather than per Claude tab (the screen
+        // this replaced, M.LNCH-T65): no roster at all asks nothing, but a single active member still gets
+        // asked (M.LNCH-T119) since a desktop launch has no login evidence of its own. Every tab this session
+        // opens goes straight to the chosen person, no further question.
         var account = !string.IsNullOrWhiteSpace(settings.Account) ? settings.Account : WhoIsUsing.Resolve();
         AccountScope? scope = null;
         if (!string.IsNullOrWhiteSpace(account))

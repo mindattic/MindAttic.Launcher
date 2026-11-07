@@ -2,15 +2,19 @@ namespace MindAttic.Launcher.Services;
 
 /// <summary>
 /// Resolves who is using this Launcher (M.LNCH-T71) once, at startup, when it wasn't told outright
-/// (<c>--account</c>, <see cref="Commands.MainMenuCommand"/>): from <see cref="OrchestratorMembers.ActiveRoster"/>,
-/// never asking when there's no real choice (no roster, or exactly one active member) or when the login this
-/// process was explicitly started under (<c>CLAUDE_CONFIG_DIR</c>, via <see cref="AccountScope.SignedInEmail"/>, the
-/// same <c>oauthAccount.emailAddress</c> Claude Code itself reports) matches a roster member's email exactly
-/// (M.LNCH-T114): a person's name is not a reliable stand-in for which of their Claude logins is live (e.g. a Team
-/// org seat vs. a personal plan under the same name), so the match goes by the full sign-in email, never the display
-/// name. Deliberately does NOT trust the shared global <c>~/.claude</c> login as that signal (M.LNCH-T118): with no
-/// <c>CLAUDE_CONFIG_DIR</c> to vouch for who this specific launch is for, it falls back to asking rather than
-/// guessing from whoever last signed that shared file in.
+/// (<c>--account</c>, <see cref="Commands.MainMenuCommand"/>) — the Orchestrator always passes <c>--account</c>
+/// itself, so reaching this at all means an unscoped launch: someone double-clicked the desktop shortcut, or ran
+/// the exe bare in a terminal. From <see cref="OrchestratorMembers.ActiveRoster"/>, never asking when there's no
+/// real choice at all (no roster) or when the login this process was explicitly started under (<c>CLAUDE_CONFIG_DIR</c>,
+/// via <see cref="AccountScope.SignedInEmail"/>, the same <c>oauthAccount.emailAddress</c> Claude Code itself reports)
+/// matches a roster member's email exactly (M.LNCH-T114): a person's name is not a reliable stand-in for which of
+/// their Claude logins is live (e.g. a Team org seat vs. a personal plan under the same name), so the match goes by
+/// the full sign-in email, never the display name. Deliberately does NOT trust the shared global <c>~/.claude</c>
+/// login as that signal (M.LNCH-T118): with no <c>CLAUDE_CONFIG_DIR</c> to vouch for who this specific launch is for,
+/// it falls back to asking rather than guessing from whoever last signed that shared file in. A single active member
+/// is NOT skipped either (M.LNCH-T119): a desktop double-click has no login evidence of its own, so even the one
+/// person on the roster still gets asked (and still sees the API Key option) rather than the Launcher silently
+/// assuming it's them.
 /// </summary>
 public static class WhoIsUsing
 {
@@ -47,7 +51,6 @@ public static class WhoIsUsing
     {
         var roster = RosterOverride is not null ? RosterOverride() : OrchestratorMembers.ActiveRoster();
         if (roster is null or { Count: 0 }) return null;
-        if (roster.Count == 1) return roster[0].Email;
 
         var signedIn = SignedInEmailOverride is not null ? SignedInEmailOverride() : DetectSignedInEmail();
         if (signedIn is not null)

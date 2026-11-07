@@ -80,13 +80,29 @@ public sealed class WhoIsUsingTests
     }
 
     [Test]
-    public void Resolve_asks_nothing_with_exactly_one_active_member()
+    public void Resolve_still_asks_with_exactly_one_active_member()
     {
+        // M.LNCH-T119: an unscoped launch (desktop double-click) has no login evidence of its own, so even a
+        // single-member roster must be asked rather than silently assumed — the Orchestrator path never reaches
+        // Resolve() at all (it always passes --account), so this is the one case Resolve() exists to cover.
         var jordan = new MemberOption("jordan@mindattic.com", "Jordan", "member", "standard", "active");
         WhoIsUsing.RosterOverride = () => new[] { jordan };
-        WhoIsUsing.AskOverride = _ => throw new AssertionException("asked with one eligible member");
+        WhoIsUsing.SignedInEmailOverride = () => null;
+        IReadOnlyList<MemberOption>? asked = null;
+        WhoIsUsing.AskOverride = roster => { asked = roster; return jordan; };
 
         Assert.That(WhoIsUsing.Resolve(), Is.EqualTo("jordan@mindattic.com"));
+        Assert.That(asked!.Select(m => m.Email), Is.EqualTo(new[] { "jordan@mindattic.com", WhoIsUsing.ApiKeyOption }));
+    }
+
+    [Test]
+    public void Resolve_returns_null_when_the_one_member_asked_declines()
+    {
+        WhoIsUsing.RosterOverride = () => new[] { new MemberOption("jordan@mindattic.com", "Jordan", "member", "standard", "active") };
+        WhoIsUsing.SignedInEmailOverride = () => null;
+        WhoIsUsing.AskOverride = _ => null;
+
+        Assert.That(WhoIsUsing.Resolve(), Is.Null);
     }
 
     [Test]
