@@ -1,0 +1,3 @@
+#!/bin/sh
+# mindattic-commit-msg
+exec sh "D:/Projects/MindAttic/mindattic-agent-standard/shared/hooks/commit-msg" "$@"
