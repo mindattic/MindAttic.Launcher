@@ -41,8 +41,8 @@
     nothing is built, moved aside or launched.
 
 .PARAMETER WaitPid
-    The in-app Restart: wait for that menu process to exit, force a clean rebuild,
-    then run the fresh exe. Restart means "run fresh code", so a failed rebuild
+    The in-app Redeploy: wait for that menu process to exit, force a clean rebuild,
+    then run the fresh exe. Redeploy means "run fresh code", so a failed rebuild
     stops loudly here instead of launching the stale exe.
 
 .EXAMPLE
@@ -71,7 +71,7 @@ $exeName   = 'MindAttic.Launcher.exe'
 $exe       = Join-Path $deployDir $exeName
 $pdb       = [System.IO.Path]::ChangeExtension($exe, '.pdb')
 
-# ── Restart: wait for the old menu ──────────────────────────────────────────
+# ── Redeploy: wait for the old menu ─────────────────────────────────────────
 if ($WaitPid -gt 0) {
     # Cap the wait: if it lingers, still publish (the exe gets renamed aside).
     try { Wait-Process -Id $WaitPid -Timeout 30 -ErrorAction SilentlyContinue } catch { }
@@ -223,7 +223,7 @@ if ($Force -or (Test-NeedsPublish)) { $ok = Publish }
 if (-not $ok) {
     Write-Host 'Deploy FAILED.' -ForegroundColor Red
     if ($WaitPid -gt 0) {
-        Write-Host '  Restart: not launching the stale build. Fix the build above, then relaunch.' -ForegroundColor Yellow
+        Write-Host '  Redeploy: not launching the stale build. Fix the build above, then relaunch.' -ForegroundColor Yellow
         Write-Host '  Press any key to close this tab...' -ForegroundColor DarkGray
         [void][System.Console]::ReadKey($true)
         exit 1

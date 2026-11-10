@@ -7,7 +7,7 @@ namespace MindAttic.Launcher.Services;
 /// <see cref="Self"/> is whatever exe is currently executing (e.g. the Debug
 /// bin during dev). <see cref="Release"/> is the deployed single-file exe in
 /// <see cref="DeployDir"/>, which the desktop shortcut's run.bat runs and
-/// which agent tabs and "Restart" launch. <see cref="EnsureFresh"/> shells out to
+/// which agent tabs and "Redeploy" launch. <see cref="EnsureFresh"/> shells out to
 /// the repo's <c>run.ps1</c> to republish when source has changed.
 /// </summary>
 public static class ExePath
@@ -87,7 +87,7 @@ public static class ExePath
                 var drainOut = Task.Run(() => p.StandardOutput.ReadToEnd());
                 var drainErr = Task.Run(() => p.StandardError.ReadToEnd());
                 // Cap the wait so a wedged publish (nuget stall, AV scan) can't
-                // freeze Restart / Open Project Tab. On timeout, kill and move on
+                // freeze Redeploy / Open Project Tab. On timeout, kill and move on
                 // — the caller still tries to launch whatever exe currently exists.
                 if (!p.WaitForExit((int)TimeSpan.FromMinutes(2).TotalMilliseconds))
                 {

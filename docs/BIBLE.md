@@ -79,7 +79,7 @@ call stateless/injectable services; the services own all external-process and fi
   `Version 1.0.0`; references MindAttic.Vault 1.0.0, Spectre.Console + Spectre.Console.Cli 0.49.1).
 - `MindAttic.Launcher.Tests/MindAttic.Launcher.Tests.csproj` — NUnit 4 test project.
 - `run.ps1` — publishes to `C:\Apps\MindAttic.Launcher\` (writing `run.bat` and `repo.path` beside
-  the exe), launches it, and backs the in-app Restart (`-WaitPid`).
+  the exe), launches it, and backs the in-app Redeploy (`-WaitPid`).
 
 ### 4.2 Domain model — NOUNS (`MindAttic.Launcher/Models/`)
 - **Project** (`Models/Project.cs`) — a managed repo: `Name`, `Path`, `RepoUrl`, tab alias/color/scheme,

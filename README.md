@@ -16,7 +16,7 @@ One Windows console for a whole workspace of repos: open any project in a colore
    Settings                      CLI development: the model each agent CLI runs with
    Open Command Prompt (Admin)   open cmd as Administrator at the workspace root
    Open PowerShell (Admin)       open PowerShell as Administrator at the workspace root
-   Restart                       reload this console in a new tab; other tabs are untouched
+   Redeploy                      rebuild and reload this console; other tabs are untouched
 
    Quit                          close this menu (other tabs are untouched)
 ```
@@ -40,7 +40,7 @@ A single `MindAttic.Launcher.exe` (`net10.0-windows`, published `win-x64`) built
 - Per-project tab color and a matching `MindAttic-<Name>` Windows Terminal scheme, spliced into the user's WT settings without reformatting the file.
 - Per-provider model picker that rewrites the `--model` flag inside the provider's run command.
 - Lossless settings: unknown keys written by other MindAttic tools survive every save ([MindAttic.Vault](https://github.com/mindattic/MindAttic.Vault) backs the store).
-- Self-refreshing exe: the in-app Restart waits out the Windows file lock, republishes and relaunches; a header notice warns when the running build is behind the latest commit.
+- Self-refreshing exe: the in-app Redeploy waits out the Windows file lock, republishes and relaunches — embedded in the Orchestrator's Terminals panel it tells the dashboard directly instead of popping a detached window; a header notice warns when the running build is behind the latest commit.
 - A Claude usage and rate-limit block (`ClaudeStatusService`, read from `~/.claude/*`; the pace status from the orchestrator's `orchestrator.db` `rl-status` row, or `~/.claude/rl-status.json` when that is newer or the row can't be read), currently hidden: commented out in `MainMenuCommand` because it gave no actionable insight.
 
 It is not an agent: it execs a provider CLI with inherited stdio and never calls an LLM SDK or makes an LLM API call directly.
@@ -209,7 +209,7 @@ Launching the exe with no arguments runs `MainMenuCommand`, which loads settings
 | Settings | `settings` | Opens `SettingsMenu`: the model each agent CLI runs with (only). |
 | Open Command Prompt (Admin) | `cmd` | Opens an elevated `cmd` tab at the workspace root via UAC (`wt … -- cmd`, `Verb=runas`). |
 | Open PowerShell (Admin) | `ps` | Same, but `powershell`. |
-| Restart | `restart` | Launches `run.ps1 -WaitPid <this pid>` in a fresh tab (waits for this process to exit, force-republishes, then re-execs) and exits this instance. Needed because Windows locks the running exe image so it cannot republish itself in place. |
+| Redeploy | `redeploy` | Launches `run.ps1 -WaitPid <this pid>` in a fresh tab (waits for this process to exit, force-republishes, then re-execs) and exits this instance. Needed because Windows locks the running exe image so it cannot republish itself in place. Embedded in the Orchestrator's Terminals panel (`MINDATTIC_ORCHESTRATOR_TERMINALS` set), it sends the request down that pipe as `IsMenu:true` instead, so the dashboard's own watchdog replaces the pane rather than a new OS-level `wt` window opening alongside it. |
 | Quit | `exit` | Closes the menu; other tabs are untouched. |
 
 The header also shows the staleness notice when the build is behind; it is not a menu item.
@@ -360,10 +360,10 @@ dotnet test
 powershell -NoProfile -ExecutionPolicy Bypass -File run.ps1
 #   -Force        : clean bin/obj rebuild even if nothing looks changed
 #   -Launch ...   : then run the deployed exe here, passing the remaining args
-#   -WaitPid <n>  : the in-app Restart (wait for that menu to exit, force, launch)
+#   -WaitPid <n>  : the in-app Redeploy (wait for that menu to exit, force, launch)
 ```
 
-`run.ps1` is the one script for publishing, launching and restarting. Without `-Force` it republishes only when the deployed exe or `repo.path` is missing or a source file is newer than the exe, so the per-launch call is a fast no-op. It never closes running copies (every agent tab is a live `MindAttic.Launcher.exe host` process): a locked exe is renamed to `*.stale-*` and the fresh one published beside it; leftovers are deleted once unlocked. Every run also writes `run.bat` (what the desktop shortcut runs) and `repo.path` (the source path, which the deployed exe reads to find the repo, workspace root and git). Restart refuses to fall back to a stale exe when the rebuild fails.
+`run.ps1` is the one script for publishing, launching and redeploying. Without `-Force` it republishes only when the deployed exe or `repo.path` is missing or a source file is newer than the exe, so the per-launch call is a fast no-op. It never closes running copies (every agent tab is a live `MindAttic.Launcher.exe host` process): a locked exe is renamed to `*.stale-*` and the fresh one published beside it; leftovers are deleted once unlocked. Every run also writes `run.bat` (what the desktop shortcut runs) and `repo.path` (the source path, which the deployed exe reads to find the repo, workspace root and git). Redeploy refuses to fall back to a stale exe when the rebuild fails.
 
 Test coverage (`MindAttic.Launcher.Tests/`, NUnit 4) spans:
 

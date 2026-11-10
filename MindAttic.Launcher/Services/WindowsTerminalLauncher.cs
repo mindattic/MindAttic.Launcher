@@ -100,6 +100,13 @@ public sealed class WindowsTerminalLauncher(
         /// opens its own real <c>wt</c> window, embedded or not.</summary>
         public bool IsAgentHost { get; init; }
 
+        /// <summary>This Launcher's own menu redeploying itself (<see cref="Commands.MainMenuCommand"/>'s Redeploy),
+        /// not a CLI it opened. Embedded in the Orchestrator's Terminals panel, <see cref="Open"/> sends it down the
+        /// pipe as <c>PaneRequest{IsMenu:true}</c> so the dashboard's own watchdog replaces the ended pane with a
+        /// fresh one; it never falls through to <see cref="TermHostLauncher"/> (that's for agent CLIs, not the menu),
+        /// so an unembedded Redeploy keeps opening a plain <c>wt</c> tab exactly as before.</summary>
+        public bool IsMenu { get; init; }
+
         /// <summary>This tab's <see cref="AgentProvider.Key"/> ("Claude", "Codex", …); cosmetic/routing only, read when
         /// this is an agent-host tab sent down the Orchestrator's pipe.</summary>
         public string? Provider { get; init; }
@@ -113,6 +120,22 @@ public sealed class WindowsTerminalLauncher(
     {
         if (tab.Command.Count == 0)
             throw new ArgumentException("Tab.Command must contain at least the executable.", nameof(tab));
+
+        // This Launcher's own menu redeploying itself: embedded in the Orchestrator's Terminals panel, tell it
+        // directly (PaneRequest{IsMenu:true}) instead of spawning a detached wt window the dashboard knows nothing
+        // about — its own watchdog (OpenLaunchers/CloseEndedLaunchers) then replaces the ended pane with a fresh
+        // one. Deliberately independent of the IsAgentHost/TermHost checks below: a redeploy is never a CLI, so
+        // nothing listening (the dashboard closed) falls straight through to plain wt, same as an agent-host tab.
+        if (tab.IsMenu && Environment.GetEnvironmentVariable(OrchestratorTerminalsEnvVar) is { Length: > 0 } menuPipeName)
+        {
+            var menuReply = sendToOrchestrator(menuPipeName, PipeRequestJson(tab));
+            if (menuReply is not null)
+            {
+                if (menuReply.Length > 0)
+                    throw new InvalidOperationException($"Failed to open tab via the Orchestrator: {menuReply}");
+                return;
+            }
+        }
 
         // Embedded in the Orchestrator's own Terminals panel (M.LNCH-T77): an agent-host tab goes down that pipe as a
         // new tab there instead of its own wt window. Nothing listening (null — e.g. the dashboard closed since this
@@ -219,6 +242,7 @@ public sealed class WindowsTerminalLauncher(
         public string? Email { get; init; }
         public string? Initials { get; init; }
         public string? TabColor { get; init; }
+        public bool? IsMenu { get; init; }
     }
 
     /// <summary>One line of UTF-8 JSON for <paramref name="tab"/>, exactly the <c>wt</c> command it would otherwise
@@ -236,7 +260,8 @@ public sealed class WindowsTerminalLauncher(
         ConfigDir = ConfigDirFromCommand(tab.Command),
         Email = tab.ProfileLook?.Email,
         Initials = tab.ProfileLook?.Initials,
-        TabColor = tab.TabColor
+        TabColor = tab.TabColor,
+        IsMenu = tab.IsMenu ? true : null
     }, PipeRequestOptions);
 
     private static string? ConfigDirFromCommand(IReadOnlyList<string> command)

@@ -315,4 +315,103 @@ public sealed class WindowsTerminalLauncherTests
             Assert.That(launched, Is.Not.Null);
         });
     }
+
+    // ---- redeploying the menu itself: embedded in the Orchestrator vs a plain terminal (M.LNCH-T107) -----------
+
+    private static WindowsTerminalLauncher.Tab MenuTab() => new()
+    {
+        Title = "Launcher",
+        WorkingDirectory = @"D:\Projects\MindAttic",
+        Command = ["MindAttic.Launcher.exe"],
+        IsMenu = true,
+        Provider = "Launcher"
+    };
+
+    [Test]
+    public void Outside_the_Orchestrator_a_menu_redeploy_tab_still_just_opens_wt()
+    {
+        WithOrchestratorPipe(null, () =>
+        {
+            WindowsTerminalLauncher.Tab? launched = null;
+            var wt = new WindowsTerminalLauncher(
+                sendToOrchestrator: (_, _) => throw new InvalidOperationException("must not touch the pipe when unembedded"),
+                launchWindowsTerminal: t => launched = t,
+                startInTermHost: _ => { Assert.Fail("a menu redeploy must never start a TermHost"); return true; });
+
+            wt.Open(MenuTab());
+
+            Assert.That(launched, Is.Not.Null);
+        });
+    }
+
+    [Test]
+    public void Embedded_menu_redeploy_tab_sends_the_pipe_request_and_never_opens_wt_or_a_term_host()
+    {
+        WithOrchestratorPipe("launcher-test-menu-pipe", () =>
+        {
+            string? pipeNameSeen = null;
+            string? jsonSeen = null;
+            var wt = new WindowsTerminalLauncher(
+                sendToOrchestrator: (pipe, json) => { pipeNameSeen = pipe; jsonSeen = json; return ""; },
+                launchWindowsTerminal: _ => Assert.Fail("a successful pipe send must not also open wt"),
+                startInTermHost: _ => { Assert.Fail("a menu redeploy must never start a TermHost"); return true; });
+
+            var tab = MenuTab();
+            wt.Open(tab);
+
+            Assert.That(pipeNameSeen, Is.EqualTo("launcher-test-menu-pipe"));
+            using var doc = System.Text.Json.JsonDocument.Parse(jsonSeen!);
+            var root = doc.RootElement;
+            Assert.That(root.GetProperty("title").GetString(), Is.EqualTo(tab.Title));
+            Assert.That(root.GetProperty("provider").GetString(), Is.EqualTo("Launcher"));
+            Assert.That(root.GetProperty("isMenu").GetBoolean(), Is.True);
+        });
+    }
+
+    [Test]
+    public void A_non_menu_non_agent_host_tab_never_reports_isMenu()
+    {
+        WithOrchestratorPipe("launcher-test-menu-pipe-omit", () =>
+        {
+            string? jsonSeen = null;
+            var wt = new WindowsTerminalLauncher(
+                sendToOrchestrator: (pipe, json) => { jsonSeen = json; return ""; });
+
+            wt.Open(wt.BuildAgentTab(Project, Provider, "mindattic.exe"));
+
+            using var doc = System.Text.Json.JsonDocument.Parse(jsonSeen!);
+            Assert.That(doc.RootElement.TryGetProperty("isMenu", out _), Is.False);
+        });
+    }
+
+    [Test]
+    public void Nothing_listening_on_the_pipe_for_a_menu_redeploy_falls_back_to_wt()
+    {
+        WithOrchestratorPipe("launcher-test-menu-pipe-gone", () =>
+        {
+            WindowsTerminalLauncher.Tab? launched = null;
+            var wt = new WindowsTerminalLauncher(
+                sendToOrchestrator: (_, _) => null, // nothing listening (e.g. the dashboard closed)
+                launchWindowsTerminal: t => launched = t,
+                startInTermHost: _ => { Assert.Fail("a menu redeploy must never start a TermHost"); return true; });
+
+            wt.Open(MenuTab());
+
+            Assert.That(launched, Is.Not.Null);
+        });
+    }
+
+    [Test]
+    public void Embedded_menu_redeploy_tab_reports_the_dashboards_error_and_does_not_also_open_wt()
+    {
+        WithOrchestratorPipe("launcher-test-menu-pipe-error", () =>
+        {
+            var wt = new WindowsTerminalLauncher(
+                sendToOrchestrator: (_, _) => "no such pane",
+                launchWindowsTerminal: _ => Assert.Fail("an errored pipe send must not also open wt (duplicate)"));
+
+            var ex = Assert.Throws<InvalidOperationException>(() => wt.Open(MenuTab()));
+            Assert.That(ex!.Message, Does.Contain("no such pane"));
+        });
+    }
 }
