@@ -153,9 +153,10 @@ public sealed class WindowsTerminalLauncher(
             }
         }
 
-        // Every other agent CLI (M.LNCH-T82/T83): host it in a detached TermHost, dashboard up or down, so it survives any
-        // window closing and the dashboard discovers it via the session registry. No TermHost installed falls through to wt, as before.
-        if (tab.IsAgentHost && startInTermHost(tab)) return;
+        // An embedded Launcher whose dashboard has since closed (M.LNCH-T82/T83): host the CLI in a detached TermHost so the
+        // dashboard finds it again via the session registry. A Launcher started on its own (desktop, shortcut) opens its own
+        // wt tab instead (M.LNCH-T122): it was the Launcher you asked for, not a CLI that turns up in the dashboard.
+        if (tab.IsAgentHost && Environment.GetEnvironmentVariable(OrchestratorTerminalsEnvVar) is { Length: > 0 } && startInTermHost(tab)) return;
 
         launchWindowsTerminal(WithProfileWritten(tab));
     }

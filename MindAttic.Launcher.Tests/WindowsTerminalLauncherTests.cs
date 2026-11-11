@@ -183,6 +183,24 @@ public sealed class WindowsTerminalLauncherTests
     }
 
     [Test]
+    public void A_launcher_started_on_its_own_opens_wt_even_with_a_termhost_installed()
+    {
+        // M.LNCH-T122: started from the desktop it's the Launcher you asked for; its CLI must not vanish into the dashboard.
+        WithOrchestratorPipe(null, () =>
+        {
+            WindowsTerminalLauncher.Tab? launched = null;
+            var wt = new WindowsTerminalLauncher(
+                sendToOrchestrator: (_, _) => throw new InvalidOperationException("must not touch the pipe when unembedded"),
+                launchWindowsTerminal: t => launched = t,
+                startInTermHost: _ => { Assert.Fail("a standalone Launcher must not start a TermHost"); return true; });
+
+            wt.Open(wt.BuildAgentTab(Project, Provider, "mindattic.exe"));
+
+            Assert.That(launched, Is.Not.Null);
+        });
+    }
+
+    [Test]
     public void A_utility_tab_always_opens_wt_even_when_embedded()
     {
         WithOrchestratorPipe("launcher-test-does-not-exist", () =>
