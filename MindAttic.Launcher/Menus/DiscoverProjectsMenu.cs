@@ -23,9 +23,11 @@ public sealed class DiscoverProjectsMenu(SettingsStore store, GitService git, Wi
 
     private enum Outcome { Added, Skipped, SkipAll, Never }
 
-    public void Run()
+    /// <summary><paramref name="root"/> defaults to <see cref="ExePath.WorkspaceRoot"/>; pass one of
+    /// <see cref="ExePath.ExtraWorkspaceRoots"/> to offer repos found under a second workspace too.</summary>
+    public void Run(string? root = null)
     {
-        var root = ExePath.WorkspaceRoot;
+        root ??= ExePath.WorkspaceRoot;
         if (!Directory.Exists(root)) return;
 
         var candidates = ProjectDiscovery.FindUnregistered(store.Load(), root);

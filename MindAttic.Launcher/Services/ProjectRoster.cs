@@ -26,7 +26,10 @@ public static class ProjectRoster
     {
         IEnumerable<Project> projects = settings.Projects ?? [];
         if (taggedFullNames is not null)
-            projects = projects.Where(p => GitHubRepoRef.Parse(p.RepoUrl) is { } full && taggedFullNames.Contains(full));
+            // A project under a second workspace root (GunGreenEyes) was never part of the MindAttic wip-topic
+            // roster workflow, so the tag filter — built from that one GitHub token's view — can't speak to it
+            // either way; it stays, same as it would with no filter active at all.
+            projects = projects.Where(p => UnderExtraRoot(p) || GitHubRepoRef.Parse(p.RepoUrl) is { } full && taggedFullNames.Contains(full));
 
         // A hand-edited or corrupted settings.json can carry the same (Name, Path) more
         // than once (M.LNCH-T91); every consumer here just iterates the list, so without
@@ -40,4 +43,7 @@ public static class ProjectRoster
     public static Project? FindByName(AppSettings settings, string name) =>
         (settings.Projects ?? []).FirstOrDefault(p =>
             string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+
+    private static bool UnderExtraRoot(Project p) =>
+        ExePath.ExtraWorkspaceRoots.Any(root => p.Path.StartsWith(root + System.IO.Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase));
 }

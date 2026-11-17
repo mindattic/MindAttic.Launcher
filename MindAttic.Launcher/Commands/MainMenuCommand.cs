@@ -118,6 +118,11 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
         // with an add-to-roster prompt until it's actually tagged.
         new DiscoverProjectsMenu(store, git, new WindowsTerminalSchemes(), tagged).Run();
 
+        // A second workspace root (GunGreenEyes), outside the MindAttic/wip-topic roster entirely: offered
+        // unfiltered (no tagged set), so its repos don't need a GitHub topic to surface here.
+        foreach (var extraRoot in ExePath.ExtraWorkspaceRoots)
+            new DiscoverProjectsMenu(store, git, new WindowsTerminalSchemes()).Run(extraRoot);
+
         // M.LNCH-T111: started once, here, in the Launcher's singleton menu process (never in a per-tab
         // host/commit/backup/… invocation, which would mean one SetWinEventHook per open tab). Keeps every
         // MindAttic window off whatever virtual desktop (2+) the user is gaming on; disposed on the way out

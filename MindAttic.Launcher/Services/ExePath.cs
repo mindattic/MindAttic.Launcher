@@ -55,6 +55,11 @@ public static class ExePath
         }
     }
 
+    /// <summary>Other workspace roots whose repos are discovered and opened just like <see cref="WorkspaceRoot"/>'s
+    /// (GunGreenEyes): not under the <c>wip</c>-topic roster at all, since they're not MindAttic/GitHub-tagged repos —
+    /// see <see cref="Services.ProjectRoster"/>'s tag-filter exemption for them.</summary>
+    public static readonly IReadOnlyList<string> ExtraWorkspaceRoots = [@"D:\Projects\GunGreenEyes"];
+
     public static void EnsureFresh()
     {
         var root = FindRepoRoot();
