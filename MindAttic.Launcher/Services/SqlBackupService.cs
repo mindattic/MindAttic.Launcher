@@ -35,11 +35,45 @@ public sealed class SqlBackupService
     /// </summary>
     public const string LocalDbInstance = @"(localdb)\MSSQLLocalDB";
 
+    /// <summary>
+    /// The instances whose every online user database is backed up when the
+    /// <see cref="AppSettings.BackupSqlInstances"/> setting is absent (M.LNCH-T128):
+    /// the full SQL Server on this PC as well as LocalDB. Before T128 only LocalDB
+    /// was discovered, so the <c>localhost</c> databases were never backed up.
+    /// </summary>
+    public static readonly IReadOnlyList<string> DefaultInstances = [DefaultInstance, LocalDbInstance];
+
+    /// <summary>Default for <see cref="AppSettings.BackupSqlLoginTimeoutSeconds"/>.</summary>
+    public const int DefaultLoginTimeoutSeconds = 60;
+
+    /// <summary>The setting's instance list, trimmed and de-duplicated; null means <see cref="DefaultInstances"/>.</summary>
+    public static IReadOnlyList<string> ResolveInstances(IEnumerable<string>? configured) =>
+        configured is null
+            ? DefaultInstances
+            : configured.Where(i => !string.IsNullOrWhiteSpace(i)).Select(i => i.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
     /// <summary>Runs sqlcmd with the given argument list; returns its exit code and combined output.</summary>
     public delegate (int ExitCode, string Output) SqlcmdRunner(IReadOnlyList<string> args, CancellationToken ct);
 
     public string Executable { get; }
     private readonly SqlcmdRunner run;
+
+    /// <summary>
+    /// sqlcmd's login timeout (<c>-l</c>) in seconds; null leaves sqlcmd's own 8-second default.
+    /// A busy instance (another backup running, memory pressure) takes longer than that to accept a
+    /// login, and a timed-out login would otherwise fail every database on the instance.
+    /// </summary>
+    public int? LoginTimeoutSeconds { get; init; }
+
+    /// <summary>
+    /// Grants an account modify rights on a folder (and everything created in it); returns whether it
+    /// worked and the tool's output. Default: <c>icacls</c>. Injectable so tests never change an ACL.
+    /// </summary>
+    public Func<string, string, (bool Ok, string Output)> GrantModify { get; init; } = IcaclsGrantModify;
+
+    /// <summary>Called with one line per instance folder prepared (who was granted what, or why not).</summary>
+    public Action<string>? OnNote { get; init; }
 
     public SqlBackupService() : this("sqlcmd") { }
 
@@ -141,8 +175,19 @@ public sealed class SqlBackupService
     /// <c>-b</c> so a backup error returns a non-zero exit code instead of just
     /// printing to stdout.
     /// </summary>
-    public static IReadOnlyList<string> BuildArguments(string server, string sql) =>
-        ["-S", server, "-E", "-C", "-b", "-Q", sql];
+    public static IReadOnlyList<string> BuildArguments(string server, string sql, int? loginTimeoutSeconds = null) =>
+        ["-S", server, "-E", "-C", "-b", .. LoginTimeoutArgs(loginTimeoutSeconds), "-Q", sql];
+
+    private static string[] LoginTimeoutArgs(int? seconds) =>
+        seconds is > 0 ? ["-l", seconds.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)] : [];
+
+    /// <summary>
+    /// The Windows account the instance's engine service runs as. <c>BACKUP DATABASE ... TO DISK</c> is
+    /// written by that account, not by the user running sqlcmd, so it needs write access to the target
+    /// folder. LocalDB runs as the user and returns no row.
+    /// </summary>
+    public static string BuildServiceAccountSql() =>
+        "SET NOCOUNT ON; SELECT TOP (1) service_account FROM sys.dm_server_services WHERE servicename LIKE 'SQL Server (%';";
 
     /// <summary>
     /// Lists every user database on an instance: <c>database_id &gt; 4</c> excludes
@@ -158,8 +203,8 @@ public sealed class SqlBackupService
     /// drops the column-header/row-count banner and <c>-W</c> trims trailing
     /// padding, so stdout is exactly one database name per line.
     /// </summary>
-    public static IReadOnlyList<string> BuildListArguments(string server, string sql) =>
-        ["-S", server, "-E", "-C", "-b", "-h", "-1", "-W", "-Q", sql];
+    public static IReadOnlyList<string> BuildListArguments(string server, string sql, int? loginTimeoutSeconds = null) =>
+        ["-S", server, "-E", "-C", "-b", .. LoginTimeoutArgs(loginTimeoutSeconds), "-h", "-1", "-W", "-Q", sql];
 
     /// <summary>Splits sqlcmd's one-name-per-line output, dropping blank lines.</summary>
     public static IReadOnlyList<string> ParseDatabaseNames(string output) =>
@@ -184,9 +229,15 @@ public sealed class SqlBackupService
         CancellationToken ct = default)
     {
         var results = new List<DatabaseBackupResult>();
+        var prepared = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var t in targets)
         {
             if (ct.IsCancellationRequested) break;
+            if (prepared.Add(t.Server))
+            {
+                // Never fatal: if the grant can't be made, each BACKUP reports its own "access denied".
+                try { OnNote?.Invoke(PrepareInstanceFolder(t.Server, targetFolder, ct)); } catch { /* best-effort */ }
+            }
             var r = BackupOne(t, targetFolder, ct);
             results.Add(r);
             onDone?.Invoke(r);
@@ -194,12 +245,74 @@ public sealed class SqlBackupService
         return results;
     }
 
+    /// <summary>
+    /// Creates <c>{targetFolder}\Databases\{instance}</c> and, when the instance's engine runs as an
+    /// account other than the current user (a full SQL Server: <c>NT Service\MSSQLSERVER</c>), grants
+    /// that account modify on the folder so it can write the .bak files there (M.LNCH-T128). LocalDB
+    /// runs as the user, so nothing is granted. Returns a one-line description of what happened.
+    /// </summary>
+    public string PrepareInstanceFolder(string server, string targetFolder, CancellationToken ct = default)
+    {
+        var folder = Path.GetDirectoryName(ResolveBackupFilePath(targetFolder, server, "x"))!;
+        Directory.CreateDirectory(folder);
+
+        string account;
+        try
+        {
+            var (code, output) = run(BuildListArguments(server, BuildServiceAccountSql(), LoginTimeoutSeconds), ct);
+            if (code != 0) return $"{server}: could not read the service account (sqlcmd exit {code}); folder permissions left as they are.";
+            account = ParseDatabaseNames(output).FirstOrDefault() ?? "";
+        }
+        catch (Exception ex)
+        {
+            return $"{server}: could not read the service account ({ex.Message}); folder permissions left as they are.";
+        }
+
+        if (account.Length == 0 || IsCurrentUser(account))
+            return $"{server}: runs as the current user; no folder permission needed.";
+
+        var (ok, grantOutput) = GrantModify(folder, account);
+        return ok
+            ? $"{server}: granted {account} modify on {folder}."
+            : $"{server}: could not grant {account} modify on {folder}: {Tail(grantOutput, 500)}";
+    }
+
+    private static bool IsCurrentUser(string account) =>
+        string.Equals(account, Environment.UserDomainName + "\\" + Environment.UserName, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(account, Environment.UserName, StringComparison.OrdinalIgnoreCase);
+
+    private static (bool Ok, string Output) IcaclsGrantModify(string folder, string account)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo("icacls.exe")
+            {
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+            // (OI)(CI)M: modify, inherited by the files and folders created inside.
+            foreach (var a in new[] { folder, "/grant", $"{account}:(OI)(CI)M" }) psi.ArgumentList.Add(a);
+            using var p = Process.Start(psi);
+            if (p is null) return (false, "icacls did not start");
+            var stderr = Task.Run(() => p.StandardError.ReadToEnd());
+            var stdout = p.StandardOutput.ReadToEnd();
+            p.WaitForExit();
+            return (p.ExitCode == 0, string.Join("\n", stderr.Result, stdout).Trim());
+        }
+        catch (Exception ex)
+        {
+            return (false, ex.Message);
+        }
+    }
+
     public DatabaseBackupResult BackupOne(BackupTarget target, string targetFolder, CancellationToken ct = default)
     {
         var file = ResolveBackupFilePath(targetFolder, target.Server, target.Database);
         Directory.CreateDirectory(Path.GetDirectoryName(file)!);
 
-        var args = BuildArguments(target.Server, BuildBackupSql(target.Database, file));
+        var args = BuildArguments(target.Server, BuildBackupSql(target.Database, file), LoginTimeoutSeconds);
 
         var sw = Stopwatch.StartNew();
         int code;
@@ -257,7 +370,7 @@ public sealed class SqlBackupService
     public DatabaseDiscoveryResult DiscoverDatabases(string? server = null, CancellationToken ct = default)
     {
         var instance = string.IsNullOrWhiteSpace(server) ? LocalDbInstance : server.Trim();
-        var args = BuildListArguments(instance, BuildListDatabasesSql());
+        var args = BuildListArguments(instance, BuildListDatabasesSql(), LoginTimeoutSeconds);
 
         int code;
         string output;

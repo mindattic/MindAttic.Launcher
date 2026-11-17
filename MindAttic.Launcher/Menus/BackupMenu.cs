@@ -39,13 +39,18 @@ public sealed class BackupMenu(
             dbTargets = SqlBackupService.CollectTargets(settings, tagged);
             sqliteTargets = SqliteBackupService.CollectTargets(settings, tagged);
 
-            // Round out the roster with whatever's actually on LocalDB (M.LNCH-T21):
-            // EF/VS-created databases there are rarely added to a project's
-            // roster entry, so roster-only would silently skip them. Best-effort
-            // — a machine with no LocalDB just contributes nothing here.
-            var localDb = sql.DiscoverDatabases(SqlBackupService.LocalDbInstance);
-            if (localDb.Ok && localDb.Targets.Count > 0)
-                dbTargets = SqlBackupService.Merge(dbTargets, localDb.Targets);
+            // Round out the roster with whatever's actually on each configured instance
+            // (M.LNCH-T21, M.LNCH-T128: localhost as well as LocalDB by default): databases
+            // are rarely added to a project's roster entry, so roster-only would silently
+            // skip them. An instance that can't be read is named rather than dropped quietly.
+            foreach (var instance in SqlBackupService.ResolveInstances(settings.BackupSqlInstances))
+            {
+                var found = sql.DiscoverDatabases(instance);
+                if (found.Ok)
+                    dbTargets = SqlBackupService.Merge(dbTargets, found.Targets);
+                else
+                    AnsiConsole.MarkupLine($"  [yellow]Could not list databases on {Markup.Escape(instance)}: {Markup.Escape(found.Output)}[/]");
+            }
         }
         catch (Exception ex)
         {

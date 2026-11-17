@@ -36,6 +36,42 @@ public sealed class AppSettings
     [Setting("Never offer these repos", Group = "Projects", Order = 2, Help = "Repo folders startup discovery won't offer to add.")]
     public List<string>? DiscoveryIgnore { get; set; }
 
+    // ---- Backup (M.LNCH-T128) ----
+
+    /// <summary>
+    /// SQL Server instances whose every online user database the backup discovers and backs up, on top of
+    /// any database a project lists itself. Null (the key absent) means
+    /// <see cref="Services.SqlBackupService.DefaultInstances"/>; an empty list means none.
+    /// </summary>
+    [Setting("SQL Server instances", Group = "Backup", Order = 1,
+        Help = "Every online user database on each instance is backed up to Databases\\<instance>\\<db>.bak. Default: localhost and (localdb)\\MSSQLLocalDB.")]
+    public List<string>? BackupSqlInstances { get; set; } = [.. Services.SqlBackupService.DefaultInstances];
+
+    [Setting("SQL login timeout (seconds)", Group = "Backup", Order = 2,
+        Help = "How long sqlcmd waits for an instance to accept the login. A busy server needs more than sqlcmd's own 8 seconds.")]
+    public int BackupSqlLoginTimeoutSeconds { get; set; } = Services.SqlBackupService.DefaultLoginTimeoutSeconds;
+
+    [Setting("Upload databases to Azure", Group = "Backup", Order = 3,
+        Help = "After the local backup, upload that night's Databases folder to the blob container with the signed-in Azure CLI (az, no keys).")]
+    public bool BackupUploadEnabled { get; set; } = true;
+
+    [Setting("Azure storage account", Group = "Backup", Order = 4, Help = "Storage account that holds the off-machine database backups.")]
+    public string BackupUploadStorageAccount { get; set; } = Services.AzureBlobBackupService.DefaultStorageAccount;
+
+    [Setting("Azure blob container", Group = "Backup", Order = 5, Help = "Container in that account; each night is a <yyyy-MM-dd>/ prefix in it.")]
+    public string BackupUploadContainer { get; set; } = Services.AzureBlobBackupService.DefaultContainer;
+
+    [Setting("Nights kept in Azure", Group = "Backup", Order = 6,
+        Help = "After a complete upload, older dated prefixes in the container are deleted so this many nights remain. Separate from the local --keep. 0 or less: never delete.")]
+    public int BackupUploadKeepNights { get; set; } = Services.AzureBlobBackupService.DefaultKeepNights;
+
+    [Setting("Upload time limit (hours)", Group = "Backup", Order = 7,
+        Help = "An upload still running after this long is stopped and reported as failed, so it can't block the next night's backup. 0: no limit.")]
+    public double BackupUploadTimeoutHours { get; set; } = Services.AzureBlobBackupService.DefaultTimeoutHours;
+
+    [Setting("Upload progress interval (minutes)", Group = "Backup", Order = 8, Help = "How often a running upload writes a progress line to the log.")]
+    public double BackupUploadProgressMinutes { get; set; } = Services.AzureBlobBackupService.DefaultProgressMinutes;
+
     /// <summary>
     /// Captures top-level settings keys this app doesn't model (e.g. the "mobile"
     /// block a sibling tool writes) so a Save — triggered by any in-app change —

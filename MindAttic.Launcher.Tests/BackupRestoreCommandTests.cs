@@ -28,18 +28,72 @@ public sealed class BackupRestoreCommandTests
 
     private static BackupCommand.Deps BackupDeps(
         bool files = true, bool appData = true, bool[]? sql = null, bool[]? sqlite = null,
-        IReadOnlyList<string>? folders = null, Action<string>? delete = null, AppSettings? settings = null) =>
+        IReadOnlyList<string>? folders = null, Action<string>? delete = null, AppSettings? settings = null,
+        bool discovery = true, AzureUploadResult? upload = null, List<string>? order = null) =>
         new(
             @"R:\Backup",
             () => @"R:\Backup\2026-01-01",
-            t => new BackupResult(files, files ? 0 : 8, TimeSpan.Zero, t, 10),
-            t => new AppDataBackupResult(appData, t, 5, TimeSpan.Zero),
+            t => { order?.Add("files"); return new BackupResult(files, files ? 0 : 8, TimeSpan.Zero, t, 10); },
+            t => { order?.Add("appdata"); return new AppDataBackupResult(appData, t, 5, TimeSpan.Zero); },
             () => settings ?? new AppSettings(),
-            s => new DatabaseDiscoveryResult(s, false, [], "no localdb"),
-            (_, t) => (sql ?? []).Select((ok, i) => new DatabaseBackupResult("srv", $"db{i}", ok, ok ? 0 : 1, TimeSpan.Zero, "f")).ToList(),
-            (_, t) => (sqlite ?? []).Select((ok, i) => new SqliteBackupResult($"p{i}", $"f{i}.db", ok, ok ? 0 : 1, TimeSpan.Zero, "f")).ToList(),
+            (s, _) => { order?.Add("discover:" + s); return new DatabaseDiscoveryResult(s, discovery, [new BackupTarget(s, "Db")], discovery ? "" : "login failed"); },
+            (targets, t, _) =>
+            {
+                order?.Add("sql:" + string.Join(",", targets.Select(x => x.Server)));
+                return (sql ?? []).Select((ok, i) => new DatabaseBackupResult("srv", $"db{i}", ok, ok ? 0 : 1, TimeSpan.Zero, "f")).ToList();
+            },
+            (_, t) => { order?.Add("sqlite"); return (sqlite ?? []).Select((ok, i) => new SqliteBackupResult($"p{i}", $"f{i}.db", ok, ok ? 0 : 1, TimeSpan.Zero, "f")).ToList(); },
             _ => folders ?? [],
-            delete ?? (_ => { }));
+            delete ?? (_ => { }),
+            (folder, prefix, _) => { order?.Add($"upload:{prefix}:{folder}"); return upload ?? new AzureUploadResult(true, false, "ok"); });
+
+    [Test]
+    public void Backup_does_both_default_instances_first_the_file_copy_late_and_the_upload_last()
+    {
+        var order = new List<string>();
+        Assert.That(BackupCommand.Run(null, BackupDeps(order: order)), Is.EqualTo(0));
+        Assert.That(order, Is.EqualTo(new[]
+        {
+            "discover:localhost", @"discover:(localdb)\MSSQLLocalDB", @"sql:localhost,(localdb)\MSSQLLocalDB",
+            "sqlite", "appdata", "files", @"upload:2026-01-01:R:\Backup\2026-01-01\Databases"
+        }));
+    }
+
+    [Test]
+    public void Backup_uses_the_instances_setting()
+    {
+        var order = new List<string>();
+        BackupCommand.Run(null, BackupDeps(order: order, settings: new AppSettings { BackupSqlInstances = ["other"] }));
+        Assert.That(order.Take(2), Is.EqualTo(new[] { "discover:other", "sql:other" }));
+    }
+
+    [Test]
+    public void Backup_returns_1_when_an_instance_cannot_be_read_but_still_runs_the_rest()
+    {
+        var order = new List<string>();
+        Assert.That(BackupCommand.Run(null, BackupDeps(discovery: false, order: order)), Is.EqualTo(1));
+        Assert.That(order, Does.Contain("files"));
+    }
+
+    [Test]
+    public void Backup_returns_1_when_the_upload_fails_and_still_prunes_locally()
+    {
+        var deleted = new List<string>();
+        var deps = BackupDeps(upload: new AzureUploadResult(false, false, "no az"),
+            folders: [@"R:\Backup\2026-01-02", @"R:\Backup\2026-01-01"], delete: deleted.Add);
+        Assert.That(BackupCommand.Run(1, deps), Is.EqualTo(1));
+        Assert.That(deleted, Is.EqualTo(new[] { @"R:\Backup\2026-01-01" }));
+    }
+
+    [Test]
+    public void Backup_survives_a_step_that_throws()
+    {
+        var order = new List<string>();
+        var deps = BackupDeps(order: order) with { ZipAppData = _ => throw new IOException("locked") };
+        Assert.That(BackupCommand.Run(null, deps), Is.EqualTo(1));
+        Assert.That(order, Does.Contain("files"));
+        Assert.That(order.Last(), Does.StartWith("upload:"));
+    }
 
     [Test]
     public void Backup_returns_1_when_the_target_folder_cannot_be_resolved()
