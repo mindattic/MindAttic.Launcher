@@ -184,8 +184,11 @@ public sealed class MainMenuCommand : AsyncCommand<MainMenuCommand.Settings>
                     var tab = result.Selected.Tag is "ps"
                         ? wt.BuildPowerShellTab(adminRoot)
                         : wt.BuildCmdTab(adminRoot);
+                    // M.LNCH-T125: a CLI tab in the Orchestrator's dashboard when it's embedded there (wt.Open routes an
+                    // IsElevatedHost tab down its pipe, which starts a UAC-elevated TermHost, M.ORCH-T1656); otherwise the
+                    // same standalone elevated wt window as before.
                     Screen.Working("Opening elevated tab…  Please wait.");
-                    wt.OpenElevated(tab);
+                    wt.Open(tab);
                     Thread.Sleep(600);
                     break;
                 }

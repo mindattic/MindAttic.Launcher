@@ -25,9 +25,11 @@ namespace MindAttic.Launcher.Services;
 /// profile; <see cref="Open"/> writes its fragment and icon, so tests that build tabs never touch the fragments folder.</para>
 /// <para>When this process itself is one of the Orchestrator's own embedded Terminals-panel panes — its wrapper sets
 /// <see cref="OrchestratorTerminalsEnvVar"/> to a named pipe — opening an agent-host tab (<see cref="Tab.IsAgentHost"/>)
-/// routes into that panel as a new tab there instead of its own <c>wt</c> window (M.LNCH-T77). Nothing listening on the
-/// pipe (the dashboard closed since) falls back to <c>wt</c> exactly as if unembedded; a utility tab (elevated, or built
-/// by <see cref="OpenElevated"/>) always still opens its own real window.</para>
+/// routes into that panel as a new tab there instead of its own <c>wt</c> window (M.LNCH-T77), and so does an elevated one
+/// (<see cref="Tab.IsElevatedHost"/>, M.LNCH-T125), which the dashboard hosts under a UAC-elevated TermHost (M.ORCH-T1656).
+/// Nothing listening on the pipe (the dashboard closed since, or this Launcher wasn't opened embedded) falls back to plain
+/// <c>wt</c> for an agent-host tab, or <see cref="OpenElevated"/>'s own standalone elevated window for an elevated one —
+/// exactly as if unembedded either way.</para>
 /// </summary>
 public sealed class WindowsTerminalLauncher(
     AccountScope? scope = null, Func<LoginLook?>? claudeLook = null, LoginTerminalProfiles? profiles = null,
@@ -95,9 +97,10 @@ public sealed class WindowsTerminalLauncher(
         public bool SuppressApplicationTitle { get; init; } = true;
         public required IReadOnlyList<string> Command { get; init; }
 
-        /// <summary>Only an agent CLI tab (<see cref="BuildAgentTab"/>/<see cref="BuildAgentTabAtPath"/>) can route into
-        /// the Orchestrator's embedded Terminals panel (M.LNCH-T77) — a utility tab (Command Prompt, PowerShell) always
-        /// opens its own real <c>wt</c> window, embedded or not.</summary>
+        /// <summary>A project-menu tab that can route into the Orchestrator's embedded Terminals panel (M.LNCH-T77): an
+        /// agent CLI (<see cref="BuildAgentTab"/>/<see cref="BuildAgentTabAtPath"/>) or a project's Run Command
+        /// (<see cref="BuildRunCommandTab"/>, M.LNCH-T125) — never a bare utility tab (Command Prompt, PowerShell), which
+        /// is <see cref="IsElevatedHost"/> instead and routes (and falls back) differently.</summary>
         public bool IsAgentHost { get; init; }
 
         /// <summary>This Launcher's own menu redeploying itself (<see cref="Commands.MainMenuCommand"/>'s Redeploy),
@@ -106,6 +109,14 @@ public sealed class WindowsTerminalLauncher(
         /// fresh one; it never falls through to <see cref="TermHostLauncher"/> (that's for agent CLIs, not the menu),
         /// so an unembedded Redeploy keeps opening a plain <c>wt</c> tab exactly as before.</summary>
         public bool IsMenu { get; init; }
+
+        /// <summary>This tab needs to run elevated (M.LNCH-T125: <see cref="BuildCmdTab"/>/<see cref="BuildPowerShellTab"/>).
+        /// Embedded in the Orchestrator's Terminals panel, <see cref="Open"/> sends it down the pipe as
+        /// <c>PaneRequest{Elevated:true}</c> instead of calling <see cref="OpenElevated"/> itself: the dashboard's own
+        /// process is never elevated, so it starts a UAC-elevated TermHost for it (M.ORCH-T1656) and hosts it as an
+        /// ordinary tab from there. Nothing listening (no dashboard, or this Launcher wasn't opened embedded) falls back to
+        /// <see cref="OpenElevated"/> exactly as before — its own standalone elevated <c>wt</c> window.</summary>
+        public bool IsElevatedHost { get; init; }
 
         /// <summary>This tab's <see cref="AgentProvider.Key"/> ("Claude", "Codex", …); cosmetic/routing only, read when
         /// this is an agent-host tab sent down the Orchestrator's pipe.</summary>
@@ -120,6 +131,26 @@ public sealed class WindowsTerminalLauncher(
     {
         if (tab.Command.Count == 0)
             throw new ArgumentException("Tab.Command must contain at least the executable.", nameof(tab));
+
+        // M.LNCH-T125: an elevated utility tab (cmd/PowerShell as Administrator). Embedded, tell the dashboard so it hosts
+        // it under a UAC-elevated TermHost (M.ORCH-T1656) instead of this process spawning its own elevated wt window —
+        // mutually exclusive with IsMenu/IsAgentHost below, so this returns either way rather than falling through to them.
+        if (tab.IsElevatedHost)
+        {
+            if (Environment.GetEnvironmentVariable(OrchestratorTerminalsEnvVar) is { Length: > 0 } elevatedPipeName)
+            {
+                var elevatedReply = sendToOrchestrator(elevatedPipeName, PipeRequestJson(tab));
+                if (elevatedReply is not null)
+                {
+                    if (elevatedReply.Length > 0)
+                        throw new InvalidOperationException($"Failed to open the elevated tab via the Orchestrator: {elevatedReply}");
+                    return;
+                }
+            }
+            // No dashboard listening: the same standalone elevated wt window this opened before M.LNCH-T125.
+            OpenElevated(tab);
+            return;
+        }
 
         // This Launcher's own menu redeploying itself: embedded in the Orchestrator's Terminals panel, tell it
         // directly (PaneRequest{IsMenu:true}) instead of spawning a detached wt window the dashboard knows nothing
@@ -244,6 +275,7 @@ public sealed class WindowsTerminalLauncher(
         public string? Initials { get; init; }
         public string? TabColor { get; init; }
         public bool? IsMenu { get; init; }
+        public bool? Elevated { get; init; }
     }
 
     /// <summary>One line of UTF-8 JSON for <paramref name="tab"/>, exactly the <c>wt</c> command it would otherwise
@@ -262,7 +294,8 @@ public sealed class WindowsTerminalLauncher(
         Email = tab.ProfileLook?.Email,
         Initials = tab.ProfileLook?.Initials,
         TabColor = tab.TabColor,
-        IsMenu = tab.IsMenu ? true : null
+        IsMenu = tab.IsMenu ? true : null,
+        Elevated = tab.IsElevatedHost ? true : null
     }, PipeRequestOptions);
 
     private static string? ConfigDirFromCommand(IReadOnlyList<string> command)
@@ -429,7 +462,12 @@ public sealed class WindowsTerminalLauncher(
             WorkingDirectory = project.Path,
             TabColor = project.TabColor,
             ColorScheme = project.ColorScheme,
-            Command = command
+            Command = command,
+            // M.LNCH-T125: a project-menu tab, same as Start Editing's agent tab — it must never open its own wt window
+            // when this Launcher is embedded in the Orchestrator's Terminals panel.
+            IsAgentHost = true,
+            Provider = "Run",
+            Repo = project.Name
         };
     }
 
@@ -437,13 +475,17 @@ public sealed class WindowsTerminalLauncher(
     {
         Title = "Command Prompt (Administrator)",
         WorkingDirectory = workingDirectory,
-        Command = ["cmd"]
+        Command = ["cmd"],
+        IsElevatedHost = true,
+        Provider = "Admin"
     };
 
     public Tab BuildPowerShellTab(string workingDirectory) => new()
     {
         Title = "PowerShell (Administrator)",
         WorkingDirectory = workingDirectory,
-        Command = ["powershell"]
+        Command = ["powershell"],
+        IsElevatedHost = true,
+        Provider = "Admin"
     };
 }
