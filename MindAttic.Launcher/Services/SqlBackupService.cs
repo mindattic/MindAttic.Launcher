@@ -10,8 +10,13 @@ public sealed record DatabaseBackupResult(
 /// <summary>A (instance, database) pair to back up. Value-equal so duplicates dedupe.</summary>
 public readonly record struct BackupTarget(string Server, string Database);
 
-/// <summary>Outcome of listing every user database on a SQL Server instance.</summary>
-public sealed record DatabaseDiscoveryResult(string Server, bool Ok, IReadOnlyList<BackupTarget> Targets, string Output = "");
+/// <summary>
+/// Outcome of listing every user database on a SQL Server instance. <see cref="Unreachable"/> (only ever
+/// set with <c>Ok: false</c>) means no server answered at all, or sqlcmd itself isn't installed: there is
+/// no instance to back up, as opposed to one that answered and refused (M.LNCH-T133).
+/// </summary>
+public sealed record DatabaseDiscoveryResult(
+    string Server, bool Ok, IReadOnlyList<BackupTarget> Targets, string Output = "", bool Unreachable = false);
 
 /// <summary>
 /// sqlcmd-backed full backup (schema + data) of each project's SQL Server
@@ -52,6 +57,29 @@ public sealed class SqlBackupService
             ? DefaultInstances
             : configured.Where(i => !string.IsNullOrWhiteSpace(i)).Select(i => i.Trim())
                 .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+    /// <summary>
+    /// What sqlcmd (ODBC) and LocalDB print when nothing is listening on an instance: the server is
+    /// stopped, uninstalled, or the LocalDB instance no longer exists. A login that is refused, a
+    /// permission error or a bad query is none of these and stays a failure.
+    /// </summary>
+    private static readonly string[] UnreachableMarkers =
+    [
+        "Could not open a connection to SQL Server",
+        "network-related or instance-specific error",
+        "server was not found or was not accessible",
+        "Error Locating Server/Instance Specified",
+        "No connection could be made because the target machine actively refused it",
+        "Local Database Runtime error occurred",
+        "Cannot create an automatic instance",
+        "The specified LocalDB instance does not exist",
+        "Unable to locate a Local Database Runtime installation"
+    ];
+
+    /// <summary>True when <paramref name="sqlcmdOutput"/> says no server answered on the instance (M.LNCH-T133).</summary>
+    public static bool IsUnreachable(string? sqlcmdOutput) =>
+        !string.IsNullOrEmpty(sqlcmdOutput)
+        && UnreachableMarkers.Any(m => sqlcmdOutput.Contains(m, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Runs sqlcmd with the given argument list; returns its exit code and combined output.</summary>
     public delegate (int ExitCode, string Output) SqlcmdRunner(IReadOnlyList<string> args, CancellationToken ct);
@@ -384,8 +412,9 @@ public sealed class SqlBackupService
         }
         catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 2)
         {
+            // No sqlcmd means no SQL Server tools on this PC at all: nothing local to back up.
             return new DatabaseDiscoveryResult(instance, false, [],
-                $"'{Executable}' not found on PATH — install the SQL Server command-line tools (sqlcmd).");
+                $"'{Executable}' not found on PATH — install the SQL Server command-line tools (sqlcmd).", Unreachable: true);
         }
         catch (Exception ex)
         {
@@ -393,7 +422,8 @@ public sealed class SqlBackupService
         }
 
         if (!ComputeOk(code, ct.IsCancellationRequested))
-            return new DatabaseDiscoveryResult(instance, false, [], Tail(output, 2000));
+            return new DatabaseDiscoveryResult(instance, false, [], Tail(output, 2000),
+                Unreachable: !ct.IsCancellationRequested && IsUnreachable(output));
 
         var targets = ParseDatabaseNames(output).Select(name => new BackupTarget(instance, name)).ToList();
         return new DatabaseDiscoveryResult(instance, true, targets);

@@ -47,6 +47,16 @@ public sealed class AppSettings
         Help = "Every online user database on each instance is backed up to Databases\\<instance>\\<db>.bak. Default: localhost and (localdb)\\MSSQLLocalDB.")]
     public List<string>? BackupSqlInstances { get; set; } = [.. Services.SqlBackupService.DefaultInstances];
 
+    /// <summary>
+    /// When true (the default), an instance in <see cref="BackupSqlInstances"/> that no server answers on
+    /// (stopped, uninstalled, or sqlcmd itself is gone) is skipped with a log line instead of failing the
+    /// backup: after the move to Azure SQL there may be no local SQL Server at all (M.LNCH-T133). An
+    /// instance that answers and refuses, and a database whose BACKUP fails, are still failures.
+    /// </summary>
+    [Setting("Skip unreachable SQL instances", Group = "Backup", Order = 1,
+        Help = "On: a listed instance that isn't running or installed is skipped with a log line, not a failed backup. Off: it fails the backup. Empty the instance list to turn the SQL Server step off.")]
+    public bool BackupSqlSkipUnreachableInstances { get; set; } = true;
+
     [Setting("SQL login timeout (seconds)", Group = "Backup", Order = 2,
         Help = "How long sqlcmd waits for an instance to accept the login. A busy server needs more than sqlcmd's own 8 seconds.")]
     public int BackupSqlLoginTimeoutSeconds { get; set; } = Services.SqlBackupService.DefaultLoginTimeoutSeconds;

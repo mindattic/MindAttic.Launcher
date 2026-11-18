@@ -75,6 +75,58 @@ public sealed class BackupRestoreCommandTests
         Assert.That(order, Does.Contain("files"));
     }
 
+    // ---- M.LNCH-T133: no local SQL Server is a skip, not a failure ----
+
+    private static DatabaseDiscoveryResult Unreachable(string server) =>
+        new(server, false, [], "Named Pipes Provider: Could not open a connection to SQL Server [2].", Unreachable: true);
+
+    [Test]
+    public void Backup_skips_unreachable_instances_cleanly_and_still_runs_the_rest()
+    {
+        var order = new List<string>();
+        var deps = BackupDeps(order: order) with { DiscoverDatabases = (s, _) => Unreachable(s) };
+        Assert.That(BackupCommand.Run(null, deps), Is.EqualTo(0));
+        Assert.That(order, Does.Contain("sql:"), "the SQL step runs with no targets");
+        Assert.That(order, Does.Contain("files"));
+    }
+
+    [Test]
+    public void Backup_fails_on_an_unreachable_instance_when_the_skip_setting_is_off()
+    {
+        var deps = BackupDeps(settings: new AppSettings { BackupSqlSkipUnreachableInstances = false })
+            with { DiscoverDatabases = (s, _) => Unreachable(s) };
+        Assert.That(BackupCommand.Run(null, deps), Is.EqualTo(1));
+    }
+
+    [Test]
+    public void Backup_with_an_empty_instance_list_discovers_nothing_and_succeeds()
+    {
+        var order = new List<string>();
+        Assert.That(BackupCommand.Run(null, BackupDeps(order: order, settings: new AppSettings { BackupSqlInstances = [] })), Is.EqualTo(0));
+        Assert.That(order.Where(o => o.StartsWith("discover:")), Is.Empty);
+        Assert.That(order, Does.Contain("sql:"));
+    }
+
+    [Test]
+    public void Backup_drops_project_listed_databases_on_an_unreachable_instance()
+    {
+        var order = new List<string>();
+        var settings = new AppSettings { BackupSqlInstances = ["localhost"] };
+        settings.Projects.Add(new Project { Name = "P", Path = @"D:\P", Databases = ["Listed"] });
+        var deps = BackupDeps(order: order, settings: settings) with { DiscoverDatabases = (s, _) => Unreachable(s) };
+        Assert.That(BackupCommand.Run(null, deps), Is.EqualTo(0));
+        Assert.That(order, Does.Contain("sql:"));
+    }
+
+    [TestCase("Sqlcmd: Error: Microsoft ODBC Driver 17 for SQL Server : Named Pipes Provider: Could not open a connection to SQL Server [2].", true)]
+    [TestCase("A network-related or instance-specific error has occurred while establishing a connection to SQL Server.", true)]
+    [TestCase("SQL Server Network Interfaces: Error Locating Server/Instance Specified [xFFFFFFFF].", true)]
+    [TestCase("Login failed for user 'SNOWCRASH\\ryand'.", false)]
+    [TestCase("Msg 3201: Cannot open backup device.", false)]
+    [TestCase("", false)]
+    public void IsUnreachable_tells_no_server_from_a_server_that_refused(string output, bool expected) =>
+        Assert.That(SqlBackupService.IsUnreachable(output), Is.EqualTo(expected));
+
     [Test]
     public void Backup_returns_1_when_the_upload_fails_and_still_prunes_locally()
     {

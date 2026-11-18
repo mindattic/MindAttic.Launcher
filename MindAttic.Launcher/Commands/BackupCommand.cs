@@ -129,13 +129,24 @@ public sealed class BackupCommand : Command<BackupCommand.Settings>
         try
         {
             dbTargets = SqlBackupService.CollectTargets(settingsData);
-            foreach (var instance in SqlBackupService.ResolveInstances(settingsData.BackupSqlInstances))
+            var instances = SqlBackupService.ResolveInstances(settingsData.BackupSqlInstances);
+            // M.LNCH-T133: with the databases on Azure SQL there may be no local SQL Server. An empty
+            // instance list, or a listed instance nothing answers on, is a skip that says so, not a failure.
+            if (instances.Count == 0)
+                Note("SQL Server backup: no instances are configured (Backup > SQL Server instances is empty); instance discovery skipped.");
+            var unreachable = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var instance in instances)
             {
                 var found = d.DiscoverDatabases(instance, settingsData);
                 if (found.Ok)
                 {
                     dbTargets = SqlBackupService.Merge(dbTargets, found.Targets);
                     Note($"Database discovery on {instance}: {found.Targets.Count} found");
+                }
+                else if (found.Unreachable && settingsData.BackupSqlSkipUnreachableInstances)
+                {
+                    unreachable.Add(instance);
+                    Note($"SQL Server instance {instance} is not reachable (not running or not installed); SKIPPED, nothing backed up from it. {FirstLine(found.Output)}");
                 }
                 else
                 {
@@ -144,6 +155,15 @@ public sealed class BackupCommand : Command<BackupCommand.Settings>
                     Fail($"Database discovery on {instance} FAILED: {found.Output}");
                 }
             }
+            if (unreachable.Count > 0)
+            {
+                // A project-listed database on an instance that isn't there would only fail one BACKUP each.
+                var dropped = dbTargets.Count(t => unreachable.Contains(t.Server));
+                dbTargets = dbTargets.Where(t => !unreachable.Contains(t.Server)).ToList();
+                if (dropped > 0) Note($"SQL Server backup: {dropped} project-listed database(s) on unreachable instance(s) skipped.");
+            }
+            if (dbTargets.Count == 0)
+                Note("SQL Server backup: no local databases to back up; step skipped.");
             dbResults = d.BackupSql(dbTargets, target, settingsData);
         }
         catch (Exception ex)
@@ -269,6 +289,9 @@ public sealed class BackupCommand : Command<BackupCommand.Settings>
         if (r.Ok) Note($"{r.Database}@{r.Server}: OK ({r.Elapsed.TotalSeconds:F0}s)");
         else Fail($"{r.Database}@{r.Server}: FAILED (sqlcmd exit {r.ExitCode}) {r.Output}");
     }
+
+    private static string FirstLine(string text) =>
+        (text ?? "").Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.Length > 0) ?? "";
 
     private static void Note(string message)
     {
