@@ -128,10 +128,17 @@ function Publish {
     Move-Aside $pdb
 
     Write-Host "Publishing MindAttic.Launcher -> $exe" -ForegroundColor Cyan
+    # The --self-contained CLI switch is silently overridden back to true once --runtime and
+    # /p:PublishSingleFile are both present (M.LNCH-T134) - the exe balloons to ~90MB and bundles
+    # its own framework, which drops facade/type-forwarder DLLs (System.Threading.Tasks.Parallel,
+    # System.Diagnostics.Process, System.IO.Pipes) that "Commit and sync" and friends need, so every
+    # git/process call crashes with a bare "Error:" (the exception's Message is empty). Setting
+    # SelfContained via /p: instead of the CLI switch makes it stick and produces the normal ~20MB
+    # framework-dependent exe that resolves those types from the machine's shared runtime.
     dotnet publish $proj `
         --configuration Release `
         --runtime win-x64 `
-        --self-contained false `
+        /p:SelfContained=false `
         /p:PublishSingleFile=true `
         /p:IncludeNativeLibrariesForSelfExtract=true `
         --output $deployDir | Out-Host
